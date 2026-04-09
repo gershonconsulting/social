@@ -1,0 +1,329 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  OPERATIONS
+  READ_ONLY
+}
+
+enum ClientStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  INCOMPLETE_SETUP
+  ARCHIVED
+}
+
+enum Platform {
+  LINKEDIN
+  TWITTER
+  GOOGLE_BUSINESS
+  FACEBOOK
+  INSTAGRAM
+  TIKTOK
+  YOUTUBE
+  THREADS
+  PINTEREST
+  MEDIUM
+  REDDIT
+  BLOG_RSS
+  OTHER
+}
+
+enum ConnectionStatus {
+  CONNECTED
+  DISCONNECTED
+  EXPIRED
+  ERROR
+  PENDING
+}
+
+enum PostingMode {
+  EVERY_DAY
+  WORKING_DAYS
+  CUSTOM_WEEKDAYS
+  CUSTOM_TARGET
+}
+
+enum ComplianceStatus {
+  GREEN
+  RED
+  YELLOW
+  GRAY
+}
+
+enum SyncStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  PARTIAL
+}
+
+enum SyncJobType {
+  POST_SYNC
+  FOLLOWER_SNAPSHOT
+  COMPLIANCE_RECOMPUTE
+  BACKFILL
+  TOKEN_HEALTH_CHECK
+  MONTHLY_REPORT
+}
+
+enum SyncScopeType {
+  ALL
+  CLIENT
+  PLATFORM_CONNECTION
+  DATE_RANGE
+}
+
+enum AuditAction {
+  CLIENT_CREATED
+  CLIENT_UPDATED
+  CLIENT_ARCHIVED
+  CLIENT_RESTORED
+  PLATFORM_CONNECTED
+  PLATFORM_DISCONNECTED
+  PLATFORM_REQUIREMENT_CHANGED
+  POSTING_CALENDAR_CHANGED
+  MANUAL_SYNC_TRIGGERED
+  BACKFILL_TRIGGERED
+  REPORT_EXPORTED
+  USER_CREATED
+  USER_UPDATED
+}
+
+// ─── User ─────────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      UserRole @default(OPERATIONS)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  auditLogs AuditLog[]
+  syncJobs  SyncJob[]
+
+  @@map("users")
+}
+
+// ─── Client ───────────────────────────────────────────────────────────────────
+
+model Client {
+  id                  String       @id @default(cuid())
+  slug                String       @unique
+  name                String
+  timezone            String       @default("America/New_York")
+  status              ClientStatus @default(DRAFT)
+  campaignStartDate   DateTime?
+  reportingStartDate  DateTime?
+  internalOwner       String?
+  website             String?
+  industry            String?
+  billingStatus       String?
+  contractStatus      String?
+  notes               String?
+  archivedAt          DateTime?
+  archiveReason       String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  platformConnections PlatformConnection[]
+  postingSchedules    PostingSchedule[]
+  socialPosts         SocialPost[]
+  dailyCompliance     DailyCompliance[]
+  followerSnapshots   FollowerSnapshot[]
+  syncJobs            SyncJob[]
+
+  @@map("clients")
+}
+
+// ─── PlatformConnection ───────────────────────────────────────────────────────
+
+model PlatformConnection {
+  id                    String           @id @default(cuid())
+  clientId              String
+  platform              Platform
+  externalAccountId     String?
+  externalAccountName   String?
+  externalAccountUrl    String?
+  isMandatory           Boolean          @default(true)
+  isEnabled             Boolean          @default(true)
+  connectionStatus      ConnectionStatus @default(PENDING)
+  tokenReference        String?
+  tokenExpiresAt        DateTime?
+  enforcementStartDate  DateTime?
+  enforcementEndDate    DateTime?
+  notes                 String?
+  lastSyncAt            DateTime?
+  lastSyncError         String?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  client            Client            @relation(fields: [clientId], references: [id])
+  postingSchedules  PostingSchedule[]
+  socialPosts       SocialPost[]
+  dailyCompliance   DailyCompliance[]
+  followerSnapshots FollowerSnapshot[]
+
+  @@unique([clientId, platform])
+  @@map("platform_connections")
+}
+
+// ─── PostingSchedule ──────────────────────────────────────────────────────────
+
+model PostingSchedule {
+  id                   String      @id @default(cuid())
+  clientId             String
+  platformConnectionId String
+  mode                 PostingMode @default(WORKING_DAYS)
+  weekdaysJson         String?     // JSON array of 0-6 (0=Sun)
+  useWorkingDays       Boolean     @default(true)
+  holidayCalendarJson  String?     // JSON array of date strings
+  exclusionDatesJson   String?     // JSON array of date strings
+  customTargetCount    Int?        // for CUSTOM_TARGET mode
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  client             Client             @relation(fields: [clientId], references: [id])
+  platformConnection PlatformConnection @relation(fields: [platformConnectionId], references: [id])
+
+  @@map("posting_schedules")
+}
+
+// ─── SocialPost ───────────────────────────────────────────────────────────────
+
+model SocialPost {
+  id                   String   @id @default(cuid())
+  clientId             String
+  platformConnectionId String
+  platform             Platform
+  externalPostId       String
+  postUrl              String?
+  postTextSnippet      String?
+  hasMedia             Boolean  @default(false)
+  publishedAtUtc       DateTime
+  publishedAtLocal     DateTime
+  publishedDateLocal   String   // YYYY-MM-DD in client timezone
+  rawPayloadJson       String?  @db.Text
+  importedAt           DateTime @default(now())
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  client             Client             @relation(fields: [clientId], references: [id])
+  platformConnection PlatformConnection @relation(fields: [platformConnectionId], references: [id])
+
+  @@unique([clientId, platform, externalPostId])
+  @@index([clientId, platform, publishedDateLocal])
+  @@map("social_posts")
+}
+
+// ─── DailyCompliance ──────────────────────────────────────────────────────────
+
+model DailyCompliance {
+  id                    String           @id @default(cuid())
+  clientId              String
+  platformConnectionId  String
+  platform              Platform
+  dateLocal             String           // YYYY-MM-DD
+  expectedFlag          Boolean          @default(false)
+  status                ComplianceStatus @default(GRAY)
+  verifiedPostCount     Int              @default(0)
+  primaryPostId         String?
+  primaryPostUrl        String?
+  verificationSource    String?
+  verificationErrorCode String?
+  verificationErrorMsg  String?
+  verifiedAt            DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  client             Client             @relation(fields: [clientId], references: [id])
+  platformConnection PlatformConnection @relation(fields: [platformConnectionId], references: [id])
+
+  @@unique([clientId, platformConnectionId, dateLocal])
+  @@index([clientId, dateLocal])
+  @@index([platform, dateLocal])
+  @@map("daily_compliance")
+}
+
+// ─── FollowerSnapshot ────────────────────────────────────────────────────────
+
+model FollowerSnapshot {
+  id                   String   @id @default(cuid())
+  clientId             String
+  platformConnectionId String
+  platform             Platform
+  snapshotDateLocal    String   // YYYY-MM-DD
+  followerCount        Int
+  followingCount       Int?
+  extraMetricsJson     String?
+  collectedAt          DateTime @default(now())
+
+  client             Client             @relation(fields: [clientId], references: [id])
+  platformConnection PlatformConnection @relation(fields: [platformConnectionId], references: [id])
+
+  @@unique([clientId, platformConnectionId, snapshotDateLocal])
+  @@index([clientId, platform])
+  @@map("follower_snapshots")
+}
+
+// ─── SyncJob ─────────────────────────────────────────────────────────────────
+
+model SyncJob {
+  id              String        @id @default(cuid())
+  jobType         SyncJobType
+  scopeType       SyncScopeType @default(ALL)
+  scopeId         String?
+  clientId        String?
+  triggeredById   String?
+  startedAt       DateTime      @default(now())
+  finishedAt      DateTime?
+  status          SyncStatus    @default(PENDING)
+  itemsProcessed  Int           @default(0)
+  itemsSucceeded  Int           @default(0)
+  itemsFailed     Int           @default(0)
+  errorLogJson    String?       @db.Text
+  notes           String?
+  createdAt       DateTime      @default(now())
+
+  client      Client? @relation(fields: [clientId], references: [id])
+  triggeredBy User?   @relation(fields: [triggeredById], references: [id])
+
+  @@index([clientId, status])
+  @@index([jobType, startedAt])
+  @@map("sync_jobs")
+}
+
+// ─── AuditLog ─────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id           String      @id @default(cuid())
+  actorUserId  String?
+  actionType   AuditAction
+  entityType   String
+  entityId     String
+  beforeJson   String?     @db.Text
+  afterJson    String?     @db.Text
+  ipAddress    String?
+  createdAt    DateTime    @default(now())
+
+  user User? @relation(fields: [actorUserId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([actorUserId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

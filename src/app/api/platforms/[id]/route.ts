@@ -1,0 +1,114 @@
+import { NextRequest, NextResponse } from "next/server";
+import prisma from "@/lib/db";
+import { requireRole } from "@/lib/auth";
+import { UserRole, ConnectionStatus } from "@prisma/client";
+import { z } from "zod";
+
+const updatePlatformSchema = z.object({
+  externalAccountId: z.string().optional().nullable(),
+  externalAccountName: z.string().optional().nullable(),
+  externalAccountUrl: z.string().url().optional().nullable(),
+  isMandatory: z.boolean().optional(),
+  isEnabled: z.boolean().optional(),
+  tokenReference: z.string().optional().nullable(),
+  tokenExpiresAt: z.string().datetime().optional().nullable(),
+  enforcementStartDate: z.string().datetime().optional().nullable(),
+  enforcementEndDate: z.string().datetime().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  connectionStatus: z.nativeEnum(ConnectionStatus).optional(),
+});
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  let user: { id?: string };
+  try {
+    user = await requireRole(UserRole.ADMIN);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Error";
+    return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
+  }
+
+  const connection = await prisma.platformConnection.findUnique({ where: { id: params.id } });
+  if (!connection) {
+    return NextResponse.json({ success: false, error: "Platform connection not found" }, { status: 404 });
+  }
+
+  const body = await req.json().catch(() => null);
+  const parsed = updatePlatformSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      { success: false, error: "Validation failed", details: parsed.error.flatten() },
+      { status: 400 }
+    );
+  }
+
+  const updated = await prisma.platformConnection.update({
+    where: { id: params.id },
+    data: {
+      ...parsed.data,
+      tokenExpiresAt: parsed.data.tokenExpiresAt ? new Date(parsed.data.tokenExpiresAt) : undefined,
+      enforcementStartDate: parsed.data.enforcementStartDate
+        ? new Date(parsed.data.enforcementStartDate)
+        : undefined,
+      enforcementEndDate: parsed.data.enforcementEndDate
+        ? new Date(parsed.data.enforcementEndDate)
+        : undefined,
+    },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: user.id ?? null,
+      actionType: "PLATFORM_CONNECTED",
+      entityType: "PlatformConnection",
+      entityId: connection.id,
+      beforeJson: JSON.stringify(connection),
+      afterJson: JSON.stringify(updated),
+    },
+  });
+
+  return NextResponse.json({ success: true, data: updated });
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  let user: { id?: string };
+  try {
+    user = await requireRole(UserRole.ADMIN);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Error";
+    return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
+  }
+
+  const connection = await prisma.platformConnection.findUnique({ where: { id: params.id } });
+  if (!connection) {
+    return NextResponse.json({ success: false, error: "Platform connection not found" }, { status: 404 });
+  }
+
+  // Soft-disable rather than delete (preserves historical records)
+  const updated = await prisma.platformConnection.update({
+    where: { id: params.id },
+    data: {
+      isEnabled: false,
+      connectionStatus: ConnectionStatus.DISCONNECTED,
+    },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: user.id ?? null,
+      actionType: "PLATFORM_DISCONNECTED",
+      entityType: "PlatformConnection",
+      entityId: connection.id,
+      beforeJson: JSON.stringify(connection),
+      afterJson: JSON.stringify(updated),
+    },
+  });
+
+  return NextResponse.json({ success: true, data: updated });
+}
