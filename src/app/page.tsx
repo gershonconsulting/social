@@ -1,9 +1,9 @@
+export const runtime = 'edge';
 import { redirect } from "next/navigation";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/options";
+import { getSession } from "@/lib/auth";
 
 export default async function RootPage() {
-  const session = await getServerSession(authOptions);
+  const session = await getSession();
   if (session) {
     redirect("/dashboard");
   } else {

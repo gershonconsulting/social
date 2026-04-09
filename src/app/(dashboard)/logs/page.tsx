@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { Header } from "@/components/layout/header";
 import prisma from "@/lib/db";
 import { formatDateTime } from "@/lib/utils";

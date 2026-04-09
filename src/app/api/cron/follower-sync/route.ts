@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 /**
  * Cron endpoint for daily follower snapshot collection.
  * Schedule: 0 7 * * *  (7am UTC daily)

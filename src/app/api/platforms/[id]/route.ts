@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { requireRole } from "@/lib/auth";
@@ -20,7 +21,7 @@ const updatePlatformSchema = z.object({
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   let user: { id?: string };
   try {
@@ -30,7 +31,8 @@ export async function PATCH(
     return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
   }
 
-  const connection = await prisma.platformConnection.findUnique({ where: { id: params.id } });
+  const { id } = await params;
+  const connection = await prisma.platformConnection.findUnique({ where: { id } });
   if (!connection) {
     return NextResponse.json({ success: false, error: "Platform connection not found" }, { status: 404 });
   }
@@ -46,7 +48,7 @@ export async function PATCH(
   }
 
   const updated = await prisma.platformConnection.update({
-    where: { id: params.id },
+    where: { id },
     data: {
       ...parsed.data,
       tokenExpiresAt: parsed.data.tokenExpiresAt ? new Date(parsed.data.tokenExpiresAt) : undefined,
@@ -75,7 +77,7 @@ export async function PATCH(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   let user: { id?: string };
   try {
@@ -85,14 +87,15 @@ export async function DELETE(
     return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
   }
 
-  const connection = await prisma.platformConnection.findUnique({ where: { id: params.id } });
+  const { id } = await params;
+  const connection = await prisma.platformConnection.findUnique({ where: { id } });
   if (!connection) {
     return NextResponse.json({ success: false, error: "Platform connection not found" }, { status: 404 });
   }
 
   // Soft-disable rather than delete (preserves historical records)
   const updated = await prisma.platformConnection.update({
-    where: { id: params.id },
+    where: { id },
     data: {
       isEnabled: false,
       connectionStatus: ConnectionStatus.DISCONNECTED,

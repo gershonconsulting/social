@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { notFound } from "next/navigation";
 import prisma from "@/lib/db";
 import { Header } from "@/components/layout/header";
@@ -73,8 +74,9 @@ async function getClientData(id: string) {
   return { client, compliance, recentPosts, today };
 }
 
-export default async function ClientDetailPage({ params }: { params: { id: string } }) {
-  const data = await getClientData(params.id);
+export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const data = await getClientData(id);
   if (!data) notFound();
 
   const { client, compliance, recentPosts, today } = data;

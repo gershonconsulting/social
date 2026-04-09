@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { requireRole } from "@/lib/auth";
@@ -20,7 +21,7 @@ const updateClientSchema = z.object({
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireRole(UserRole.OPERATIONS);
@@ -29,8 +30,9 @@ export async function GET(
     return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
   }
 
+  const { id } = await params;
   const client = await prisma.client.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       platformConnections: {
         include: { postingSchedules: true },
@@ -48,7 +50,7 @@ export async function GET(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   let user: { id?: string };
   try {
@@ -58,7 +60,8 @@ export async function PATCH(
     return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
   }
 
-  const client = await prisma.client.findUnique({ where: { id: params.id } });
+  const { id } = await params;
+  const client = await prisma.client.findUnique({ where: { id } });
   if (!client) {
     return NextResponse.json({ success: false, error: "Client not found" }, { status: 404 });
   }
@@ -74,19 +77,15 @@ export async function PATCH(
   }
 
   const updated = await prisma.client.update({
-    where: { id: params.id },
+    where: { id },
     data: {
       ...parsed.data,
       campaignStartDate: parsed.data.campaignStartDate
         ? new Date(parsed.data.campaignStartDate)
-        : parsed.data.campaignStartDate === null
-          ? null
-          : undefined,
+        : parsed.data.campaignStartDate === null ? null : undefined,
       reportingStartDate: parsed.data.reportingStartDate
         ? new Date(parsed.data.reportingStartDate)
-        : parsed.data.reportingStartDate === null
-          ? null
-          : undefined,
+        : parsed.data.reportingStartDate === null ? null : undefined,
     },
   });
 
@@ -106,7 +105,7 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   let user: { id?: string };
   try {
@@ -116,10 +115,11 @@ export async function DELETE(
     return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
   }
 
+  const { id } = await params;
   const { searchParams } = new URL(req.url);
   const reason = searchParams.get("reason") ?? "Archived by admin";
 
-  const client = await prisma.client.findUnique({ where: { id: params.id } });
+  const client = await prisma.client.findUnique({ where: { id } });
   if (!client) {
     return NextResponse.json({ success: false, error: "Client not found" }, { status: 404 });
   }
@@ -129,12 +129,8 @@ export async function DELETE(
   }
 
   const archived = await prisma.client.update({
-    where: { id: params.id },
-    data: {
-      status: ClientStatus.ARCHIVED,
-      archivedAt: new Date(),
-      archiveReason: reason,
-    },
+    where: { id },
+    data: { status: ClientStatus.ARCHIVED, archivedAt: new Date(), archiveReason: reason },
   });
 
   await prisma.auditLog.create({

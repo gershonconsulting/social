@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { Suspense } from "react";
 import prisma from "@/lib/db";
 import { Header } from "@/components/layout/header";

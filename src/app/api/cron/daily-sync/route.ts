@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 /**
  * Cron endpoint for daily sync.
  *
