@@ -32,6 +32,7 @@ interface Client {
   internalOwner: string | null;
   archivedAt: string | null;
   archiveReason: string | null;
+  clientType: string;
   platformConnections: PlatformConn[];
 }
 
@@ -73,6 +74,7 @@ export default function AdminPage() {
   const [loadError, setLoadError] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>("ALL");
   const [creating, setCreating] = useState(false);
   const [discovering, setDiscovering] = useState(false);
   const [syncingClientId, setSyncingClientId] = useState<string | null>(null);
@@ -425,6 +427,37 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* Client Type Tabs */}
+        <div className="flex items-center gap-1 mb-4">
+          {[
+            { key: "ALL", label: "All" },
+            { key: "CLIENT", label: "Clients" },
+            { key: "PARTNER", label: "Partners" },
+            { key: "PROSPECT", label: "Prospects" },
+            { key: "INTERNAL", label: "Internal" },
+          ].map((tab) => {
+            const count = tab.key === "ALL"
+              ? clients.length
+              : clients.filter((c) => c.clientType === tab.key).length;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                  activeTab === tab.key
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                {tab.label}
+                <span className={`ml-1.5 text-xs ${activeTab === tab.key ? "text-blue-200" : "text-gray-400"}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* Client table */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {loading ? (
@@ -453,7 +486,7 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {clients.map((client) => (
+                {clients.filter((c) => activeTab === "ALL" || c.clientType === activeTab).map((client) => (
                   <tr key={client.id} className="hover:bg-gray-50 align-top">
                     <td className="px-6 py-3">
                       <div className="font-medium text-gray-900">{client.name}</div>
@@ -485,9 +518,20 @@ export default function AdminPage() {
                               </span>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-xs font-medium text-gray-700">
-                                    {PLATFORM_LABELS[conn.platform] ?? conn.platform}
-                                  </span>
+                                  {conn.externalAccountUrl ? (
+                                    <a
+                                      href={conn.externalAccountUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs font-medium text-blue-600 hover:underline"
+                                    >
+                                      {PLATFORM_LABELS[conn.platform] ?? conn.platform}
+                                    </a>
+                                  ) : (
+                                    <span className="text-xs font-medium text-gray-700">
+                                      {PLATFORM_LABELS[conn.platform] ?? conn.platform}
+                                    </span>
+                                  )}
                                   <ConnectionBadge status={conn.connectionStatus} />
                                 </div>
                                 {conn.latestPost ? (
@@ -527,7 +571,7 @@ export default function AdminPage() {
                         {client.status !== "ARCHIVED" ? (
                           <>
                             <button
-                              onClick={() => handleBackfill(client.id)}
+                                       onClick={() => handleBackfill(client.id)}
                               disabled={syncingClientId === client.id}
                               className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-600 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-60"
                               title="Run backfill from Jan 1"
