@@ -2,7 +2,7 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { requireRole } from "@/lib/auth";
-import { UserRole, ClientStatus, ConnectionStatus } from "@prisma/client";
+import { UserRole, ClientStatus, ClientType, ConnectionStatus } from "@prisma/client";
 import { z } from "zod";
 
 const platformConnectionSchema = z.object({
@@ -15,6 +15,7 @@ const createClientSchema = z.object({
   slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/),
   timezone: z.string().default("America/New_York"),
   status: z.nativeEnum(ClientStatus).default(ClientStatus.ACTIVE),
+  clientType: z.nativeEnum(ClientType).default(ClientType.CLIENT),
   campaignStartDate: z.string().datetime().optional().nullable(),
   reportingStartDate: z.string().datetime().optional().nullable(),
   internalOwner: z.string().optional().nullable(),
@@ -44,78 +45,94 @@ export async function GET(req: NextRequest) {
   } else if (!includeArchived) {
     where.status = { not: ClientStatus.ARCHIVED };
   }
-
-  const clients = await prisma.client.findMany({
-    where,
-    include: {
-      platformConnections: {
-        where: { isEnabled: true },
-        select: {
-          id: true,
-          platform: true,
-          connectionStatus: true,
-          isMandatory: true,
-          externalAccountUrl: true,
-          lastSyncAt: true,
-          lastSyncError: true,
-        },
-      },
-    },
-    orderBy: [{ status: "asc" }, { name: "asc" }],
-  });
-
-  // Fetch latest post for each client's platform connections
-  const clientIds = clients.map((c) => c.id);
-  const latestPosts = clientIds.length > 0
-    ? await prisma.socialPost.findMany({
-        where: { clientId: { in: clientIds } },
-        orderBy: { publishedAtUtc: "desc" },
-        select: {
-          clientId: true,
-          platform: true,
-          platformConnectionId: true,
-          postTextSnippet: true,
-          postUrl: true,
-          publishedAtUtc: true,
-        },
-      })
-    : [];
-
-  // Group latest post per client+platform (first one is latest due to orderBy desc)
-  const latestPostMap = new Map<string, typeof latestPosts[0]>();
-  for (const post of latestPosts) {
-    const key = `${post.clientId}:${post.platform}`;
-    if (!latestPostMap.has(key)) {
-      latestPostMap.set(key, post);
-    }
+  const clientType = searchParams.get("clientType");
+  if (clientType) {
+    where.clientType = clientType;
   }
 
-  // Attach latest posts to each client
-  const enriched = clients.map((client) => ({
-    ...client,
-    platformConnections: client.platformConnections.map((conn) => {
-      const latestPost = latestPostMap.get(`${client.id}:${conn.platform}`);
-      return {
-        ...conn,
-        latestPost: latestPost
-          ? {
-              snippet: latestPost.postTextSnippet,
-              url: latestPost.postUrl,
-              publishedAt: latestPost.publishedAtUtc,
-            }
-          : null,
-      };
-    }),
-  }));
+  try {
+    const clients = await prisma.client.findMany({
+      where,
+      include: {
+        platformConnections: {
+          where: { isEnabled: true },
+          select: {
+            id: true,
+            platform: true,
+            connectionStatus: true,
+            isMandatory: true,
+            externalAccountUrl: true,
+            lastSyncAt: true,
+            lastSyncError: true,
+          },
+        },
+      },
+      orderBy: [{ status: "asc" }, { name: "asc" }],
+    });
 
-  return NextResponse.json({ success: true, data: enriched });
+    // Fetch latest post for each client's platform connections
+    const clientIds = clients.map((c) => c.id);
+    let latestPosts = [];
+    try {
+      latestPosts = clientIds.length > 0
+        ? await prisma.socialPost.findMany({
+            where: { clientId: { in: clientIds } },
+            orderBy: { publishedAtUtc: "desc" },
+            select: {
+              clientId: true,
+              platform: true,
+              platformConnectionId: true,
+              postTextSnippet: true,
+              postUrl: true,
+              publishedAtUtc: true,
+            },
+          })
+        : [];
+    } catch {
+      // socialPost table may not exist yet - continue without latest posts
+      console.warn("GET /api/clients: socialPost query failed, continuing without latest posts");
+    }
+
+    // Group latest post per client+platform (first one is latest due to orderBy desc)
+    const latestPostMap = new Map();
+    for (const post of latestPosts) {
+      const key = post.clientId + ":" + post.platform;
+      if (!latestPostMap.has(key)) {
+        latestPostMap.set(key, post);
+      }
+    }
+
+    // Attach latest posts to each client
+    const enriched = clients.map((client) => ({
+      ...client,
+      platformConnections: client.platformConnections.map((conn) => {
+        const latestPost = latestPostMap.get(client.id + ":" + conn.platform);
+        return {
+          ...conn,
+          latestPost: latestPost
+            ? {
+                snippet: latestPost.postTextSnippet,
+                url: latestPost.postUrl,
+                publishedAt: latestPost.publishedAtUtc,
+              }
+            : null,
+        };
+      }),
+    }));
+
+    return NextResponse.json({ success: true, data: enriched });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Database query failed";
+    console.error("GET /api/clients error:", msg);
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
-  let user: { id?: string; name?: string; role?: string };
+  let user;
   try {
     user = await requireRole(UserRole.ADMIN);
-  } catch (e: unknown) {
+  } catch (e) {
     const msg = e instanceof Error ? e.message : "Error";
     return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
   }
@@ -152,7 +169,7 @@ export async function POST(req: NextRequest) {
       await prisma.platformConnection.create({
         data: {
           clientId: client.id,
-          platform: conn.platform as any,
+          platform: conn.platform,
           externalAccountUrl: conn.externalAccountUrl || null,
           connectionStatus: ConnectionStatus.PENDING,
           isMandatory: true,
