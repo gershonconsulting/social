@@ -4,28 +4,14 @@
  * Web Crypto API (crypto.getRandomValues), not Node's crypto.randomBytes.
  */
 
-if (typeof globalThis.crypto !== "undefined" && !globalThis.crypto.randomBytes) {
-  (globalThis.crypto as any).randomBytes = (size: number): Buffer => {
+const _g = globalThis as any;
+
+if (typeof _g.crypto !== "undefined" && !_g.crypto.randomBytes) {
+  _g.crypto.randomBytes = (size: number): Uint8Array => {
     const bytes = new Uint8Array(size);
     crypto.getRandomValues(bytes);
-    return Buffer.from(bytes);
+    return bytes as any;
   };
-}
-
-// Also patch if accessed via require('crypto')
-if (typeof globalThis.process !== "undefined") {
-  try {
-    const cryptoModule = require("crypto");
-    if (!cryptoModule.randomBytes) {
-      cryptoModule.randomBytes = (size: number): Buffer => {
-        const bytes = new Uint8Array(size);
-        crypto.getRandomValues(bytes);
-        return Buffer.from(bytes);
-      };
-    }
-  } catch {
-    // ignore if require not available
-  }
 }
 
 export {};
