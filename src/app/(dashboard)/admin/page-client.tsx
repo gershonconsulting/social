@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/header";
-import { Plus, Loader2, RefreshCw, Archive, RotateCcw, Globe, Search, ExternalLink } from "lucide-react";
+import { Plus, Loader2, RefreshCw, Archive, RotateCcw, Globe, Search } from "lucide-react";
 import { slugify, formatDate, formatRelative, PLATFORM_LABELS } from "@/lib/utils";
 import { ConnectionBadge } from "@/components/ui/connection-badge";
 
@@ -57,12 +57,12 @@ const CLIENT_STATUS_COLORS: Record<string, string> = {
 
 const PLATFORM_ICONS: Record<string, string> = {
   LINKEDIN: "in",
-  TWITTER: "𝕏",
+  TWITTER: "\ud835\udd4f",
   GOOGLE_BUSINESS: "G",
   FACEBOOK: "f",
   INSTAGRAM: "ig",
-  YOUTUBE: "▶",
-  TIKTOK: "♪",
+  YOUTUBE: "\u25b6",
+  TIKTOK: "\u266a",
   PINTEREST: "P",
   THREADS: "@",
 };
@@ -70,6 +70,7 @@ const PLATFORM_ICONS: Record<string, string> = {
 export default function AdminPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -78,7 +79,6 @@ export default function AdminPage() {
   const [syncMsg, setSyncMsg] = useState("");
   const [formError, setFormError] = useState("");
 
-  // Discovery flow state
   const [websiteInput, setWebsiteInput] = useState("");
   const [discovery, setDiscovery] = useState<DiscoveryResult | null>(null);
   const [editName, setEditName] = useState("");
@@ -87,10 +87,33 @@ export default function AdminPage() {
 
   async function loadClients() {
     setLoading(true);
-    const res = await fetch(`/api/clients?includeArchived=${showArchived}`);
-    const data = await res.json();
-    if (data.success) setClients(data.data);
-    setLoading(false);
+    setLoadError("");
+    try {
+      const res = await fetch(`/api/clients?includeArchived=${showArchived}`);
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403 || res.redirected) {
+          window.location.href = "/login";
+          return;
+        }
+        throw new Error(`Server error ${res.status}`);
+      }
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        window.location.href = "/login";
+        return;
+      }
+      const data = await res.json();
+      if (data.success) {
+        setClients(data.data);
+      } else {
+        setLoadError(data.error || "Failed to load clients");
+      }
+    } catch (err) {
+      console.error("loadClients error:", err);
+      setLoadError("Failed to load clients. Please refresh the page.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { loadClients(); }, [showArchived]);
@@ -101,24 +124,28 @@ export default function AdminPage() {
     setFormError("");
     setDiscovery(null);
 
-    const res = await fetch("/api/clients/discover", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ website: websiteInput.trim() }),
-    });
-    const data = await res.json();
-    setDiscovering(false);
+    try {
+      const res = await fetch("/api/clients/discover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ website: websiteInput.trim() }),
+      });
+      const data = await res.json();
 
-    if (data.success) {
-      setDiscovery(data.data);
-      setEditName(data.data.name);
-      setEditSlug(data.data.slug);
-      // Pre-select all discovered platforms
-      const sel: Record<string, boolean> = {};
-      data.data.discovered.forEach((d: DiscoveredLink) => { sel[d.platform] = true; });
-      setSelectedPlatforms(sel);
-    } else {
-      setFormError(data.error ?? "Failed to scan website");
+      if (data.success) {
+        setDiscovery(data.data);
+        setEditName(data.data.name);
+        setEditSlug(data.data.slug);
+        const sel: Record<string, boolean> = {};
+        data.data.discovered.forEach((d: DiscoveredLink) => { sel[d.platform] = true; });
+        setSelectedPlatforms(sel);
+      } else {
+        setFormError(data.error ?? "Failed to scan website");
+      }
+    } catch {
+      setFormError("Network error scanning website. Please try again.");
+    } finally {
+      setDiscovering(false);
     }
   }
 
@@ -127,36 +154,41 @@ export default function AdminPage() {
     setCreating(true);
     setFormError("");
 
-    const connections = discovery.discovered
-      .filter((d) => selectedPlatforms[d.platform])
-      .map((d) => ({ platform: d.platform, externalAccountUrl: d.url }));
+    try {
+      const connections = discovery.discovered
+        .filter((d) => selectedPlatforms[d.platform])
+        .map((d) => ({ platform: d.platform, externalAccountUrl: d.url }));
 
-    const res = await fetch("/api/clients", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: editName,
-        slug: editSlug,
-        website: discovery.website,
-        status: "ACTIVE",
-        campaignStartDate: new Date().toISOString(),
-        platformConnections: connections,
-      }),
-    });
+      const res = await fetch("/api/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editName,
+          slug: editSlug,
+          website: discovery.website,
+          status: "ACTIVE",
+          campaignStartDate: new Date().toISOString(),
+          platformConnections: connections,
+        }),
+      });
 
-    const data = await res.json();
-    setCreating(false);
+      const data = await res.json();
 
-    if (data.success) {
-      setShowCreateForm(false);
-      setDiscovery(null);
-      setWebsiteInput("");
-      setEditName("");
-      setEditSlug("");
-      setSelectedPlatforms({});
-      loadClients();
-    } else {
-      setFormError(data.error ?? "Failed to create client");
+      if (data.success) {
+        setShowCreateForm(false);
+        setDiscovery(null);
+        setWebsiteInput("");
+        setEditName("");
+        setEditSlug("");
+        setSelectedPlatforms({});
+        loadClients();
+      } else {
+        setFormError(data.error ?? "Failed to create client");
+      }
+    } catch {
+      setFormError("Network error creating client. Please try again.");
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -189,25 +221,29 @@ export default function AdminPage() {
     since.setMonth(0);
     since.setDate(1);
 
-    const res = await fetch("/api/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: "backfill",
-        clientId,
-        since: since.toISOString(),
-        until: new Date().toISOString(),
-      }),
-    });
-
-    const data = await res.json();
-    setSyncingClientId(null);
-    setSyncMsg(data.success ? "Backfill complete" : `Error: ${data.error}`);
+    try {
+      const res = await fetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "backfill",
+          clientId,
+          since: since.toISOString(),
+          until: new Date().toISOString(),
+        }),
+      });
+      const data = await res.json();
+      setSyncMsg(data.success ? "Backfill complete" : `Error: ${data.error}`);
+    } catch {
+      setSyncMsg("Backfill request failed");
+    } finally {
+      setSyncingClientId(null);
+    }
   }
 
   function truncate(str: string | null, len: number): string {
     if (!str) return "";
-    return str.length > len ? str.slice(0, len) + "…" : str;
+    return str.length > len ? str.slice(0, len) + "\u2026" : str;
   }
 
   return (
@@ -243,7 +279,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Simplified create form — website only */}
         {showCreateForm && (
           <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
             {!discovery ? (
@@ -280,7 +315,7 @@ export default function AdminPage() {
                     ) : (
                       <Search size={14} />
                     )}
-                    {discovering ? "Scanning…" : "Scan Website"}
+                    {discovering ? "Scanning\u2026" : "Scan Website"}
                   </button>
                   <button
                     onClick={handleCancel}
@@ -322,12 +357,11 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* Discovered social profiles */}
                 <div className="mb-5">
                   <label className="block text-xs font-medium text-gray-600 mb-2">
                     Discovered Social Profiles
                     {discovery.discovered.length === 0 && (
-                      <span className="text-gray-400 font-normal ml-1">— none found on this website</span>
+                      <span className="text-gray-400 font-normal ml-1">&mdash; none found on this website</span>
                     )}
                   </label>
                   {discovery.discovered.length > 0 ? (
@@ -396,7 +430,17 @@ export default function AdminPage() {
           {loading ? (
             <div className="px-6 py-12 text-center text-gray-400 text-sm">
               <Loader2 size={16} className="animate-spin mx-auto mb-2" />
-              Loading clients…
+              Loading clients&hellip;
+            </div>
+          ) : loadError ? (
+            <div className="px-6 py-12 text-center text-sm">
+              <div className="text-red-500 mb-2">{loadError}</div>
+              <button
+                onClick={() => loadClients()}
+                className="text-blue-600 hover:underline text-xs"
+              >
+                Try again
+              </button>
             </div>
           ) : (
             <table className="w-full text-sm">
@@ -422,7 +466,7 @@ export default function AdminPage() {
                           className="text-xs text-blue-500 hover:underline flex items-center gap-0.5 mt-0.5"
                         >
                           <Globe size={10} />
-                          {new URL(client.website).hostname}
+                          {(() => { try { return new URL(client.website).hostname; } catch { return client.website; } })()}
                         </a>
                       )}
                     </td>
@@ -464,7 +508,7 @@ export default function AdminPage() {
                                       </span>
                                     )}
                                     <span className="text-[10px] text-gray-400 shrink-0">
-                                      · {formatRelative(conn.latestPost.publishedAt)}
+                                      &middot; {formatRelative(conn.latestPost.publishedAt)}
                                     </span>
                                   </div>
                                 ) : (
@@ -528,6 +572,7 @@ export default function AdminPage() {
           )}
         </div>
       </div>
+
     </div>
   );
 }
