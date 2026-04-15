@@ -24,6 +24,13 @@ enum ClientStatus {
   ARCHIVED
 }
 
+enum ClientType {
+  CLIENT
+  PARTNER
+  PROSPECT
+  INTERNAL
+}
+
 enum Platform {
   LINKEDIN
   TWITTER
@@ -128,6 +135,7 @@ model Client {
   name                String
   timezone            String       @default("America/New_York")
   status              ClientStatus @default(DRAFT)
+  clientType          ClientType   @default(CLIENT)
   campaignStartDate   DateTime?
   reportingStartDate  DateTime?
   internalOwner       String?
@@ -190,11 +198,11 @@ model PostingSchedule {
   clientId             String
   platformConnectionId String
   mode                 PostingMode @default(WORKING_DAYS)
-  weekdaysJson         String?     // JSON array of 0-6 (0=Sun)
+  weekdaysJson         String?
   useWorkingDays       Boolean     @default(true)
-  holidayCalendarJson  String?     // JSON array of date strings
-  exclusionDatesJson   String?     // JSON array of date strings
-  customTargetCount    Int?        // for CUSTOM_TARGET mode
+  holidayCalendarJson  String?
+  exclusionDatesJson   String?
+  customTargetCount    Int?
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
@@ -217,7 +225,7 @@ model SocialPost {
   hasMedia             Boolean  @default(false)
   publishedAtUtc       DateTime
   publishedAtLocal     DateTime
-  publishedDateLocal   String   // YYYY-MM-DD in client timezone
+  publishedDateLocal   String
   rawPayloadJson       String?  @db.Text
   importedAt           DateTime @default(now())
   createdAt            DateTime @default(now())
@@ -238,7 +246,7 @@ model DailyCompliance {
   clientId              String
   platformConnectionId  String
   platform              Platform
-  dateLocal             String           // YYYY-MM-DD
+  dateLocal             String
   expectedFlag          Boolean          @default(false)
   status                ComplianceStatus @default(GRAY)
   verifiedPostCount     Int              @default(0)
@@ -267,7 +275,7 @@ model FollowerSnapshot {
   clientId             String
   platformConnectionId String
   platform             Platform
-  snapshotDateLocal    String   // YYYY-MM-DD
+  snapshotDateLocal    String
   followerCount        Int
   followingCount       Int?
   extraMetricsJson     String?
