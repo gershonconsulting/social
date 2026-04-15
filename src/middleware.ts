@@ -1,3 +1,15 @@
+// Polyfill crypto.randomBytes for Cloudflare Workers edge runtime
+if (typeof globalThis.crypto !== "undefined") {
+  const c = globalThis.crypto as any;
+  if (!c.randomBytes) {
+    c.randomBytes = (size: number): Buffer => {
+      const bytes = new Uint8Array(size);
+      crypto.getRandomValues(bytes);
+      return Buffer.from(bytes);
+    };
+  }
+}
+
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 
