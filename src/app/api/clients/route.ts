@@ -2,14 +2,19 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { requireRole } from "@/lib/auth";
-import { UserRole, ClientStatus } from "@prisma/client";
+import { UserRole, ClientStatus, ConnectionStatus } from "@prisma/client";
 import { z } from "zod";
+
+const platformConnectionSchema = z.object({
+  platform: z.string(),
+  externalAccountUrl: z.string().url().optional(),
+});
 
 const createClientSchema = z.object({
   name: z.string().min(1).max(200),
   slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/),
   timezone: z.string().default("America/New_York"),
-  status: z.nativeEnum(ClientStatus).default(ClientStatus.DRAFT),
+  status: z.nativeEnum(ClientStatus).default(ClientStatus.ACTIVE),
   campaignStartDate: z.string().datetime().optional().nullable(),
   reportingStartDate: z.string().datetime().optional().nullable(),
   internalOwner: z.string().optional().nullable(),
@@ -18,6 +23,7 @@ const createClientSchema = z.object({
   billingStatus: z.string().optional().nullable(),
   contractStatus: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
+  platformConnections: z.array(platformConnectionSchema).optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -49,6 +55,7 @@ export async function GET(req: NextRequest) {
           platform: true,
           connectionStatus: true,
           isMandatory: true,
+          externalAccountUrl: true,
           lastSyncAt: true,
           lastSyncError: true,
         },
@@ -57,7 +64,51 @@ export async function GET(req: NextRequest) {
     orderBy: [{ status: "asc" }, { name: "asc" }],
   });
 
-  return NextResponse.json({ success: true, data: clients });
+  // Fetch latest post for each client's platform connections
+  const clientIds = clients.map((c) => c.id);
+  const latestPosts = clientIds.length > 0
+    ? await prisma.socialPost.findMany({
+        where: { clientId: { in: clientIds } },
+        orderBy: { publishedAtUtc: "desc" },
+        select: {
+          clientId: true,
+          platform: true,
+          platformConnectionId: true,
+          postTextSnippet: true,
+          postUrl: true,
+          publishedAtUtc: true,
+        },
+      })
+    : [];
+
+  // Group latest post per client+platform (first one is latest due to orderBy desc)
+  const latestPostMap = new Map<string, typeof latestPosts[0]>();
+  for (const post of latestPosts) {
+    const key = `${post.clientId}:${post.platform}`;
+    if (!latestPostMap.has(key)) {
+      latestPostMap.set(key, post);
+    }
+  }
+
+  // Attach latest posts to each client
+  const enriched = clients.map((client) => ({
+    ...client,
+    platformConnections: client.platformConnections.map((conn) => {
+      const latestPost = latestPostMap.get(`${client.id}:${conn.platform}`);
+      return {
+        ...conn,
+        latestPost: latestPost
+          ? {
+              snippet: latestPost.postTextSnippet,
+              url: latestPost.postUrl,
+              publishedAt: latestPost.publishedAtUtc,
+            }
+          : null,
+      };
+    }),
+  }));
+
+  return NextResponse.json({ success: true, data: enriched });
 }
 
 export async function POST(req: NextRequest) {
@@ -85,13 +136,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: "Slug already taken" }, { status: 409 });
   }
 
+  const { platformConnections: connections, ...clientData } = parsed.data;
+
   const client = await prisma.client.create({
     data: {
-      ...parsed.data,
-      campaignStartDate: parsed.data.campaignStartDate ? new Date(parsed.data.campaignStartDate) : null,
-      reportingStartDate: parsed.data.reportingStartDate ? new Date(parsed.data.reportingStartDate) : null,
+      ...clientData,
+      campaignStartDate: clientData.campaignStartDate ? new Date(clientData.campaignStartDate) : null,
+      reportingStartDate: clientData.reportingStartDate ? new Date(clientData.reportingStartDate) : null,
     },
   });
+
+  // Create platform connections if provided
+  if (connections && connections.length > 0) {
+    for (const conn of connections) {
+      await prisma.platformConnection.create({
+        data: {
+          clientId: client.id,
+          platform: conn.platform as any,
+          externalAccountUrl: conn.externalAccountUrl || null,
+          connectionStatus: ConnectionStatus.PENDING,
+          isMandatory: true,
+          isEnabled: true,
+        },
+      });
+    }
+  }
 
   // Audit log
   await prisma.auditLog.create({
@@ -104,5 +173,11 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return NextResponse.json({ success: true, data: client }, { status: 201 });
+  // Return client with connections
+  const fullClient = await prisma.client.findUnique({
+    where: { id: client.id },
+    include: { platformConnections: true },
+  });
+
+  return NextResponse.json({ success: true, data: fullClient }, { status: 201 });
 }
