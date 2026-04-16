@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
 
     // Fetch latest post for each client's platform connections
     const clientIds = clients.map((c) => c.id);
-    let latestPosts = [];
+    let latestPosts: any[] = [];
     try {
       latestPosts = clientIds.length > 0
         ? await prisma.socialPost.findMany({
@@ -126,7 +126,7 @@ export async function GET(req: NextRequest) {
     console.error("GET /api/clients error:", msg);
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
-}
+  }
 
 export async function POST(req: NextRequest) {
   let user;
@@ -198,3 +198,4 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ success: true, data: fullClient }, { status: 201 });
 }
+
