@@ -2,7 +2,7 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { requireRole } from "@/lib/auth";
-import { UserRole, ClientStatus, ClientType, ConnectionStatus } from "@prisma/client";
+import { UserRole, ClientStatus, ClientType, ConnectionStatus, Platform } from "@prisma/client";
 import { z } from "zod";
 
 const platformConnectionSchema = z.object({
@@ -126,7 +126,7 @@ export async function GET(req: NextRequest) {
     console.error("GET /api/clients error:", msg);
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
-  }
+}
 
 export async function POST(req: NextRequest) {
   let user;
@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
       await prisma.platformConnection.create({
         data: {
           clientId: client.id,
-          platform: conn.platform,
+          platform: conn.platform as Platform,
           externalAccountUrl: conn.externalAccountUrl || null,
           connectionStatus: ConnectionStatus.PENDING,
           isMandatory: true,
