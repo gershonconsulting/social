@@ -155,7 +155,19 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                       )}
                     </div>
                     <div className="text-xs text-gray-400 mt-0.5">
-                      {conn.externalAccountName ?? "Not configured"}
+                      {conn.externalAccountUrl ? (
+                        <a
+                          href={conn.externalAccountUrl.startsWith("http") ? conn.externalAccountUrl : `https://${conn.externalAccountUrl}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline inline-flex items-center gap-1"
+                        >
+                          <ExternalLink size={10} />
+                          {conn.externalAccountName ?? conn.externalAccountUrl.replace(/^https?:\/\/(?:www\.)?/, "")}
+                        </a>
+                      ) : (
+                        <span>{conn.externalAccountName ?? "Not configured"}</span>
+                      )}
                     </div>
                   </div>
                 </div>
