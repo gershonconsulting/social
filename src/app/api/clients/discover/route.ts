@@ -13,7 +13,7 @@ function extractHrefs(html: string): string[] {
     // Decode HTML entities
     url = url.replace(/&amp;/g, "&").replace(/&#x2F;/g, "/").replace(/&#47;/g, "/");
     hrefs.push(url);
-  }
+  }h
   return hrefs;
 }
 
@@ -30,7 +30,7 @@ const PLATFORM_MATCHERS: { platform: string; test: (url: string) => boolean; cle
   {
     platform: "TWITTER",
     test: (url) => {
-      if (!/(?:twitter\.com|x\.com)\/[a-zA-Z0-9_]+/i.test(url)) return false;
+      if (!/((?:^|:\/\/|:\/\/www\.)?:twitter\.com|x\.com)\/[a-zA-Z0-9_]+/i.test(url)) return false;
       // Exclude share/intent/generic pages
       return !/\/(intent|share|sharer|login|signup|help|i\/|search|hashtag)\b/i.test(url);
     },
