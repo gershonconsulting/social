@@ -79,6 +79,7 @@ export default function AdminPage() {
   const [discovering, setDiscovering] = useState(false);
   const [syncingClientId, setSyncingClientId] = useState<string | null>(null);
   const [syncMsg, setSyncMsg] = useState("");
+  const [discoveringUrlsId, setDiscoveringUrlsId] = useState<string | null>(null);
   const [formError, setFormError] = useState("");
 
   const [websiteInput, setWebsiteInput] = useState("");
@@ -240,6 +241,47 @@ export default function AdminPage() {
       setSyncMsg("Backfill request failed");
     } finally {
       setSyncingClientId(null);
+    }
+  }
+
+
+
+  async function handleDiscoverUrls(clientId: string, website: string) {
+    setDiscoveringUrlsId(clientId);
+    setSyncMsg("");
+    try {
+      const res = await fetch("/api/clients/discover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ website }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setSyncMsg("Discovery failed: " + (data.error || "Unknown error"));
+        return;
+      }
+      const discovered: DiscoveredLink[] = data.data.discovered;
+      const client = clients.find((c) => c.id === clientId);
+      if (!client) return;
+
+      let updated = 0;
+      for (const disc of discovered) {
+        const conn = client.platformConnections.find((c) => c.platform === disc.platform);
+        if (conn && !conn.externalAccountUrl) {
+          const patchRes = await fetch("/api/platforms/" + conn.id, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ externalAccountUrl: disc.url }),
+          });
+          if (patchRes.ok) updated++;
+        }
+      }
+      setSyncMsg(updated > 0 ? updated + " profile URL(s) discovered and saved" : "No new URLs found");
+      loadClients();
+    } catch {
+      setSyncMsg("Discovery request failed");
+    } finally {
+      setDiscoveringUrlsId(null);
     }
   }
 
@@ -570,6 +612,21 @@ export default function AdminPage() {
                       <div className="flex items-center gap-2 justify-end">
                         {client.status !== "ARCHIVED" ? (
                           <>
+                            {client.website && (
+                            <button
+                              onClick={() => handleDiscoverUrls(client.id, client.website!)}
+                              disabled={discoveringUrlsId === client.id}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs text-blue-600 bg-blue-50 rounded hover:bg-blue-100 disabled:opacity-60"
+                              title="Discover social profile URLs from website"
+                            >
+                              {discoveringUrlsId === client.id ? (
+                                <Loader2 size={11} className="animate-spin" />
+                              ) : (
+                                <Globe size={11} />
+                              )}
+                              Discover
+                            </button>
+                            )}
                             <button
                                        onClick={() => handleBackfill(client.id)}
                               disabled={syncingClientId === client.id}
