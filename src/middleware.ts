@@ -1,34 +1,12 @@
-import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-export default withAuth(
-  function middleware(_req) {
-    return NextResponse.next();
-  },
-  {
-    callbacks: {
-      authorized: ({ token }) => !!token,
-    },
-  }
-);
+// Single-user app — no authentication middleware needed
+export function middleware(_req: NextRequest) {
+  return NextResponse.next();
+}
 
+// No matcher = middleware won't run on any routes
 export const config = {
-  matcher: [
-    "/dashboard/:path*",
-    "/clients/:path*",
-    "/reports/:path*",
-    "/followers/:path*",
-    "/admin/:path*",
-    "/logs/:path*",
-    "/api/clients/:path*",
-    "/api/platforms/:path*",
-    "/api/compliance/:path*",
-    "/api/reports/:path*",
-    "/api/followers/:path*",
-    "/api/sync/:path*",
-    "/api/jobs/:path*",
-    "/api/users/:path*",
-    "/api/audit/:path*",
-    "/api/dashboard/:path*",
-  ],
+  matcher: [],
 };
