@@ -17,6 +17,7 @@ const updateClientSchema = z.object({
   billingStatus: z.string().optional().nullable(),
   contractStatus: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
+  clientType: z.nativeEnum(ClientType).optional(),
 });
 
 export async function GET(
