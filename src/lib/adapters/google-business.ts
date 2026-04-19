@@ -8,7 +8,8 @@
  *   https://www.googleapis.com/auth/business.manage
  *
  * externalAccountId: Google location name (e.g. "accounts/123/locations/456")
- * tokenReference: OAuth2 access token (refreshed as needed)
+ * tokenReference: JSON string with { accessToken, refreshToken, expiresAt }
+ *   (stored by the Google OAuth callback)
  *
  * Note: Google Business Profile does not expose a public post URL consistently.
  * We store the internal post name and clearly label this limitation.
@@ -36,11 +37,122 @@ interface GBPLocalPostsResponse {
   nextPageToken?: string;
 }
 
+interface TokenData {
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt?: number;
+}
+
+/**
+ * Parse the tokenReference field which may be:
+ * - A JSON string: { accessToken, refreshToken, expiresAt }
+ * - A plain access token string (legacy)
+ */
+function parseToken(tokenReference: string): TokenData {
+  try {
+    const parsed = JSON.parse(tokenReference);
+    if (parsed.accessToken) {
+      return parsed as TokenData;
+    }
+    // If JSON but no accessToken field, treat the whole thing as unknown
+    return { accessToken: tokenReference };
+  } catch {
+    // Not JSON — treat as a raw access token string
+    return { accessToken: tokenReference };
+  }
+}
+
+/**
+ * Refresh the Google OAuth access token using the refresh token.
+ */
+async function refreshAccessToken(refreshToken: string): Promise<{ accessToken: string; expiresAt: number } | null> {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret || !refreshToken) return null;
+
+  try {
+    const resp = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: "refresh_token",
+      }),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return {
+      accessToken: data.access_token,
+      expiresAt: Date.now() + (data.expires_in || 3600) * 1000,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get a valid access token, refreshing if necessary.
+ */
+async function getAccessToken(tokenRef: string): Promise<string | null> {
+  const tokenData = parseToken(tokenRef);
+
+  // Check if token is expired (with 5 min buffer)
+  if (tokenData.expiresAt && tokenData.expiresAt < Date.now() + 300_000) {
+    if (tokenData.refreshToken) {
+      const refreshed = await refreshAccessToken(tokenData.refreshToken);
+      if (refreshed) return refreshed.accessToken;
+    }
+    // Token expired and no refresh possible
+    return null;
+  }
+
+  return tokenData.accessToken;
+}
+
 export class GoogleBusinessAdapter implements PlatformAdapter {
   readonly platform = "GOOGLE_BUSINESS";
 
   private authHeaders(token: string): HeadersInit {
     return { Authorization: `Bearer ${token}` };
+  }
+
+  /**
+   * Auto-discover the first location for the authenticated account.
+   * Used when externalAccountId is not yet set.
+   */
+  async discoverLocation(tokenReference: string): Promise<{ locationName: string; displayName: string } | null> {
+    const accessToken = await getAccessToken(tokenReference);
+    if (!accessToken) return null;
+
+    try {
+      // First, list accounts
+      const accountsResp = await fetch(`${GBP_API_BASE}/accounts`, {
+        headers: this.authHeaders(accessToken),
+      });
+      if (!accountsResp.ok) return null;
+      const accountsData = await accountsResp.json();
+      const accounts = accountsData.accounts ?? [];
+      if (accounts.length === 0) return null;
+
+      // Then, list locations for the first account
+      const accountName = accounts[0].name; // e.g. "accounts/123"
+      const locResp = await fetch(`${GBP_API_BASE}/${accountName}/locations`, {
+        headers: this.authHeaders(accessToken),
+      });
+      if (!locResp.ok) return null;
+      const locData = await locResp.json();
+      const locations = locData.locations ?? [];
+      if (locations.length === 0) return null;
+
+      return {
+        locationName: locations[0].name, // e.g. "accounts/123/locations/456"
+        displayName: locations[0].locationName || locations[0].name,
+      };
+    } catch {
+      return null;
+    }
   }
 
   async fetchPosts(
@@ -56,10 +168,19 @@ export class GoogleBusinessAdapter implements PlatformAdapter {
       );
     }
 
+    const accessToken = await getAccessToken(config.tokenReference);
+    if (!accessToken) {
+      return buildUnavailableResult(
+        "TOKEN_EXPIRED",
+        "Google OAuth token expired and could not be refreshed. Please reconnect the Google account.",
+        false
+      );
+    }
+
     if (!config.externalAccountId) {
       return buildUnavailableResult(
         "NO_ACCOUNT_ID",
-        "No Google Business Profile location ID configured.",
+        "No Google Business Profile location ID configured. Run location discovery first.",
         false
       );
     }
@@ -68,7 +189,7 @@ export class GoogleBusinessAdapter implements PlatformAdapter {
       const locationName = config.externalAccountId; // e.g. "accounts/123/locations/456"
       const response = await fetch(
         `${GBP_API_BASE}/${locationName}/localPosts?pageSize=100`,
-        { headers: this.authHeaders(config.tokenReference) }
+        { headers: this.authHeaders(accessToken) }
       );
 
       if (response.status === 401) {
@@ -119,11 +240,7 @@ export class GoogleBusinessAdapter implements PlatformAdapter {
         const publishedAtLocal = toLocalTime(publishedAtUtc, config.timezone);
         const publishedDateLocal = toLocalDateString(publishedAtUtc, config.timezone);
 
-        // Google Business Profile does not reliably expose public post URLs.
-        // We store the CTA URL when available, or label as unavailable.
         const postUrl = post.callToAction?.url ?? null;
-
-        // Use the post name as the external ID (stable identifier)
         const externalPostId = post.name;
 
         posts.push({
@@ -150,9 +267,6 @@ export class GoogleBusinessAdapter implements PlatformAdapter {
   }
 
   async fetchFollowerCount(_config: AdapterConfig): Promise<number | null> {
-    // Google Business Profile does not expose a follower count equivalent.
-    // Some metrics (impressions, searches) may be available via the Insights API
-    // but are not a follower count. Return null to be transparent.
     return null;
   }
 
@@ -161,11 +275,15 @@ export class GoogleBusinessAdapter implements PlatformAdapter {
       return { valid: false, error: "No OAuth token configured" };
     }
 
+    const accessToken = await getAccessToken(config.tokenReference);
+    if (!accessToken) {
+      return { valid: false, error: "Token expired and could not be refreshed" };
+    }
+
     try {
-      // Attempt to list accounts as a basic token validation
       const response = await fetch(
         `${GBP_API_BASE}/accounts`,
-        { headers: this.authHeaders(config.tokenReference) }
+        { headers: this.authHeaders(accessToken) }
       );
 
       if (response.status === 401) return { valid: false, error: "Token expired or invalid" };

@@ -55,7 +55,6 @@ export async function GET(req: NextRequest) {
             isMandatory: true,
             externalAccountUrl: true,
             externalAccountName: true,
-            tokenReference: true,
             lastSyncAt: true,
             lastSyncError: true,
           },
