@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { ExternalLink, Plug, CheckCircle, AlertCircle, RefreshCw } from "lucide-react";
+import { Plug, CheckCircle, AlertCircle, RefreshCw, Eye, EyeOff, Save, Loader2 } from "lucide-react";
 
 interface ConnectionInfo {
   id: string;
@@ -8,6 +8,7 @@ interface ConnectionInfo {
   externalAccountName: string | null;
   tokenExpiresAt: string | null;
   connectionStatus: string;
+  hasToken: boolean;
   client: { id: string; name: string };
 }
 
@@ -15,48 +16,142 @@ const PLATFORMS = [
   {
     key: "LINKEDIN",
     name: "LinkedIn",
-    icon: "🔗",
+    icon: "\ud83d\udd17",
     color: "blue",
-    description: "Connect your LinkedIn account to fetch company page posts, engagement metrics, and follower data for all your managed clients.",
-    scopes: "Organization admin, social reading, follower counts",
+    description: "Connect your LinkedIn account to fetch company page posts, engagement metrics, and follower data.",
+    connectMethod: "oauth" as const,
   },
   {
     key: "TWITTER",
     name: "X / Twitter",
-    icon: "𝕏",
+    icon: "\ud835\udd4f",
     color: "gray",
-    description: "Connect your X/Twitter account to monitor client tweets, mentions, and engagement.",
-    scopes: "Tweet read, user read",
+    description: "Enter your X/Twitter credentials to monitor tweets, mentions, and engagement.",
+    connectMethod: "credentials" as const,
   },
   {
     key: "GOOGLE_BUSINESS",
     name: "Google Business Profile",
-    icon: "📍",
+    icon: "\ud83d\udccd",
     color: "green",
-    description: "Connect your Google account to track Business Profile posts and reviews for your clients.",
-    scopes: "Business Profile management",
+    description: "Connect your Google account to track Business Profile posts and reviews.",
+    connectMethod: "google-oauth" as const,
   },
 ];
+
+function TwitterCredentialsForm({ onSaved }: { onSaved: () => void }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const handleSave = async () => {
+    if (!username.trim() || !password.trim()) {
+      setError("Both username and password are required");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const resp = await fetch("/api/settings/twitter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username.trim(), password }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({ error: "Failed to save" }));
+        throw new Error(data.error || "Failed to save credentials");
+      }
+      setSuccess(true);
+      setPassword("");
+      onSaved();
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 space-y-2 max-w-sm">
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Username / Email</label>
+        <input
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          placeholder="@youraccount"
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Password</label>
+        <div className="relative">
+          <input
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-9"
+            placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          >
+            {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+        </div>
+      </div>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      {success && <p className="text-xs text-green-600">Credentials saved successfully!</p>}
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+      >
+        {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+        {saving ? "Saving..." : "Save Credentials"}
+      </button>
+    </div>
+  );
+}
 
 export function SettingsConnections({
   connections,
   linkedinConfigured,
+  googleConfigured,
   appUrl,
 }: {
   connections: Record<string, ConnectionInfo[]>;
   linkedinConfigured: boolean;
+  googleConfigured: boolean;
   appUrl: string;
 }) {
   const [connecting, setConnecting] = useState<string | null>(null);
+  const [showTwitterForm, setShowTwitterForm] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const handleConnect = (platform: string) => {
-    if (platform === "LINKEDIN" && linkedinConfigured) {
-      setConnecting(platform);
-      // For LinkedIn, we need a clientId and connectionId.
-      // The connect flow will prompt to select which client to connect.
-      window.location.href = `/settings/connect?platform=${platform}`;
-    } else {
-      alert(`${platform} OAuth integration coming soon. Please configure the API credentials first.`);
+  const handleConnect = (platform: typeof PLATFORMS[number]) => {
+    if (platform.connectMethod === "oauth" && platform.key === "LINKEDIN") {
+      if (!linkedinConfigured) {
+        alert("LinkedIn API credentials not configured yet. Add LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET in Cloudflare Pages environment variables.");
+        return;
+      }
+      setConnecting(platform.key);
+      window.location.href = `/settings/connect?platform=${platform.key}`;
+    } else if (platform.connectMethod === "credentials" && platform.key === "TWITTER") {
+      setShowTwitterForm(true);
+    } else if (platform.connectMethod === "google-oauth" && platform.key === "GOOGLE_BUSINESS") {
+      if (!googleConfigured) {
+        alert("Google API credentials not configured yet. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Cloudflare Pages environment variables.");
+        return;
+      }
+      setConnecting(platform.key);
+      window.location.href = `/api/auth/google/connect`;
     }
   };
 
@@ -65,7 +160,7 @@ export function SettingsConnections({
       <div className="px-6 py-4 border-b border-gray-100">
         <h2 className="text-sm font-semibold text-gray-900">Platform Connections</h2>
         <p className="text-xs text-gray-500 mt-1">
-          Connect your social media admin accounts to enable post syncing and analytics for all clients
+          Connect your social media accounts to enable post syncing and analytics
         </p>
       </div>
       <div className="divide-y divide-gray-50">
@@ -87,7 +182,11 @@ export function SettingsConnections({
                       {platform.description}
                     </p>
                     <div className="text-[10px] text-gray-400 mt-1">
-                      Scopes: {platform.scopes}
+                      {platform.connectMethod === "credentials"
+                        ? "Connection: Username & Password"
+                        : platform.connectMethod === "google-oauth"
+                        ? "Connection: Google Account (Gmail)"
+                        : "Connection: OAuth 2.0"}
                     </div>
 
                     {/* Show connected clients */}
@@ -104,7 +203,7 @@ export function SettingsConnections({
                               )}
                               <span className="text-gray-600">
                                 {conn.client.name}
-                                {conn.externalAccountName && ` — ${conn.externalAccountName}`}
+                                {conn.externalAccountName && ` \u2014 ${conn.externalAccountName}`}
                               </span>
                               {expired && (
                                 <span className="text-amber-600 font-medium">Token expired</span>
@@ -114,17 +213,43 @@ export function SettingsConnections({
                         })}
                       </div>
                     )}
+
+                    {/* Twitter credentials form */}
+                    {platform.key === "TWITTER" && (showTwitterForm || (!hasConnected)) && (
+                      <TwitterCredentialsForm
+                        onSaved={() => {
+                          setShowTwitterForm(false);
+                          setRefreshKey(k => k + 1);
+                          window.location.reload();
+                        }}
+                      />
+                    )}
                   </div>
                 </div>
 
                 <div className="flex-shrink-0">
-                  {hasConnected && !allExpired ? (
+                  {platform.key === "TWITTER" ? (
+                    hasConnected ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-green-600 font-medium flex items-center gap-1">
+                          <CheckCircle size={12} /> Connected
+                        </span>
+                        <button
+                          onClick={() => setShowTwitterForm(true)}
+                          className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 px-2 py-1 border border-gray-200 rounded-lg"
+                        >
+                          <RefreshCw size={11} />
+                          Update
+                        </button>
+                      </div>
+                    ) : null /* Form is shown inline */
+                  ) : hasConnected && !allExpired ? (
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-green-600 font-medium flex items-center gap-1">
                         <CheckCircle size={12} /> Connected
                       </span>
                       <button
-                        onClick={() => handleConnect(platform.key)}
+                        onClick={() => handleConnect(platform)}
                         className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 px-2 py-1 border border-gray-200 rounded-lg"
                       >
                         <RefreshCw size={11} />
@@ -133,12 +258,12 @@ export function SettingsConnections({
                     </div>
                   ) : (
                     <button
-                      onClick={() => handleConnect(platform.key)}
+                      onClick={() => handleConnect(platform)}
                       disabled={connecting === platform.key}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
                     >
                       <Plug size={12} />
-                      {connecting === platform.key ? "Connecting…" : allExpired ? "Reconnect" : "Connect"}
+                      {connecting === platform.key ? "Connecting\u2026" : allExpired ? "Reconnect" : "Connect"}
                     </button>
                   )}
                 </div>

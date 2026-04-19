@@ -1,14 +1,11 @@
 export const runtime = 'edge';
 import prisma from "@/lib/db";
-import { getSession } from "@/lib/auth";
-import { redirect } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { SettingsConnections } from "@/components/settings/settings-connections";
 
 export const dynamic = "force-dynamic";
 
 async function getConnectionStatus() {
-  // Check if we have any connected LinkedIn/Twitter/Google platform connections
   const connections = await prisma.platformConnection.findMany({
     where: {
       platform: { in: ["LINKEDIN", "TWITTER", "GOOGLE_BUSINESS"] },
@@ -20,43 +17,41 @@ async function getConnectionStatus() {
       externalAccountName: true,
       tokenExpiresAt: true,
       connectionStatus: true,
+      tokenReference: true,
       client: { select: { id: true, name: true } },
     },
   });
 
-  // Group by platform
-  const byPlatform: Record<string, typeof connections> = {};
-  for (const conn of connections) {
-    const p = conn.platform;
-    if (!byPlatform[p]) byPlatform[p] = [];
-    byPlatform[p].push(conn);
-  }
-
-  // Serialize Date objects for client component
-  const serialized: Record<string, Array<{
+  const byPlatform: Record<string, Array<{
     id: string;
     platform: string;
     externalAccountName: string | null;
     tokenExpiresAt: string | null;
     connectionStatus: string;
+    hasToken: boolean;
     client: { id: string; name: string };
   }>> = {};
-  for (const [key, conns] of Object.entries(byPlatform)) {
-    serialized[key] = conns.map(c => ({
-      ...c,
-      tokenExpiresAt: c.tokenExpiresAt ? c.tokenExpiresAt.toISOString() : null,
-    }));
+  for (const conn of connections) {
+    const p = conn.platform;
+    if (!byPlatform[p]) byPlatform[p] = [];
+    byPlatform[p].push({
+      id: conn.id,
+      platform: conn.platform,
+      externalAccountName: conn.externalAccountName,
+      tokenExpiresAt: conn.tokenExpiresAt ? conn.tokenExpiresAt.toISOString() : null,
+      connectionStatus: conn.connectionStatus,
+      hasToken: !!conn.tokenReference,
+      client: conn.client,
+    });
   }
-  return serialized;
+  return byPlatform;
 }
 
 export default async function SettingsPage() {
-  const session = await getSession();
-  if (!session) redirect("/login");
-
-  const connections = await getConnectionStatus() as Record<string, Array<{ id: string; platform: string; externalAccountName: string | null; tokenExpiresAt: string | null; connectionStatus: string; client: { id: string; name: string }; }>>;
+  const connections = await getConnectionStatus();
 
   const linkedinConfigured = !!process.env.LINKEDIN_CLIENT_ID;
+  const googleConfigured = !!process.env.GOOGLE_CLIENT_ID;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://social.gershoncrm.com";
 
   return (
@@ -69,6 +64,7 @@ export default async function SettingsPage() {
       <SettingsConnections
         connections={connections}
         linkedinConfigured={linkedinConfigured}
+        googleConfigured={googleConfigured}
         appUrl={appUrl}
       />
 
@@ -100,6 +96,28 @@ export default async function SettingsPage() {
               </div>
               <span className={`text-xs px-2 py-1 rounded-full ${process.env.LINKEDIN_CLIENT_SECRET ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>
                 {process.env.LINKEDIN_CLIENT_SECRET ? "Configured" : "Not set"}
+              </span>
+            </div>
+          </div>
+          <div className="px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-gray-900">GOOGLE_CLIENT_ID</div>
+                <div className="text-xs text-gray-400 mt-0.5">Google OAuth Client ID for Business Profile</div>
+              </div>
+              <span className={`text-xs px-2 py-1 rounded-full ${googleConfigured ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>
+                {googleConfigured ? "Configured" : "Not set"}
+              </span>
+            </div>
+          </div>
+          <div className="px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-gray-900">GOOGLE_CLIENT_SECRET</div>
+                <div className="text-xs text-gray-400 mt-0.5">Google OAuth Client Secret</div>
+              </div>
+              <span className={`text-xs px-2 py-1 rounded-full ${process.env.GOOGLE_CLIENT_SECRET ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>
+                {process.env.GOOGLE_CLIENT_SECRET ? "Configured" : "Not set"}
               </span>
             </div>
           </div>

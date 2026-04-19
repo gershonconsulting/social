@@ -1,8 +1,7 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { requireRole } from "@/lib/auth";
-import { UserRole, ClientStatus } from "@prisma/client";
+import { ClientStatus } from "@prisma/client";
 import { z } from "zod";
 
 const updateClientSchema = z.object({
@@ -24,13 +23,6 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    await requireRole(UserRole.OPERATIONS);
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Error";
-    return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
-  }
-
   const { id } = await params;
   const client = await prisma.client.findUnique({
     where: { id },
@@ -53,14 +45,6 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  let user: { id?: string };
-  try {
-    user = await requireRole(UserRole.ADMIN);
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Error";
-    return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
-  }
-
   const { id } = await params;
   const client = await prisma.client.findUnique({ where: { id } });
   if (!client) {
@@ -92,7 +76,7 @@ export async function PATCH(
 
   await prisma.auditLog.create({
     data: {
-      actorUserId: user.id ?? null,
+      actorUserId: null,
       actionType: "CLIENT_UPDATED",
       entityType: "Client",
       entityId: client.id,
@@ -108,14 +92,6 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  let user: { id?: string };
-  try {
-    user = await requireRole(UserRole.ADMIN);
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Error";
-    return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
-  }
-
   const { id } = await params;
   const { searchParams } = new URL(req.url);
   const reason = searchParams.get("reason") ?? "Archived by admin";
@@ -136,7 +112,7 @@ export async function DELETE(
 
   await prisma.auditLog.create({
     data: {
-      actorUserId: user.id ?? null,
+      actorUserId: null,
       actionType: "CLIENT_ARCHIVED",
       entityType: "Client",
       entityId: client.id,
@@ -147,4 +123,3 @@ export async function DELETE(
 
   return NextResponse.json({ success: true, data: archived });
 }
-
