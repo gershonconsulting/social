@@ -52,8 +52,10 @@ export async function syncPlatformConnection(
     };
   }
 
-  // Auto-discover Google Business location if not set
+  // Auto-discover platform-specific IDs if not set
   let externalAccountId = connection.externalAccountId ?? "";
+
+  // Google Business: discover location ID
   if (connection.platform === "GOOGLE_BUSINESS" && !externalAccountId && connection.tokenReference) {
     const gbAdapter = adapter as GoogleBusinessAdapter;
     const location = await gbAdapter.discoverLocation(connection.tokenReference);
@@ -67,6 +69,51 @@ export async function syncPlatformConnection(
         },
       });
     }
+  }
+
+  // LinkedIn: discover organization ID from company URL
+  if (connection.platform === "LINKEDIN" && !externalAccountId && connection.tokenReference) {
+    const companyUrl = connection.externalAccountUrl || "";
+    // Extract vanity name from URL like https://www.linkedin.com/company/gershonconsulting
+    const vanityMatch = companyUrl.match(/linkedin\.com\/(?:company|in)\/([^\/?#]+)/i);
+    if (vanityMatch) {
+      const vanityName = vanityMatch[1];
+      try {
+        const orgResp = await fetch(
+          \`https://api.linkedin.com/v2/organizations?q=vanityName&vanityName=\${encodeURIComponent(vanityName)}\`,
+          {
+            headers: {
+              "Authorization": \`Bearer \${connection.tokenReference}\`,
+              "LinkedIn-Version": "202401",
+              "X-Restli-Protocol-Version": "2.0.0",
+            },
+          }
+        );
+        if (orgResp.ok) {
+          const orgData = await orgResp.json();
+          const org = orgData.elements?.[0];
+          if (org?.id) {
+            externalAccountId = String(org.id);
+            await prisma.platformConnection.update({
+              where: { id: connectionId },
+              data: {
+                externalAccountId: String(org.id),
+                externalAccountName: org.localizedName || vanityName,
+              },
+            });
+          }
+        }
+      } catch (e) {
+        // Org lookup failed, continue without it
+        console.error("LinkedIn org lookup failed:", e);
+      }
+    }
+  }
+
+  // Twitter: extract user ID if we have credentials but no ID
+  if (connection.platform === "TWITTER" && !externalAccountId && connection.tokenReference) {
+    // Twitter credentials are stored as JSON {username, password} - can't use API without Bearer token
+    // Skip Twitter sync until a Bearer token is configured
   }
 
   const config: AdapterConfig = {
