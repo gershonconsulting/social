@@ -12,20 +12,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "posts array is required" }, { status: 400 });
     }
 
+    // We need to look up clientId from platformConnectionId
     const results = [];
     for (const post of posts) {
-      const { connectionId, platform, externalPostId, content, publishedAt, postUrl, postType, likes, comments, shares, views } = post;
+      const { platformConnectionId, platform, externalPostId, content, publishedAt, postUrl, likeCount, commentCount, shareCount } = post;
       
-      if (!connectionId || !content || !publishedAt) {
-        results.push({ error: "connectionId, content, publishedAt required", post: content?.substring(0, 50) });
+      if (!platformConnectionId || !content || !publishedAt) {
+        results.push({ error: "platformConnectionId, content, publishedAt required", post: content?.substring(0, 50) });
         continue;
       }
+
+      // Look up the connection to get clientId
+      const connection = await prisma.platformConnection.findUnique({
+        where: { id: platformConnectionId },
+        select: { clientId: true }
+      });
       
-      const extId = externalPostId || `manual_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      if (!connection) {
+        results.push({ error: "connection not found", platformConnectionId });
+        continue;
+      }
+
+      const extId = externalPostId || ("manual_" + Date.now().toString() + "_" + Math.random().toString(36).slice(2));
       
-      // Check for existing post to avoid duplicates
+      // Check for existing post
       const existing = await prisma.socialPost.findFirst({
-        where: { connectionId, externalPostId: extId }
+        where: { 
+          clientId: connection.clientId,
+          platform: (platform as Platform) || Platform.TWITTER,
+          externalPostId: extId
+        }
       });
       
       if (existing) {
@@ -33,19 +49,23 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      const pubDate = new Date(publishedAt);
+      const dateLocal = pubDate.toISOString().split("T")[0];
+
       const created = await prisma.socialPost.create({
         data: {
-          connectionId,
+          clientId: connection.clientId,
+          platformConnectionId,
           platform: (platform as Platform) || Platform.TWITTER,
           externalPostId: extId,
-          content,
-          publishedAt: new Date(publishedAt),
+          postTextSnippet: content.substring(0, 2000),
+          publishedAtUtc: pubDate,
+          publishedAtLocal: pubDate,
+          publishedDateLocal: dateLocal,
           postUrl: postUrl || null,
-          postType: postType || "ORIGINAL",
-          likes: likes || 0,
-          comments: comments || 0,
-          shares: shares || 0,
-          views: views || 0,
+          likeCount: likeCount || 0,
+          commentCount: commentCount || 0,
+          shareCount: shareCount || 0,
         }
       });
       results.push({ id: created.id, status: "created" });
