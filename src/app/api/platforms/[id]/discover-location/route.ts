@@ -5,14 +5,12 @@ import prisma from "@/lib/db";
 /**
  * POST /api/platforms/[id]/discover-location
  * 
- * Discovers Google Business Profile accounts and locations
- * using the stored OAuth token. Returns found locations so
- * the correct one can be set as externalAccountId.
+ * Discovers Google Business Profile accounts and locations.
+ * Auto-refreshes the OAuth token if expired, then lists accounts/locations.
  */
 
 const GBP_ACCOUNTS_API = "https://mybusinessaccountmanagement.googleapis.com/v1";
 const GBP_LOCATIONS_API = "https://mybusinessbusinessinformation.googleapis.com/v1";
-const GBP_V4_API = "https://mybusiness.googleapis.com/v4";
 
 interface AccountResult {
   name: string;
@@ -21,9 +19,39 @@ interface AccountResult {
 }
 
 interface LocationResult {
-  name: string;          // e.g. "locations/123456"
-  title?: string;        // Business name
+  name: string;
+  title?: string;
   storefrontAddress?: { locality?: string; regionCode?: string };
+}
+
+/**
+ * Refresh a Google OAuth access token using the refresh token.
+ */
+async function refreshAccessToken(refreshToken: string): Promise<{
+  accessToken: string;
+  expiresAt: string;
+} | null> {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) return null;
+
+  const resp = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+
+  if (!resp.ok) return null;
+
+  const data = await resp.json();
+  const expiresAt = new Date(Date.now() + (data.expires_in || 3600) * 1000).toISOString();
+  return { accessToken: data.access_token, expiresAt };
 }
 
 export async function POST(
@@ -46,12 +74,18 @@ export async function POST(
 
   // Parse the stored token
   let accessToken: string | null = null;
+  let refreshToken: string | null = null;
+  let tokenExpired = false;
+
   try {
     if (connection.tokenReference) {
-      // Token may be stored as JSON { accessToken, refreshToken, ... } or as plain string
       if (connection.tokenReference.startsWith("{")) {
         const parsed = JSON.parse(connection.tokenReference);
         accessToken = parsed.accessToken || parsed.access_token || null;
+        refreshToken = parsed.refreshToken || parsed.refresh_token || null;
+        if (parsed.expiresAt) {
+          tokenExpired = new Date(parsed.expiresAt) < new Date();
+        }
       } else {
         accessToken = connection.tokenReference;
       }
@@ -60,28 +94,106 @@ export async function POST(
     return NextResponse.json({ success: false, error: "Failed to parse stored token" }, { status: 500 });
   }
 
-  if (!accessToken) {
-    return NextResponse.json({ success: false, error: "No access token available. Please reconnect Google." }, { status: 400 });
+  if (!accessToken && !refreshToken) {
+    return NextResponse.json({ success: false, error: "No token available. Please reconnect Google via Settings." }, { status: 400 });
+  }
+
+  const diagnostics: Record<string, unknown> = {
+    tokenExpired,
+    hasRefreshToken: !!refreshToken,
+  };
+
+  // Step 0: If token expired and we have a refresh token, refresh it
+  if ((tokenExpired || !accessToken) && refreshToken) {
+    diagnostics.attemptingRefresh = true;
+    const refreshed = await refreshAccessToken(refreshToken);
+    
+    if (refreshed) {
+      accessToken = refreshed.accessToken;
+      diagnostics.tokenRefreshed = true;
+
+      // Update the stored token in DB
+      const newTokenRef = JSON.stringify({
+        accessToken: refreshed.accessToken,
+        refreshToken,
+        expiresAt: refreshed.expiresAt,
+      });
+
+      await prisma.platformConnection.update({
+        where: { id },
+        data: {
+          tokenReference: newTokenRef,
+          tokenExpiresAt: new Date(refreshed.expiresAt),
+          lastSyncError: null,
+        },
+      });
+    } else {
+      diagnostics.refreshFailed = true;
+      return NextResponse.json({
+        success: false,
+        error: "Token expired and refresh failed. Please reconnect Google via Settings.",
+        diagnostics,
+      });
+    }
   }
 
   const headers = { Authorization: `Bearer ${accessToken}` };
-  const diagnostics: Record<string, unknown> = {};
 
-  // Step 1: Try the new Account Management API
+  // Step 1: List accounts via Account Management API
   let accounts: AccountResult[] = [];
   try {
     const accountsRes = await fetch(`${GBP_ACCOUNTS_API}/accounts`, { headers });
     diagnostics.accountsApiStatus = accountsRes.status;
-    
-    if (accountsRes.ok) {
+
+    if (accountsRes.status === 401) {
+      // Token actually expired — try refresh even if we thought it was valid
+      if (refreshToken) {
+        const refreshed = await refreshAccessToken(refreshToken);
+        if (refreshed) {
+          accessToken = refreshed.accessToken;
+          const retryHeaders = { Authorization: `Bearer ${accessToken}` };
+          
+          // Update DB
+          const newTokenRef = JSON.stringify({
+            accessToken: refreshed.accessToken,
+            refreshToken,
+            expiresAt: refreshed.expiresAt,
+          });
+          await prisma.platformConnection.update({
+            where: { id },
+            data: {
+              tokenReference: newTokenRef,
+              tokenExpiresAt: new Date(refreshed.expiresAt),
+            },
+          });
+
+          // Retry
+          const retryRes = await fetch(`${GBP_ACCOUNTS_API}/accounts`, { headers: retryHeaders });
+          diagnostics.retryAccountsStatus = retryRes.status;
+          if (retryRes.ok) {
+            const data = await retryRes.json();
+            accounts = (data.accounts || []) as AccountResult[];
+          } else {
+            const errBody = await retryRes.text().catch(() => "");
+            diagnostics.retryAccountsError = errBody.slice(0, 500);
+          }
+        } else {
+          return NextResponse.json({
+            success: false,
+            error: "Token expired and refresh failed. Please reconnect Google via Settings.",
+            diagnostics,
+          });
+        }
+      } else {
+        return NextResponse.json({
+          success: false,
+          error: "Token expired and no refresh token available. Please reconnect Google via Settings.",
+          diagnostics,
+        });
+      }
+    } else if (accountsRes.ok) {
       const data = await accountsRes.json();
       accounts = (data.accounts || []) as AccountResult[];
-      diagnostics.accountsFound = accounts.length;
-      diagnostics.accounts = accounts.map((a: AccountResult) => ({
-        name: a.name,
-        accountName: a.accountName,
-        type: a.type,
-      }));
     } else {
       const errBody = await accountsRes.text().catch(() => "");
       diagnostics.accountsApiError = errBody.slice(0, 500);
@@ -90,39 +202,22 @@ export async function POST(
     diagnostics.accountsApiError = err instanceof Error ? err.message : String(err);
   }
 
-  // Step 2: Try the old v4 accounts API as fallback
-  if (accounts.length === 0) {
-    try {
-      const v4AccountsRes = await fetch(`${GBP_V4_API}/accounts`, { headers });
-      diagnostics.v4AccountsApiStatus = v4AccountsRes.status;
-      
-      if (v4AccountsRes.ok) {
-        const data = await v4AccountsRes.json();
-        accounts = (data.accounts || []) as AccountResult[];
-        diagnostics.v4AccountsFound = accounts.length;
-        diagnostics.v4Accounts = accounts.map((a: AccountResult) => ({
-          name: a.name,
-          accountName: a.accountName,
-          type: a.type,
-        }));
-      } else {
-        const errBody = await v4AccountsRes.text().catch(() => "");
-        diagnostics.v4AccountsApiError = errBody.slice(0, 500);
-      }
-    } catch (err) {
-      diagnostics.v4AccountsApiError = err instanceof Error ? err.message : String(err);
-    }
-  }
+  diagnostics.accountsFound = accounts.length;
+  diagnostics.accounts = accounts.map((a) => ({
+    name: a.name,
+    accountName: a.accountName,
+    type: a.type,
+  }));
 
-  // Step 3: For each account, list locations
+  // Step 2: For each account, list locations
   const allLocations: Array<{ accountName: string; locationName: string; title: string; address?: string }> = [];
 
   for (const account of accounts) {
-    // Try new Business Information API
+    const currentHeaders = { Authorization: `Bearer ${accessToken}` };
     try {
       const locRes = await fetch(
         `${GBP_LOCATIONS_API}/${account.name}/locations?readMask=name,title,storefrontAddress`,
-        { headers }
+        { headers: currentHeaders }
       );
       diagnostics[`locations_${account.name}_status`] = locRes.status;
 
@@ -139,24 +234,6 @@ export async function POST(
       } else {
         const errBody = await locRes.text().catch(() => "");
         diagnostics[`locations_${account.name}_error`] = errBody.slice(0, 500);
-
-        // Fallback: try v4 locations API
-        const v4LocRes = await fetch(`${GBP_V4_API}/${account.name}/locations`, { headers });
-        diagnostics[`v4_locations_${account.name}_status`] = v4LocRes.status;
-        if (v4LocRes.ok) {
-          const v4LocData = await v4LocRes.json();
-          for (const loc of (v4LocData.locations || []) as LocationResult[]) {
-            allLocations.push({
-              accountName: account.name,
-              locationName: loc.name,
-              title: loc.title || "Unknown",
-              address: loc.storefrontAddress?.locality || undefined,
-            });
-          }
-        } else {
-          const v4Err = await v4LocRes.text().catch(() => "");
-          diagnostics[`v4_locations_${account.name}_error`] = v4Err.slice(0, 500);
-        }
       }
     } catch (err) {
       diagnostics[`locations_${account.name}_error`] = err instanceof Error ? err.message : String(err);
@@ -193,7 +270,7 @@ export async function POST(
   return NextResponse.json({
     success: allLocations.length > 0,
     message: allLocations.length === 0
-      ? "No locations found. Token may be expired or account has no locations."
+      ? "No locations found. Token may be invalid or account has no Business Profile locations."
       : `Found ${allLocations.length} locations. Use PATCH /api/platforms/${id} to set externalAccountId.`,
     locations: allLocations,
     diagnostics,
