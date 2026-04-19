@@ -206,8 +206,19 @@ export async function DashboardContent() {
                       <td className="px-6 py-4">
                         <Link
                           href={`/clients/${client.id}`}
-                          className="font-medium text-gray-900 hover:text-blue-600"
+                          className="font-medium text-gray-900 hover:text-blue-600 inline-flex items-center gap-2"
                         >
+                          {client.logoUrl ? (
+                            <img
+                              src={client.logoUrl}
+                              alt={client.name}
+                              className="w-6 h-6 rounded-full object-cover border border-gray-200"
+                            />
+                          ) : (
+                            <span className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">
+                              {client.name.charAt(0).toUpperCase()}
+                            </span>
+                          )}
                           {client.name}
                         </Link>
                         {connIssues > 0 && (
@@ -259,3 +270,4 @@ export async function DashboardContent() {
     </div>
   );
 }
+

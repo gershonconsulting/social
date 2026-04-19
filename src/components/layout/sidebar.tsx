@@ -12,6 +12,7 @@ import {
   Settings,
   ScrollText,
   LogOut,
+  Plug,
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/reports", icon: FileText, label: "Reports" },
   { href: "/followers", icon: TrendingUp, label: "Followers" },
   { href: "/admin", icon: Settings, label: "Admin", adminOnly: true },
+  { href: "/settings", icon: Plug, label: "Settings", adminOnly: true },
   { href: "/logs", icon: ScrollText, label: "Audit Logs" },
 ];
 
@@ -87,3 +89,4 @@ export function Sidebar() {
     </aside>
   );
 }
+

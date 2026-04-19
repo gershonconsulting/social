@@ -149,6 +149,9 @@ export interface NormalizedPost {
   publishedAtUtc: Date;
   publishedAtLocal: Date;
   publishedDateLocal: string;
+  likeCount?: number;
+  commentCount?: number;
+  shareCount?: number;
   rawPayload: Record<string, unknown>;
 }
 
@@ -179,3 +182,4 @@ export interface FreshnessIndicator {
   lastUpdated: string | null;
   description: string;
 }
+

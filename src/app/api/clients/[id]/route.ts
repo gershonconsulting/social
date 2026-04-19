@@ -13,6 +13,7 @@ const updateClientSchema = z.object({
   reportingStartDate: z.string().datetime().optional().nullable(),
   internalOwner: z.string().optional().nullable(),
   website: z.string().url().optional().nullable(),
+  logoUrl: z.string().url().optional().nullable(),
   industry: z.string().optional().nullable(),
   billingStatus: z.string().optional().nullable(),
   contractStatus: z.string().optional().nullable(),
@@ -146,3 +147,4 @@ export async function DELETE(
 
   return NextResponse.json({ success: true, data: archived });
 }
+

@@ -8,8 +8,10 @@ import { formatDate, formatDateTime, formatRelative, freshnessFromLastSync } fro
 import { formatInTimeZone } from "date-fns-tz";
 import { ComplianceStatus } from "@prisma/client";
 import Link from "next/link";
-import { ExternalLink, RefreshCw, Calendar, TrendingUp } from "lucide-react";
+import { ExternalLink, RefreshCw, Calendar, TrendingUp, Plug } from "lucide-react";
 import { ClientSyncButton } from "@/components/clients/client-sync-button";
+import { ClientNameEditor } from "@/components/clients/client-name-editor";
+import { PostsTabs } from "@/components/clients/posts-tabs";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +92,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const sortedDates = Array.from(byDate.keys()).sort().reverse();
 
   const mandatoryConns = client.platformConnections.filter((c) => c.isMandatory);
+  const allPlatforms = client.platformConnections.map((c) => c.platform);
   const lastSync = client.platformConnections
     .map((c) => c.lastSyncAt)
     .filter(Boolean)
@@ -100,12 +103,28 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
   return (
     <div className="space-y-8">
-      <Header
-        title={client.name}
-        subtitle={`${client.timezone} · Campaign started ${formatDate(client.campaignStartDate)}`}
-        lastSyncAt={lastSync?.toISOString()}
-        actions={<ClientSyncButton clientId={client.id} />}
-      />
+      {/* Header with editable name */}
+      <div>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              <ClientNameEditor clientId={client.id} initialName={client.name} />
+            </h1>
+            <p className="text-sm text-gray-500 mt-1">
+              {client.timezone} · Campaign started {formatDate(client.campaignStartDate)}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {freshness && (
+              <div className="text-xs text-gray-400">
+                {freshness.label}
+                {lastSync && <span> · Last sync {formatRelative(lastSync.toISOString())}</span>}
+              </div>
+            )}
+            <ClientSyncButton clientId={client.id} />
+          </div>
+        </div>
+      </div>
 
       {/* Overview cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -131,12 +150,21 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-900">Platform Connections</h2>
-          <Link
-            href={`/admin?tab=platforms&clientId=${client.id}`}
-            className="text-xs text-blue-600 hover:underline"
-          >
-            Manage
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href={`/settings`}
+              className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1"
+            >
+              <Plug size={11} />
+              Connect accounts
+            </Link>
+            <Link
+              href={`/admin?tab=platforms&clientId=${client.id}`}
+              className="text-xs text-gray-500 hover:underline"
+            >
+              Manage
+            </Link>
+          </div>
         </div>
         <div className="divide-y divide-gray-50">
           {client.platformConnections.map((conn) => {
@@ -202,6 +230,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           )}
         </div>
       </div>
+
+      {/* Posts views (Listing + Calendar tabs) */}
+      <PostsTabs clientId={client.id} platforms={allPlatforms} />
 
       {/* Daily compliance matrix — last 30 days */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -274,48 +305,6 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               )}
             </tbody>
           </table>
-        </div>
-      </div>
-
-      {/* Recent posts */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-gray-900">Recent Detected Posts</h2>
-        </div>
-        <div className="divide-y divide-gray-50">
-          {recentPosts.map((post) => (
-            <div key={post.id} className="px-6 py-3 flex items-start gap-4">
-              <div className="flex-shrink-0 w-24 text-xs text-gray-400 pt-0.5">
-                {PLATFORM_LABELS_MAP[post.platform] ?? post.platform}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs text-gray-500 mb-0.5">{post.publishedDateLocal}</div>
-                {post.postTextSnippet && (
-                  <p className="text-sm text-gray-700 truncate">{post.postTextSnippet}</p>
-                )}
-              </div>
-              <div className="flex-shrink-0">
-                {post.postUrl ? (
-                  <a
-                    href={post.postUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
-                  >
-                    <ExternalLink size={12} />
-                    View post
-                  </a>
-                ) : (
-                  <span className="text-xs text-gray-400 italic">URL not available</span>
-                )}
-              </div>
-            </div>
-          ))}
-          {recentPosts.length === 0 && (
-            <div className="px-6 py-8 text-center text-sm text-gray-400">
-              No posts detected yet. Run a sync to fetch posts.
-            </div>
-          )}
         </div>
       </div>
 

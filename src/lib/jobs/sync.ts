@@ -102,12 +102,18 @@ export async function syncPlatformConnection(
         publishedAtUtc: post.publishedAtUtc,
         publishedAtLocal: post.publishedAtLocal,
         publishedDateLocal: post.publishedDateLocal,
+        likeCount: post.likeCount ?? 0,
+        commentCount: post.commentCount ?? 0,
+        shareCount: post.shareCount ?? 0,
         rawPayloadJson: JSON.stringify(post.rawPayload),
       },
       update: {
         postUrl: post.postUrl,
         postTextSnippet: post.postTextSnippet,
         hasMedia: post.hasMedia,
+        likeCount: post.likeCount ?? 0,
+        commentCount: post.commentCount ?? 0,
+        shareCount: post.shareCount ?? 0,
         rawPayloadJson: JSON.stringify(post.rawPayload),
       },
     });
@@ -311,3 +317,4 @@ export async function runBackfill(
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
+

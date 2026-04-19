@@ -140,6 +140,7 @@ model Client {
   reportingStartDate  DateTime?
   internalOwner       String?
   website             String?
+  logoUrl             String?
   industry            String?
   billingStatus       String?
   contractStatus      String?
@@ -226,6 +227,9 @@ model SocialPost {
   publishedAtUtc       DateTime
   publishedAtLocal     DateTime
   publishedDateLocal   String
+  likeCount            Int      @default(0)
+  commentCount         Int      @default(0)
+  shareCount           Int      @default(0)
   rawPayloadJson       String?  @db.Text
   importedAt           DateTime @default(now())
   createdAt            DateTime @default(now())
@@ -336,3 +340,4 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs")
 }
+
