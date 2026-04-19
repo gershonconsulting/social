@@ -1,7 +1,6 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { getSession } from "@/lib/auth";
 
 /**
  * GET /api/clients/[id]/posts?months=2&platform=LINKEDIN
@@ -13,11 +12,6 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const { id } = await params;
   const url = request.nextUrl;
   const months = parseInt(url.searchParams.get("months") || "2", 10);
@@ -33,8 +27,6 @@ export async function GET(
   };
   if (platform) {
     where.platform = platform;
-  }
-
   const posts = await prisma.socialPost.findMany({
     where,
     orderBy: { publishedAtUtc: "desc" },
@@ -65,8 +57,6 @@ export async function GET(
     if (calendarMap.has(dateStr)) {
       calendarMap.set(dateStr, { hasPost: true, postCount: (calendarMap.get(dateStr)?.postCount ?? 0) + 1 });
     }
-  }
-
   const calendar = Array.from(calendarMap.entries())
     .map(([date, info]) => ({ date, ...info }))
     .sort((a, b) => a.date.localeCompare(b.date));
