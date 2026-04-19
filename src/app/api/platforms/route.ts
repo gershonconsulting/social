@@ -1,7 +1,7 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { UserRole, Platform, ConnectionStatus, PostingMode } from "@prisma/client";
+import { Platform, ConnectionStatus, PostingMode } from "@prisma/client";
 import { z } from "zod";
 
 const createPlatformSchema = z.object({
@@ -75,7 +75,6 @@ export async function POST(req: NextRequest) {
 
   await prisma.auditLog.create({
     data: {
-      actorUserId: null ?? null,
       actionType: "PLATFORM_CONNECTED",
       entityType: "PlatformConnection",
       entityId: connection.id,

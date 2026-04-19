@@ -1,6 +1,6 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
-import { UserRole } from "@prisma/client";
+
 import { generateMonthlyReport, getAvailableMonths } from "@/lib/reports/monthly";
 
 export async function GET(req: NextRequest) {

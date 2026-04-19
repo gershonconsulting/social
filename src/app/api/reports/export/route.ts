@@ -1,6 +1,6 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
-import { UserRole } from "@prisma/client";
+
 import { generateMonthlyReport } from "@/lib/reports/monthly";
 import { reportToCSV } from "@/lib/reports/export";
 import prisma from "@/lib/db";
@@ -25,7 +25,6 @@ export async function GET(req: NextRequest) {
   // Audit the export
   await prisma.auditLog.create({
     data: {
-      actorUserId: null ?? null,
       actionType: "REPORT_EXPORTED",
       entityType: "Client",
       entityId: clientId,

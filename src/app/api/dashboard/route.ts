@@ -1,7 +1,7 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { UserRole, ClientStatus, ComplianceStatus } from "@prisma/client";
+import { ClientStatus, ComplianceStatus } from "@prisma/client";
 import { formatInTimeZone } from "date-fns-tz";
 import { DashboardSummary, ClientDashboardRow } from "@/types";
 
