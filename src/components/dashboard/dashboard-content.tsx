@@ -127,7 +127,7 @@ export async function DashboardContent() {
                     const totalClientPosts = Object.values(posts).reduce((s, c) => s + c, 0);
                     const connCount = client.platformConnections.length;
                     const activeConns = client.platformConnections.filter(
-                      (c) => c.connectionStatus === "ACTIVE" || c.connectionStatus === "PENDING"
+                      (c) => c.connectionStatus === "CONNECTED" || c.connectionStatus === "PENDING"
                     ).length;
                     const lastSync = client.platformConnections
                       .map((c) => c.lastSyncAt)
