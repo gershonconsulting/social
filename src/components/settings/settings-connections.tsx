@@ -163,7 +163,7 @@ export function SettingsConnections({
         return;
       }
       setConnecting(platform.key);
-      window.location.href = `/settings/connect?platform=${platform.key}`;
+      window.location.href = `/api/auth/linkedin/connect`;
     } else if (platform.connectMethod === "credentials" && platform.key === "TWITTER") {
       setShowTwitterForm(true);
     } else if (platform.connectMethod === "google-oauth" && platform.key === "GOOGLE_BUSINESS") {

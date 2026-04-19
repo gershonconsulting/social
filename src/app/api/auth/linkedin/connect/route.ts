@@ -2,31 +2,26 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 
 /**
- * GET /api/auth/linkedin/connect?clientId=xxx&connectionId=yyy
+ * GET /api/auth/linkedin/connect
  *
  * Initiates LinkedIn OAuth 2.0 flow. Redirects the user to LinkedIn's
  * authorization page. On success, LinkedIn redirects back to /api/auth/linkedin/callback.
  *
- * Required env vars: LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET, NEXT_PUBLIC_APP_URL
+ * Optional query params:
+ *   clientId, connectionId — if provided, will scope the token to a specific connection
+ *
+ * Required env vars: LINKEDIN_CLIENT_ID, NEXT_PUBLIC_APP_URL
  */
 export async function GET(request: NextRequest) {
-  const clientId = request.nextUrl.searchParams.get("clientId");
-  const connectionId = request.nextUrl.searchParams.get("connectionId");
-
-  if (!clientId || !connectionId) {
-    return NextResponse.json(
-      { error: "clientId and connectionId are required" },
-      { status: 400 }
-    );
-  }
+  const clientId = request.nextUrl.searchParams.get("clientId") || "";
+  const connectionId = request.nextUrl.searchParams.get("connectionId") || "";
 
   const linkedinClientId = process.env.LINKEDIN_CLIENT_ID;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://social.gershoncrm.com";
 
   if (!linkedinClientId) {
-    return NextResponse.json(
-      { error: "LINKEDIN_CLIENT_ID not configured" },
-      { status: 500 }
+    return NextResponse.redirect(
+      `${appUrl}/settings?error=${encodeURIComponent("LINKEDIN_CLIENT_ID not configured. Add it in Cloudflare Pages environment variables.")}`
     );
   }
 
