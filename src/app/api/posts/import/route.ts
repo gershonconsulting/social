@@ -3,13 +3,23 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { Platform } from "@prisma/client";
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { posts } = body;
     
     if (!posts || !Array.isArray(posts)) {
-      return NextResponse.json({ success: false, error: "posts array is required" }, { status: 400 });
+      return NextResponse.json({ success: false, error: "posts array is required" }, { status: 400, headers: corsHeaders });
     }
 
     // We need to look up clientId from platformConnectionId
@@ -71,9 +81,9 @@ export async function POST(request: NextRequest) {
       results.push({ id: created.id, status: "created" });
     }
 
-    return NextResponse.json({ success: true, results, total: results.length });
+    return NextResponse.json({ success: true, results, total: results.length }, { headers: corsHeaders });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return NextResponse.json({ success: false, error: message }, { status: 500, headers: corsHeaders });
   }
 }
