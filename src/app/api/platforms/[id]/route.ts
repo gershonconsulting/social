@@ -1,7 +1,6 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { requireRole } from "@/lib/auth";
 import { UserRole, ConnectionStatus } from "@prisma/client";
 import { z } from "zod";
 
@@ -23,13 +22,6 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  let user: { id?: string };
-  try {
-    user = await requireRole(UserRole.ADMIN);
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Error";
-    return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
-  }
 
   const { id } = await params;
   const connection = await prisma.platformConnection.findUnique({ where: { id } });
@@ -63,7 +55,7 @@ export async function PATCH(
 
   await prisma.auditLog.create({
     data: {
-      actorUserId: user.id ?? null,
+      actorUserId: null ?? null,
       actionType: "PLATFORM_CONNECTED",
       entityType: "PlatformConnection",
       entityId: connection.id,
@@ -79,13 +71,6 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  let user: { id?: string };
-  try {
-    user = await requireRole(UserRole.ADMIN);
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Error";
-    return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
-  }
 
   const { id } = await params;
   const connection = await prisma.platformConnection.findUnique({ where: { id } });
@@ -104,7 +89,7 @@ export async function DELETE(
 
   await prisma.auditLog.create({
     data: {
-      actorUserId: user.id ?? null,
+      actorUserId: null ?? null,
       actionType: "PLATFORM_DISCONNECTED",
       entityType: "PlatformConnection",
       entityId: connection.id,

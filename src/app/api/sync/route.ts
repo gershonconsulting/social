@@ -1,19 +1,9 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
-import { requireRole } from "@/lib/auth";
-import { UserRole } from "@prisma/client";
 import { syncPlatformConnection, runBackfill, syncFollowerSnapshots } from "@/lib/jobs/sync";
 import { recomputeClientCompliance } from "@/lib/compliance/engine";
 
 export async function POST(req: NextRequest) {
-  let user: { id?: string };
-  try {
-    user = await requireRole(UserRole.OPERATIONS);
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Error";
-    return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
-  }
-
   const body = await req.json().catch(() => ({}));
   const { type, clientId, platformConnectionId, since, until } = body;
 
@@ -29,7 +19,7 @@ export async function POST(req: NextRequest) {
       if (!platformConnectionId) {
         return NextResponse.json({ success: false, error: "platformConnectionId is required" }, { status: 400 });
       }
-      const result = await syncPlatformConnection(platformConnectionId, sinceDate, untilDate, user.id ?? null);
+      const result = await syncPlatformConnection(platformConnectionId, sinceDate, untilDate, null);
       return NextResponse.json({ success: result.success, data: result });
     }
 
@@ -37,7 +27,7 @@ export async function POST(req: NextRequest) {
       if (!clientId) {
         return NextResponse.json({ success: false, error: "clientId is required" }, { status: 400 });
       }
-      const result = await runBackfill(clientId, sinceDate, untilDate, user.id ?? null);
+      const result = await runBackfill(clientId, sinceDate, untilDate, null);
       return NextResponse.json({ success: result.success, data: result });
     }
 
@@ -58,6 +48,6 @@ export async function POST(req: NextRequest) {
     }
 
     default:
-      return NextResponse.json({ success: false, error: `Unknown sync type: ${type}` }, { status: 400 });
+      return NextResponse.json({ success: false, error: "Unknown sync type: " + type }, { status: 400 });
   }
 }

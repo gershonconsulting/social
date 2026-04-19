@@ -5,6 +5,7 @@
 
 import prisma from "@/lib/db";
 import { getAdapter } from "@/lib/adapters/registry";
+import { GoogleBusinessAdapter } from "@/lib/adapters/google-business";
 import { recomputeCompliance } from "@/lib/compliance/engine";
 import { AdapterConfig } from "@/types";
 import { Platform, SyncJobType, SyncStatus, ConnectionStatus } from "@prisma/client";
@@ -41,21 +42,38 @@ export async function syncPlatformConnection(
       where: { id: connectionId },
       data: {
         lastSyncAt: new Date(),
-        lastSyncError: `No adapter implemented for platform ${connection.platform}`,
+        lastSyncError: "No adapter implemented for platform " + connection.platform,
       },
     });
     return {
       success: false,
-      error: `No adapter for ${connection.platform}`,
+      error: "No adapter for " + connection.platform,
       postsUpserted: 0,
     };
+  }
+
+  // Auto-discover Google Business location if not set
+  let externalAccountId = connection.externalAccountId ?? "";
+  if (connection.platform === "GOOGLE_BUSINESS" && !externalAccountId && connection.tokenReference) {
+    const gbAdapter = adapter as GoogleBusinessAdapter;
+    const location = await gbAdapter.discoverLocation(connection.tokenReference);
+    if (location) {
+      externalAccountId = location.locationName;
+      await prisma.platformConnection.update({
+        where: { id: connectionId },
+        data: {
+          externalAccountId: location.locationName,
+          externalAccountName: location.displayName,
+        },
+      });
+    }
   }
 
   const config: AdapterConfig = {
     platform: connection.platform,
     clientId: connection.clientId,
     connectionId: connection.id,
-    externalAccountId: connection.externalAccountId ?? "",
+    externalAccountId,
     tokenReference: connection.tokenReference,
     timezone: connection.client.timezone,
   };
@@ -226,13 +244,13 @@ export async function runDailySync(triggeredById: string | null = null): Promise
         totalSucceeded++;
       } else {
         totalFailed++;
-        errors.push(`${client.name}/${conn.platform}: ${result.error}`);
+        errors.push(client.name + "/" + conn.platform + ": " + result.error);
       }
     }
 
     // Sync follower snapshots
     await syncFollowerSnapshots(client.id).catch((err) => {
-      errors.push(`${client.name}/followers: ${err.message}`);
+      errors.push(client.name + "/followers: " + err.message);
     });
   }
 
@@ -266,7 +284,7 @@ export async function runBackfill(
       clientId,
       triggeredById,
       status: SyncStatus.RUNNING,
-      notes: `Backfill from ${since.toISOString()} to ${until.toISOString()}`,
+      notes: "Backfill from " + since.toISOString() + " to " + until.toISOString(),
     },
   });
 
@@ -287,7 +305,7 @@ export async function runBackfill(
         succeeded++;
       } else {
         failed++;
-        errors.push(`${conn.platform}: ${result.error}`);
+        errors.push(conn.platform + ": " + result.error);
       }
     }
 
@@ -317,4 +335,3 @@ export async function runBackfill(
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
-

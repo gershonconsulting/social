@@ -1,18 +1,11 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { requireRole } from "@/lib/auth";
 import { UserRole, ClientStatus, ComplianceStatus } from "@prisma/client";
 import { formatInTimeZone } from "date-fns-tz";
 import { DashboardSummary, ClientDashboardRow } from "@/types";
 
 export async function GET(_req: NextRequest) {
-  try {
-    await requireRole(UserRole.OPERATIONS);
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Error";
-    return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
-  }
 
   const today = formatInTimeZone(new Date(), "America/New_York", "yyyy-MM-dd");
 

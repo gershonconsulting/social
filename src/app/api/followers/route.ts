@@ -1,16 +1,9 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { requireRole } from "@/lib/auth";
 import { UserRole } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
-  try {
-    await requireRole(UserRole.OPERATIONS);
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Error";
-    return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
-  }
 
   const { searchParams } = new URL(req.url);
   const clientId = searchParams.get("clientId");
