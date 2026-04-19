@@ -1,5 +1,7 @@
+export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import prisma from "@/lib/db";
+import { Platform } from "@prisma/client";
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,10 +21,12 @@ export async function POST(request: NextRequest) {
         continue;
       }
       
-      // Upsert by connectionId + externalPostId to avoid duplicates
-      const existing = externalPostId ? await prisma.socialPost.findFirst({
-        where: { connectionId, externalPostId }
-      }) : null;
+      const extId = externalPostId || `manual_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      
+      // Check for existing post to avoid duplicates
+      const existing = await prisma.socialPost.findFirst({
+        where: { connectionId, externalPostId: extId }
+      });
       
       if (existing) {
         results.push({ id: existing.id, status: "exists" });
@@ -32,8 +36,8 @@ export async function POST(request: NextRequest) {
       const created = await prisma.socialPost.create({
         data: {
           connectionId,
-          platform: platform || "TWITTER",
-          externalPostId: externalPostId || `manual_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+          platform: (platform as Platform) || Platform.TWITTER,
+          externalPostId: extId,
           content,
           publishedAt: new Date(publishedAt),
           postUrl: postUrl || null,
