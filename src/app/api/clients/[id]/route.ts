@@ -1,7 +1,7 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { ClientStatus } from "@prisma/client";
+import { ClientStatus, ClientType } from "@prisma/client";
 import { z } from "zod";
 
 const updateClientSchema = z.object({
