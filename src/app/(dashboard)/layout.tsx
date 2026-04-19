@@ -12,6 +12,7 @@ function formatBuildDate(raw: string): string {
     return d.toLocaleString("en-US", {
       year: "numeric", month: "short", day: "numeric",
       hour: "2-digit", minute: "2-digit", hour12: false,
+      timeZone: "America/New_York",
       timeZoneName: "short",
     });
   } catch {
