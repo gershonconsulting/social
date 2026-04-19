@@ -33,23 +33,22 @@ async function getDashboardData() {
           externalAccountUrl: true,
         },
       },
-      _count: {
-        select: { socialPosts: true },
+      socialPosts: {
+        select: {
+          platform: true,
+        },
       },
     },
     orderBy: { name: "asc" },
   });
 
-  // Get post counts per platform per client
-  const postsByClient = await prisma.socialPost.groupBy({
-    by: ["clientId", "platform"],
-    _count: { id: true },
-  });
-
+  // Build post counts from the included socialPosts
   const postMap: Record<string, Record<string, number>> = {};
-  for (const row of postsByClient) {
-    if (!postMap[row.clientId]) postMap[row.clientId] = {};
-    postMap[row.clientId][row.platform] = row._count.id;
+  for (const client of clients) {
+    postMap[client.id] = {};
+    for (const post of client.socialPosts) {
+      postMap[client.id][post.platform] = (postMap[client.id][post.platform] || 0) + 1;
+    }
   }
 
   return { clients, postMap };
