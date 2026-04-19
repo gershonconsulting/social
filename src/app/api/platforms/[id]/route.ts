@@ -55,7 +55,7 @@ export async function PATCH(
 
   await prisma.auditLog.create({
     data: {
-      actorUserId: null ?? null,
+      actorUserId: null,
       actionType: "PLATFORM_CONNECTED",
       entityType: "PlatformConnection",
       entityId: connection.id,
@@ -89,7 +89,7 @@ export async function DELETE(
 
   await prisma.auditLog.create({
     data: {
-      actorUserId: null ?? null,
+      actorUserId: null,
       actionType: "PLATFORM_DISCONNECTED",
       entityType: "PlatformConnection",
       entityId: connection.id,
