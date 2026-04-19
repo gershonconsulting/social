@@ -80,10 +80,10 @@ export async function syncPlatformConnection(
       const vanityName = vanityMatch[1];
       try {
         const orgResp = await fetch(
-          \`https://api.linkedin.com/v2/organizations?q=vanityName&vanityName=\${encodeURIComponent(vanityName)}\`,
+          `https://api.linkedin.com/v2/organizations?q=vanityName&vanityName=${encodeURIComponent(vanityName)}`,
           {
             headers: {
-              "Authorization": \`Bearer \${connection.tokenReference}\`,
+              "Authorization": `Bearer ${connection.tokenReference}`,
               "LinkedIn-Version": "202401",
               "X-Restli-Protocol-Version": "2.0.0",
             },
