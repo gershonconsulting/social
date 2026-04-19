@@ -19,6 +19,8 @@ import { PlatformAdapter, buildUnavailableResult, toLocalDateString, toLocalTime
 import { AdapterConfig, AdapterFetchResult, NormalizedPost } from "@/types";
 
 const GBP_API_BASE = "https://mybusiness.googleapis.com/v4";
+const GBP_ACCOUNTS_API = "https://mybusinessaccountmanagement.googleapis.com/v1";
+const GBP_LOCATIONS_API = "https://mybusinessbusinessinformation.googleapis.com/v1";
 
 interface GBPLocalPost {
   name: string;
@@ -127,28 +129,65 @@ export class GoogleBusinessAdapter implements PlatformAdapter {
     if (!accessToken) return null;
 
     try {
-      // First, list accounts
-      const accountsResp = await fetch(`${GBP_API_BASE}/accounts`, {
+      // Use the new Account Management API to list accounts
+      const accountsResp = await fetch(`${GBP_ACCOUNTS_API}/accounts`, {
         headers: this.authHeaders(accessToken),
       });
-      if (!accountsResp.ok) return null;
+      if (!accountsResp.ok) {
+        // Fallback: try legacy API
+        const legacyResp = await fetch(`${GBP_API_BASE}/accounts`, {
+          headers: this.authHeaders(accessToken),
+        });
+        if (!legacyResp.ok) return null;
+        const legacyData = await legacyResp.json();
+        const accounts = legacyData.accounts ?? [];
+        if (accounts.length === 0) return null;
+        const accountName = accounts[0].name;
+        const locResp = await fetch(`${GBP_API_BASE}/${accountName}/locations`, {
+          headers: this.authHeaders(accessToken),
+        });
+        if (!locResp.ok) return null;
+        const locData = await locResp.json();
+        const locations = locData.locations ?? [];
+        if (locations.length === 0) return null;
+        return {
+          locationName: locations[0].name,
+          displayName: locations[0].locationName || locations[0].name,
+        };
+      }
+
       const accountsData = await accountsResp.json();
       const accounts = accountsData.accounts ?? [];
       if (accounts.length === 0) return null;
 
-      // Then, list locations for the first account
-      const accountName = accounts[0].name; // e.g. "accounts/123"
-      const locResp = await fetch(`${GBP_API_BASE}/${accountName}/locations`, {
-        headers: this.authHeaders(accessToken),
-      });
-      if (!locResp.ok) return null;
+      // Use the new Business Information API to list locations
+      const accountName = accounts[0].name; // e.g. "accounts/123456"
+      const locResp = await fetch(
+        `${GBP_LOCATIONS_API}/${accountName}/locations?readMask=name,title,storefrontAddress`,
+        { headers: this.authHeaders(accessToken) }
+      );
+      if (!locResp.ok) {
+        // Fallback to legacy locations endpoint
+        const legacyLocResp = await fetch(`${GBP_API_BASE}/${accountName}/locations`, {
+          headers: this.authHeaders(accessToken),
+        });
+        if (!legacyLocResp.ok) return null;
+        const legacyLocData = await legacyLocResp.json();
+        const locations = legacyLocData.locations ?? [];
+        if (locations.length === 0) return null;
+        return {
+          locationName: locations[0].name,
+          displayName: locations[0].locationName || locations[0].name,
+        };
+      }
+
       const locData = await locResp.json();
       const locations = locData.locations ?? [];
       if (locations.length === 0) return null;
 
       return {
-        locationName: locations[0].name, // e.g. "accounts/123/locations/456"
-        displayName: locations[0].locationName || locations[0].name,
+        locationName: locations[0].name,
+        displayName: locations[0].title || locations[0].name,
       };
     } catch {
       return null;
@@ -281,10 +320,17 @@ export class GoogleBusinessAdapter implements PlatformAdapter {
     }
 
     try {
-      const response = await fetch(
-        `${GBP_API_BASE}/accounts`,
+      // Try new API first, fallback to legacy
+      let response = await fetch(
+        `${GBP_ACCOUNTS_API}/accounts`,
         { headers: this.authHeaders(accessToken) }
       );
+      if (!response.ok) {
+        response = await fetch(
+          `${GBP_API_BASE}/accounts`,
+          { headers: this.authHeaders(accessToken) }
+        );
+      }
 
       if (response.status === 401) return { valid: false, error: "Token expired or invalid" };
       if (response.status === 403) return { valid: false, error: "Insufficient permissions" };
