@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plug, CheckCircle, AlertCircle, RefreshCw, Eye, EyeOff, Save, Loader2 } from "lucide-react";
 
 interface ConnectionInfo {
@@ -120,6 +120,21 @@ function TwitterCredentialsForm({ onSaved }: { onSaved: () => void }) {
   );
 }
 
+function SuccessBanner({ platform }: { platform: string }) {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(false), 5000);
+    return () => clearTimeout(timer);
+  }, []);
+  if (!visible) return null;
+  return (
+    <div className="mb-4 px-4 py-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800 flex items-center gap-2">
+      <CheckCircle size={16} className="text-green-600" />
+      {platform} connected successfully!
+    </div>
+  );
+}
+
 export function SettingsConnections({
   connections,
   linkedinConfigured,
@@ -133,7 +148,13 @@ export function SettingsConnections({
 }) {
   const [connecting, setConnecting] = useState<string | null>(null);
   const [showTwitterForm, setShowTwitterForm] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [successPlatform, setSuccessPlatform] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("success") === "google") setSuccessPlatform("Google Business Profile");
+    if (params.get("success") === "linkedin") setSuccessPlatform("LinkedIn");
+  }, []);
 
   const handleConnect = (platform: typeof PLATFORMS[number]) => {
     if (platform.connectMethod === "oauth" && platform.key === "LINKEDIN") {
@@ -163,6 +184,13 @@ export function SettingsConnections({
           Connect your social media accounts to enable post syncing and analytics
         </p>
       </div>
+
+      {successPlatform && (
+        <div className="px-6 pt-4">
+          <SuccessBanner platform={successPlatform} />
+        </div>
+      )}
+
       <div className="divide-y divide-gray-50">
         {PLATFORMS.map((platform) => {
           const conns = connections[platform.key] || [];
@@ -189,7 +217,6 @@ export function SettingsConnections({
                         : "Connection: OAuth 2.0"}
                     </div>
 
-                    {/* Show connected clients */}
                     {conns.length > 0 && (
                       <div className="mt-2 space-y-1">
                         {conns.map((conn) => {
@@ -214,12 +241,10 @@ export function SettingsConnections({
                       </div>
                     )}
 
-                    {/* Twitter credentials form */}
                     {platform.key === "TWITTER" && (showTwitterForm || (!hasConnected)) && (
                       <TwitterCredentialsForm
                         onSaved={() => {
                           setShowTwitterForm(false);
-                          setRefreshKey(k => k + 1);
                           window.location.reload();
                         }}
                       />
@@ -242,7 +267,7 @@ export function SettingsConnections({
                           Update
                         </button>
                       </div>
-                    ) : null /* Form is shown inline */
+                    ) : null
                   ) : hasConnected && !allExpired ? (
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-green-600 font-medium flex items-center gap-1">
