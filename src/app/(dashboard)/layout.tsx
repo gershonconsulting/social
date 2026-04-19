@@ -34,7 +34,7 @@ export default async function DashboardLayout({
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="text-[11px] text-gray-400 mb-4 font-mono">
-            {buildLabel ? `${buildLabel} \u00b7 ` : ""}v{shortVersion} \u00b7 {buildDate}
+            {buildLabel && <>{buildLabel} &middot; </>}v{shortVersion} &middot; {buildDate}
           </div>
           {children}
         </div>

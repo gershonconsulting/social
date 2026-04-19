@@ -1,8 +1,7 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { requireRole } from "@/lib/auth";
-import { UserRole, ClientStatus, ClientType, ConnectionStatus, Platform } from "@prisma/client";
+import { ClientStatus, ClientType, ConnectionStatus, Platform } from "@prisma/client";
 import { z } from "zod";
 
 const platformConnectionSchema = z.object({
@@ -28,13 +27,6 @@ const createClientSchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
-  try {
-    await requireRole(UserRole.OPERATIONS);
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Error";
-    return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
-  }
-
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
   const includeArchived = searchParams.get("includeArchived") === "true";
@@ -62,6 +54,8 @@ export async function GET(req: NextRequest) {
             connectionStatus: true,
             isMandatory: true,
             externalAccountUrl: true,
+            externalAccountName: true,
+            tokenReference: true,
             lastSyncAt: true,
             lastSyncError: true,
           },
@@ -89,11 +83,9 @@ export async function GET(req: NextRequest) {
           })
         : [];
     } catch {
-      // socialPost table may not exist yet - continue without latest posts
       console.warn("GET /api/clients: socialPost query failed, continuing without latest posts");
     }
 
-    // Group latest post per client+platform (first one is latest due to orderBy desc)
     const latestPostMap = new Map();
     for (const post of latestPosts) {
       const key = post.clientId + ":" + post.platform;
@@ -102,7 +94,6 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Attach latest posts to each client
     const enriched = clients.map((client) => ({
       ...client,
       platformConnections: client.platformConnections.map((conn) => {
@@ -129,14 +120,6 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  let user;
-  try {
-    user = await requireRole(UserRole.ADMIN);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Error";
-    return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
-  }
-
   const body = await req.json().catch(() => null);
   const parsed = createClientSchema.safeParse(body);
 
@@ -182,7 +165,7 @@ export async function POST(req: NextRequest) {
   // Audit log
   await prisma.auditLog.create({
     data: {
-      actorUserId: user.id ?? null,
+      actorUserId: null,
       actionType: "CLIENT_CREATED",
       entityType: "Client",
       entityId: client.id,
@@ -198,4 +181,3 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ success: true, data: fullClient }, { status: 201 });
 }
-
