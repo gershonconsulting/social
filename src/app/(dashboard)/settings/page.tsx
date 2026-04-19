@@ -32,14 +32,29 @@ async function getConnectionStatus() {
     byPlatform[p].push(conn);
   }
 
-  return byPlatform;
+  // Serialize Date objects for client component
+  const serialized: Record<string, Array<{
+    id: string;
+    platform: string;
+    externalAccountName: string | null;
+    tokenExpiresAt: string | null;
+    connectionStatus: string;
+    client: { id: string; name: string };
+  }>> = {};
+  for (const [key, conns] of Object.entries(byPlatform)) {
+    serialized[key] = conns.map(c => ({
+      ...c,
+      tokenExpiresAt: c.tokenExpiresAt ? c.tokenExpiresAt.toISOString() : null,
+    }));
+  }
+  return serialized;
 }
 
 export default async function SettingsPage() {
   const session = await getSession();
   if (!session) redirect("/login");
 
-  const connections = await getConnectionStatus();
+  const connections = await getConnectionStatus() as Record<string, Array<{ id: string; platform: string; externalAccountName: string | null; tokenExpiresAt: string | null; connectionStatus: string; client: { id: string; name: string }; }>>;
 
   const linkedinConfigured = !!process.env.LINKEDIN_CLIENT_ID;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://social.gershoncrm.com";
