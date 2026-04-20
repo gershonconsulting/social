@@ -6,12 +6,11 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { ConnectionBadge } from "@/components/ui/connection-badge";
 import { formatDate, formatDateTime, formatRelative, freshnessFromLastSync } from "@/lib/utils";
 import { formatInTimeZone } from "date-fns-tz";
-import { ComplianceStatus } from "@prisma/client";
 import Link from "next/link";
-import { ExternalLink, RefreshCw, Calendar, TrendingUp, Plug } from "lucide-react";
+import { ExternalLink, Calendar, Plug } from "lucide-react";
 import { ClientSyncButton } from "@/components/clients/client-sync-button";
 import { ClientNameEditor } from "@/components/clients/client-name-editor";
-import { PostsTabs } from "@/components/clients/posts-tabs";
+import { ComplianceDashboard } from "@/components/clients/compliance-dashboard";
 
 export const dynamic = "force-dynamic";
 
@@ -49,31 +48,7 @@ async function getClientData(id: string) {
 
   if (!client) return null;
 
-  // Get last 30 days of compliance
-  const today = formatInTimeZone(new Date(), client.timezone, "yyyy-MM-dd");
-  const thirtyDaysAgo = formatInTimeZone(
-    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-    client.timezone,
-    "yyyy-MM-dd"
-  );
-
-  const compliance = await prisma.dailyCompliance.findMany({
-    where: {
-      clientId: id,
-      dateLocal: { gte: thirtyDaysAgo, lte: today },
-      expectedFlag: true,
-    },
-    orderBy: [{ dateLocal: "desc" }, { platform: "asc" }],
-  });
-
-  // Recent posts
-  const recentPosts = await prisma.socialPost.findMany({
-    where: { clientId: id },
-    orderBy: { publishedAtUtc: "desc" },
-    take: 20,
-  });
-
-  return { client, compliance, recentPosts, today };
+  return { client };
 }
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -81,17 +56,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const data = await getClientData(id);
   if (!data) notFound();
 
-  const { client, compliance, recentPosts, today } = data;
+  const { client } = data;
 
-  // Group compliance by date
-  const byDate = new Map<string, typeof compliance>();
-  for (const rec of compliance) {
-    if (!byDate.has(rec.dateLocal)) byDate.set(rec.dateLocal, []);
-    byDate.get(rec.dateLocal)!.push(rec);
-  }
-  const sortedDates = Array.from(byDate.keys()).sort().reverse();
-
-  const mandatoryConns = client.platformConnections.filter((c) => c.isMandatory);
   const allPlatforms = client.platformConnections.map((c) => c.platform);
   const lastSync = client.platformConnections
     .map((c) => c.lastSyncAt)
@@ -126,25 +92,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         </div>
       </div>
 
-      {/* Overview cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="text-xs text-gray-500 mb-1">Status</div>
-          <div className="font-semibold text-gray-900">{client.status}</div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="text-xs text-gray-500 mb-1">Timezone</div>
-          <div className="font-semibold text-gray-900">{client.timezone}</div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="text-xs text-gray-500 mb-1">Owner</div>
-          <div className="font-semibold text-gray-900">{client.internalOwner ?? "—"}</div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="text-xs text-gray-500 mb-1">Reporting Start</div>
-          <div className="font-semibold text-gray-900">{formatDate(client.reportingStartDate)}</div>
-        </div>
-      </div>
+      {/* Posting Compliance — THE BIG NUMBER */}
+      <ComplianceDashboard clientId={client.id} platforms={allPlatforms} />
 
       {/* Platform connections */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -228,83 +177,6 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               </Link>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Posts views (Listing + Calendar tabs) */}
-      <PostsTabs clientId={client.id} platforms={allPlatforms} />
-
-      {/* Daily compliance matrix — last 30 days */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-900">Daily Compliance — Last 30 Days</h2>
-          <div className="flex items-center gap-3 text-xs text-gray-400">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-500 inline-block" /> Verified</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500 inline-block" /> Missing</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-amber-500 inline-block" /> Unknown</span>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="text-left px-6 py-2.5 font-medium text-gray-500">Date</th>
-                {mandatoryConns.map((conn) => (
-                  <th key={conn.platform} className="text-center px-3 py-2.5 font-medium text-gray-500">
-                    {PLATFORM_LABELS_MAP[conn.platform] ?? conn.platform}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {sortedDates.slice(0, 30).map((date) => {
-                const recs = byDate.get(date) ?? [];
-                return (
-                  <tr key={date} className={`hover:bg-gray-50 ${date === today ? "bg-blue-50/50" : ""}`}>
-                    <td className="px-6 py-2.5 font-mono text-gray-600">
-                      {date}
-                      {date === today && (
-                        <span className="ml-2 text-xs text-blue-600 font-medium">Today</span>
-                      )}
-                    </td>
-                    {mandatoryConns.map((conn) => {
-                      const rec = recs.find((r) => r.platform === conn.platform);
-                      if (!rec) {
-                        return (
-                          <td key={conn.platform} className="px-3 py-2.5 text-center">
-                            <span className="text-gray-200">—</span>
-                          </td>
-                        );
-                      }
-                      return (
-                        <td key={conn.platform} className="px-3 py-2.5 text-center">
-                          {rec.primaryPostUrl ? (
-                            <a
-                              href={rec.primaryPostUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title={`View post · ${rec.verifiedPostCount} post(s)`}
-                            >
-                              <StatusBadge status={rec.status} compact />
-                            </a>
-                          ) : (
-                            <StatusBadge status={rec.status} compact />
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-              {sortedDates.length === 0 && (
-                <tr>
-                  <td colSpan={mandatoryConns.length + 1} className="px-6 py-8 text-center text-gray-400">
-                    No compliance data yet. Run a sync or backfill to populate.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
         </div>
       </div>
 
