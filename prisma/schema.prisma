@@ -224,6 +224,8 @@ model SocialPost {
   externalPostId       String
   postUrl              String?
   postTextSnippet      String?
+  postTextFull         String?  @db.Text
+  hashtags             String?
   hasMedia             Boolean  @default(false)
   publishedAtUtc       DateTime
   publishedAtLocal     DateTime

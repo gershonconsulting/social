@@ -62,6 +62,10 @@ export async function POST(request: NextRequest) {
       const pubDate = new Date(publishedAt);
       const dateLocal = pubDate.toISOString().split("T")[0];
 
+      // Extract hashtags from content
+      const hashtagMatches = content.match(/#[\w\u00C0-\u024F]+/g) || [];
+      const hashtags = [...new Set(hashtagMatches.map((h: string) => h.toLowerCase()))].join(",");
+
       const created = await prisma.socialPost.create({
         data: {
           clientId: connection.clientId,
@@ -69,6 +73,8 @@ export async function POST(request: NextRequest) {
           platform: (platform as Platform) || Platform.TWITTER,
           externalPostId: extId,
           postTextSnippet: content.substring(0, 2000),
+          postTextFull: content || null,
+          hashtags: hashtags || null,
           publishedAtUtc: pubDate,
           publishedAtLocal: pubDate,
           publishedDateLocal: dateLocal,
