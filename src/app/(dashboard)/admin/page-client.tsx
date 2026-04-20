@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/header";
-import { Plus, Loader2, RefreshCw, Archive, RotateCcw, Globe, Search } from "lucide-react";
+import { Plus, Loader2, RefreshCw, Archive, RotateCcw, Globe, Search, Pencil, Check, X, ExternalLink } from "lucide-react";
 import { slugify, formatDate, formatRelative, PLATFORM_LABELS } from "@/lib/utils";
 import { ConnectionBadge } from "@/components/ui/connection-badge";
 
@@ -87,6 +87,28 @@ export default function AdminPage() {
   const [editName, setEditName] = useState("");
   const [editSlug, setEditSlug] = useState("");
   const [selectedPlatforms, setSelectedPlatforms] = useState<Record<string, boolean>>({});
+
+  // Inline URL editing state
+  const [editingUrlConnId, setEditingUrlConnId] = useState<string | null>(null);
+  const [editingUrlValue, setEditingUrlValue] = useState("");
+  const [savingUrl, setSavingUrl] = useState(false);
+
+  async function handleSaveUrl(connId: string) {
+    setSavingUrl(true);
+    try {
+      const res = await fetch("/api/platforms/" + connId, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ externalAccountUrl: editingUrlValue.trim() || null }),
+      });
+      if (res.ok) {
+        setEditingUrlConnId(null);
+        setEditingUrlValue("");
+        loadClients();
+      }
+    } catch { /* ignore */ }
+    finally { setSavingUrl(false); }
+  }
 
   async function loadClients() {
     setLoading(true);
@@ -560,22 +582,67 @@ export default function AdminPage() {
                               </span>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
-                                  {conn.externalAccountUrl ? (
-                                    <a
-                                      href={conn.externalAccountUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-xs font-medium text-blue-600 hover:underline"
-                                    >
-                                      {PLATFORM_LABELS[conn.platform] ?? conn.platform}
-                                    </a>
-                                  ) : (
-                                    <span className="text-xs font-medium text-gray-700">
-                                      {PLATFORM_LABELS[conn.platform] ?? conn.platform}
-                                    </span>
-                                  )}
+                                  <span className="text-xs font-medium text-gray-700">
+                                    {PLATFORM_LABELS[conn.platform] ?? conn.platform}
+                                  </span>
                                   <ConnectionBadge status={conn.connectionStatus} />
                                 </div>
+                                {/* Editable external URL */}
+                                {editingUrlConnId === conn.id ? (
+                                  <div className="flex items-center gap-1 mt-1">
+                                    <input
+                                      type="url"
+                                      value={editingUrlValue}
+                                      onChange={(e) => setEditingUrlValue(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") handleSaveUrl(conn.id);
+                                        if (e.key === "Escape") { setEditingUrlConnId(null); setEditingUrlValue(""); }
+                                      }}
+                                      className="flex-1 px-2 py-1 text-xs border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 min-w-[200px]"
+                                      placeholder="https://linkedin.com/company/..."
+                                      autoFocus
+                                    />
+                                    <button
+                                      onClick={() => handleSaveUrl(conn.id)}
+                                      disabled={savingUrl}
+                                      className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50"
+                                      title="Save"
+                                    >
+                                      {savingUrl ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                                    </button>
+                                    <button
+                                      onClick={() => { setEditingUrlConnId(null); setEditingUrlValue(""); }}
+                                      className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                                      title="Cancel"
+                                    >
+                                      <X size={12} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1 mt-0.5 group">
+                                    {conn.externalAccountUrl ? (
+                                      <a
+                                        href={conn.externalAccountUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-[11px] text-blue-500 hover:underline truncate max-w-[260px] inline-flex items-center gap-0.5"
+                                        title={conn.externalAccountUrl}
+                                      >
+                                        <ExternalLink size={9} className="shrink-0" />
+                                        {conn.externalAccountUrl.replace(/^https?:\/\/(?:www\.)?/, "").replace(/\/$/, "")}
+                                      </a>
+                                    ) : (
+                                      <span className="text-[11px] text-gray-300 italic">No URL set</span>
+                                    )}
+                                    <button
+                                      onClick={() => { setEditingUrlConnId(conn.id); setEditingUrlValue(conn.externalAccountUrl || ""); }}
+                                      className="p-0.5 text-gray-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      title="Edit URL"
+                                    >
+                                      <Pencil size={10} />
+                                    </button>
+                                  </div>
+                                )}
                                 {conn.latestPost ? (
                                   <div className="flex items-center gap-1 mt-0.5">
                                     {conn.latestPost.url ? (
