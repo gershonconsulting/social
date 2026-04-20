@@ -13,12 +13,12 @@ import {
   ChevronDown,
 } from "lucide-react";
 
-type ClientType = "CLIENT" | "PARTNER" | "PROSPECT" | "INTERNAL";
+
 
 interface DashboardClient {
   id: string;
   name: string;
-  clientType: ClientType;
+  clientType: string;
   platformConnections: Array<{
     id: string;
     platform: string;
@@ -37,7 +37,7 @@ interface ComplianceData {
 
 type Period = "week" | "month" | "quarter" | "all" | "custom";
 
-const GROUP_CONFIG: Array<{ type: ClientType; label: string; icon: string; color: string }> = [
+const GROUP_CONFIG: Array<{ type: string; label: string; icon: string; color: string }> = [
   { type: "CLIENT", label: "Clients", icon: "users", color: "blue" },
   { type: "PARTNER", label: "Partners", icon: "handshake", color: "purple" },
   { type: "PROSPECT", label: "Prospects", icon: "target", color: "amber" },
