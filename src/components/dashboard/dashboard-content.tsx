@@ -34,11 +34,11 @@ async function getDashboardData() {
     return {
       id: client.id,
       name: client.name,
-      clientType: client.clientType,
+      clientType: client.clientType as string,
       platformConnections: client.platformConnections.map((c) => ({
         id: c.id,
-        platform: c.platform,
-        connectionStatus: c.connectionStatus,
+        platform: c.platform as string,
+        connectionStatus: c.connectionStatus as string,
         lastSyncAt: c.lastSyncAt?.toISOString() ?? null,
       })),
       postCounts,
