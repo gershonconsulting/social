@@ -1,4 +1,3 @@
-export const runtime = 'edge';
 import prisma from "@/lib/db";
 import { ClientStatus } from "@prisma/client";
 import { DashboardClient } from "./dashboard-client";
