@@ -1,21 +1,12 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { requireRole } from "@/lib/auth";
-import { UserRole, ClientStatus } from "@prisma/client";
+import { ClientStatus } from "@prisma/client";
 
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  let user: { id?: string };
-  try {
-    user = await requireRole(UserRole.ADMIN);
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Error";
-    return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
-  }
-
   const { id } = await params;
   const client = await prisma.client.findUnique({ where: { id } });
   if (!client) {
@@ -37,7 +28,7 @@ export async function POST(
 
   await prisma.auditLog.create({
     data: {
-      actorUserId: user.id ?? null,
+      actorUserId: null,
       actionType: "CLIENT_RESTORED",
       entityType: "Client",
       entityId: client.id,

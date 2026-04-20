@@ -1,8 +1,6 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { requireRole } from "@/lib/auth";
-import { UserRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 
@@ -14,13 +12,6 @@ const createUserSchema = z.object({
 });
 
 export async function GET(_req: NextRequest) {
-  try {
-    await requireRole(UserRole.ADMIN);
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Error";
-    return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
-  }
-
   const users = await prisma.user.findMany({
     select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
     orderBy: { name: "asc" },
@@ -30,14 +21,6 @@ export async function GET(_req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  let actorUser: { id?: string };
-  try {
-    actorUser = await requireRole(UserRole.ADMIN);
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Error";
-    return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
-  }
-
   const body = await req.json().catch(() => null);
   const parsed = createUserSchema.safeParse(body);
 
@@ -61,7 +44,7 @@ export async function POST(req: NextRequest) {
 
   await prisma.auditLog.create({
     data: {
-      actorUserId: actorUser.id ?? null,
+      actorUserId: null,
       actionType: "USER_CREATED",
       entityType: "User",
       entityId: user.id,

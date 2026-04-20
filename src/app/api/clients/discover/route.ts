@@ -1,7 +1,5 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
-import { requireRole } from "@/lib/auth";
-import { UserRole } from "@prisma/client";
 
 // Extract all href values from HTML
 function extractHrefs(html: string): string[] {
@@ -130,13 +128,6 @@ function slugify(str: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    await requireRole(UserRole.ADMIN);
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Error";
-    return NextResponse.json({ success: false, error: msg }, { status: msg === "UNAUTHORIZED" ? 401 : 403 });
-  }
-
   const body = await req.json().catch(() => null);
   if (!body?.website || typeof body.website !== "string") {
     return NextResponse.json({ success: false, error: "website URL is required" }, { status: 400 });
