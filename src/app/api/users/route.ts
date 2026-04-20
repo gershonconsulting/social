@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { UserRole } from "@prisma/client";
 
 const createUserSchema = z.object({
   name: z.string().min(1).max(200),
