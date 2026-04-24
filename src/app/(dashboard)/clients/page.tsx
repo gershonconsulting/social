@@ -43,15 +43,15 @@ export default async function ClientsPage() {
   return (
     <div>
       <Header
-        title="Clients"
+        title="Companies"
         subtitle={`${clients.filter((c) => c.status === "ACTIVE").length} active · ${clients.length} total`}
         actions={
           <Link
             href="/admin?tab=clients&action=new"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-[#FE1B04] rounded-lg hover:bg-[#d11200] transition-colors"
           >
             <Plus size={15} />
-            Add Client
+            Add Company
           </Link>
         }
       />
@@ -61,7 +61,7 @@ export default async function ClientsPage() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
-                <th className="text-left px-6 py-3 font-medium text-gray-500">Client</th>
+                <th className="text-left px-6 py-3 font-medium text-gray-500">Company</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-500">Platforms</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-500">Campaign Start</th>
@@ -85,7 +85,7 @@ export default async function ClientsPage() {
                     <td className="px-6 py-4">
                       <Link
                         href={`/clients/${client.id}`}
-                        className="font-medium text-gray-900 hover:text-blue-600"
+                        className="font-medium text-gray-900 hover:text-red-600"
                       >
                         {client.name}
                       </Link>
