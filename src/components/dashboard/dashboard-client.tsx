@@ -216,7 +216,7 @@ export function DashboardClient({
           />
           <button
             onClick={handleCustomApply}
-            className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+            className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
           >
             Apply
           </button>
@@ -296,7 +296,7 @@ export function DashboardClient({
                         <td className="px-6 py-4">
                           <Link
                             href={`/clients/${client.id}`}
-                            className="font-medium text-gray-900 hover:text-blue-600 inline-flex items-center gap-2"
+                            className="font-medium text-gray-900 hover:text-red-600 inline-flex items-center gap-2"
                           >
                             <span className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 border border-gray-200">
                               {client.name.charAt(0).toUpperCase()}
