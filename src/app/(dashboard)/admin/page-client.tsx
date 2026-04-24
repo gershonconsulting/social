@@ -131,11 +131,11 @@ export default function AdminPage() {
       if (data.success) {
         setClients(data.data);
       } else {
-        setLoadError(data.error || "Failed to load clients");
+        setLoadError(data.error || "Failed to load companies");
       }
     } catch (err) {
       console.error("loadClients error:", err);
-      setLoadError("Failed to load clients. Please refresh the page.");
+      setLoadError("Failed to load companies. Please refresh the page.");
     } finally {
       setLoading(false);
     }
@@ -314,7 +314,7 @@ export default function AdminPage() {
 
   return (
     <div>
-      <Header title="Admin" subtitle="Client management, platform connections, and system controls" />
+      <Header title="Admin" subtitle="Company Management, platform connections, and system controls" />
 
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
@@ -331,10 +331,10 @@ export default function AdminPage() {
             </label>
             <button
               onClick={() => setShowCreateForm(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-[#FE1B04] rounded-lg hover:bg-[#d11200] transition-colors"
             >
               <Plus size={14} />
-              Add Client
+              Add Company
             </button>
           </div>
         </div>
@@ -349,7 +349,7 @@ export default function AdminPage() {
           <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
             {!discovery ? (
               <>
-                <h3 className="text-sm font-semibold text-gray-900 mb-1">Add New Client</h3>
+                <h3 className="text-sm font-semibold text-gray-900 mb-1">Add New Company</h3>
                 <p className="text-xs text-gray-500 mb-4">
                   Enter the client&apos;s website and we&apos;ll automatically find their social media profiles.
                 </p>
@@ -366,7 +366,7 @@ export default function AdminPage() {
                       value={websiteInput}
                       onChange={(e) => setWebsiteInput(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && handleDiscover()}
-                      className="w-full pl-10 pr-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-10 pr-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
                       placeholder="https://example.com"
                       autoFocus
                     />
@@ -374,7 +374,7 @@ export default function AdminPage() {
                   <button
                     onClick={handleDiscover}
                     disabled={discovering || !websiteInput.trim()}
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-60 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium text-white bg-[#FE1B04] rounded-lg hover:bg-[#d11200] disabled:opacity-60 transition-colors"
                   >
                     {discovering ? (
                       <Loader2 size={14} className="animate-spin" />
@@ -409,7 +409,7 @@ export default function AdminPage() {
                         setEditName(e.target.value);
                         setEditSlug(slugify(e.target.value));
                       }}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
                     />
                   </div>
                   <div>
@@ -418,7 +418,7 @@ export default function AdminPage() {
                       type="text"
                       value={editSlug}
                       onChange={(e) => setEditSlug(e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 font-mono"
                     />
                   </div>
                 </div>
@@ -468,7 +468,7 @@ export default function AdminPage() {
                   <button
                     onClick={handleCreate}
                     disabled={creating || !editName.trim() || !editSlug.trim()}
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-60 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium text-white bg-[#FE1B04] rounded-lg hover:bg-[#d11200] disabled:opacity-60 transition-colors"
                   >
                     {creating && <Loader2 size={14} className="animate-spin" />}
                     Create Client
@@ -509,7 +509,7 @@ export default function AdminPage() {
                 onClick={() => setActiveTab(tab.key)}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                   activeTab === tab.key
-                    ? "bg-blue-600 text-white"
+                    ? "bg-[#FE1B04] text-white"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
               >
@@ -543,7 +543,7 @@ export default function AdminPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th className="text-left px-6 py-3 font-medium text-gray-500">Client</th>
+                  <th className="text-left px-6 py-3 font-medium text-gray-500">Company</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Platforms &amp; Last Posts</th>
                   <th className="text-right px-6 py-3 font-medium text-gray-500">Actions</th>
@@ -598,7 +598,7 @@ export default function AdminPage() {
                                         if (e.key === "Enter") handleSaveUrl(conn.id);
                                         if (e.key === "Escape") { setEditingUrlConnId(null); setEditingUrlValue(""); }
                                       }}
-                                      className="flex-1 px-2 py-1 text-xs border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 min-w-[200px]"
+                                      className="flex-1 px-2 py-1 text-xs border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-red-500 min-w-[200px]"
                                       placeholder="https://linkedin.com/company/..."
                                       autoFocus
                                     />
@@ -731,7 +731,7 @@ export default function AdminPage() {
                 {clients.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-6 py-12 text-center text-gray-400 text-sm">
-                      No clients found. Click &quot;Add Client&quot; to create one.
+                      No companies found. Click &quot;Add Company&quot; to create one.
                     </td>
                   </tr>
                 )}
