@@ -29,7 +29,7 @@ export default async function DashboardLayout({
   const buildLabel = BUILD_NUMBER ? `Build #${BUILD_NUMBER}` : "";
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <div className="flex h-screen overflow-hidden bg-[#fafafa]">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-7xl mx-auto px-6 py-8">
