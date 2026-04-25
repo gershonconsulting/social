@@ -8,9 +8,7 @@ import {
   Building2,
   LayoutDashboard,
   FileText,
-  TrendingUp,
   Settings,
-  ScrollText,
   Shield,
   LogOut,
 } from "lucide-react";
@@ -20,11 +18,9 @@ const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/clients", icon: Building2, label: "Companies" },
   { href: "/analytics", icon: BarChart3, label: "Analytics" },
-  { href: "/followers", icon: TrendingUp, label: "Followers" },
   { href: "/reports", icon: FileText, label: "Reports" },
   { href: "/admin", icon: Shield, label: "Admin", adminOnly: true },
   { href: "/settings", icon: Settings, label: "Settings", adminOnly: true },
-  { href: "/logs", icon: ScrollText, label: "Audit" },
 ];
 
 export function Sidebar() {
