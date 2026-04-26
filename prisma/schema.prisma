@@ -234,6 +234,7 @@ model SocialPost {
   likeCount            Int      @default(0)
   commentCount         Int      @default(0)
   shareCount           Int      @default(0)
+  viewCount       Int      @default(0)
   rawPayloadJson       String?  @db.Text
   importedAt           DateTime @default(now())
   createdAt            DateTime @default(now())
