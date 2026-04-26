@@ -12,6 +12,9 @@ import { ClientSyncButton } from "@/components/clients/client-sync-button";
 import { ClientNameEditor } from "@/components/clients/client-name-editor";
 import { ComplianceDashboard } from "@/components/clients/compliance-dashboard";
 import { PostsListing } from "@/components/clients/posts-listing";
+import { HashtagCloud } from "@/components/clients/hashtag-cloud";
+import { WordCloud } from "@/components/clients/word-cloud";
+import { CompanyLogo } from "@/components/clients/company-logo";
 
 export const dynamic = "force-dynamic";
 
@@ -98,6 +101,12 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
       {/* Recent Posts */}
                   <PostsListing clientId={client.id} />
+
+      {/* Content Intelligence */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <HashtagCloud clientId={client.id} />
+                    <WordCloud clientId={client.id} />
+            </div>
 
       {/* Platform connections */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
