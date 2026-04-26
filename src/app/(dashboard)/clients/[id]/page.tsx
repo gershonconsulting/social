@@ -11,10 +11,11 @@ import { ExternalLink, Calendar, Plug } from "lucide-react";
 import { ClientSyncButton } from "@/components/clients/client-sync-button";
 import { ClientNameEditor } from "@/components/clients/client-name-editor";
 import { ComplianceDashboard } from "@/components/clients/compliance-dashboard";
+import { PostsListing } from "@/components/clients/posts-listing";
 
 export const dynamic = "force-dynamic";
 
-const PLATFORM_LABELS_MAP: Record<string, string> = {
+const PLATFORM_LABELS_MAP: Record<string, string> = {h
   LINKEDIN: "LinkedIn",
   TWITTER: "X / Twitter",
   GOOGLE_BUSINESS: "Google Business",
@@ -94,6 +95,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
       {/* Posting Compliance — THE BIG NUMBER */}
       <ComplianceDashboard clientId={client.id} platforms={allPlatforms} />
+
+      {/* Recent Posts */}
+                  <PostsListing clientId={client.id} />
 
       {/* Platform connections */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
