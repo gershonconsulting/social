@@ -19,6 +19,10 @@ async function getDashboardData() {
         select: {
           platform: true,
           publishedDateLocal: true,
+          likeCount: true,
+          commentCount: true,
+          shareCount: true,
+          viewCount: true,
         },
       },
       followerSnapshots: {
@@ -50,6 +54,18 @@ async function getDashboardData() {
       if (post.publishedDateLocal.startsWith(lastMonth)) postsLastMonth++;
     }
     const totalPosts = Object.values(postCounts).reduce((s, c) => s + c, 0);
+
+    // Compute engagement totals
+    let totalLikes = 0;
+    let totalComments = 0;
+    let totalShares = 0;
+    let totalViews = 0;
+    for (const post of client.socialPosts) {
+      totalLikes += post.likeCount || 0;
+      totalComments += post.commentCount || 0;
+      totalShares += post.shareCount || 0;
+      totalViews += post.viewCount || 0;
+    }
 
     // Compute follower totals and growth
     const latestFollowers: Record<string, number> = {};
@@ -92,6 +108,10 @@ async function getDashboardData() {
       totalFollowers,
       followerGrowth,
       platformFollowers,
+      totalLikes,
+      totalComments,
+      totalShares,
+      totalViews,
     };
   });
 }
