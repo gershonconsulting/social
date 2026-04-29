@@ -13,7 +13,7 @@ import { ClientNameEditor } from "@/components/clients/client-name-editor";
 import { ComplianceDashboard } from "@/components/clients/compliance-dashboard";
 import { PostsListing } from "@/components/clients/posts-listing";
 import { HashtagCloud } from "@/components/clients/hashtag-cloud";
-import { WordCloud } from "@/components/clients/word-cloud";h
+import { WordCloud } from "@/components/clients/word-cloud";
 import { CompanyLogo } from "@/components/clients/company-logo";
 
 export const dynamic = "force-dynamic";
