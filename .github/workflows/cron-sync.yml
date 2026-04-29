@@ -1,0 +1,25 @@
+name: Daily Sync Cron
+
+on:
+  schedule:
+    # Run daily at 6:00 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    # Allow manual trigger from GitHub Actions UI
+
+jobs:
+  daily-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger daily sync
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://social.gershoncrm.com/api/cron/daily-sync")
+          echo "Daily sync response: $response"
+          if [ "$response" != "200" ]; then
+            echo "Daily sync failed with status $response"
+            exit 1
+          fi
+          echo "Daily sync completed successfully"
+
