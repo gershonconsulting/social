@@ -126,6 +126,8 @@ export function DashboardClient({
   }, [fetchCompliance]);
 
   const totalPostsThisMonth = clients.reduce((s, c) => s + c.postsThisMonth, 0);
+    const totalDaysPosted = Object.values(compliance).reduce((s, c) => s + (c.overall?.daysWithPosts ?? 0), 0);
+    const totalWorkingDays = Object.values(compliance).length > 0 ? (Object.values(compliance)[0]?.overall?.totalWorkingDays ?? 0) : 0;
 
   // Sort clients by compliance % descending
   const sorted = [...clients].sort((a, b) => {
@@ -213,8 +215,8 @@ export function DashboardClient({
 
               {/* KPI Section */}
               <div className="px-5 pb-3">
-                <div className="text-4xl font-bold text-gray-900">{client.postsThisMonth}</div>
-                <div className="text-xs text-gray-500 mt-0.5">posts this month</div>
+                <div className="text-4xl font-bold text-gray-900">{comp?.overall?.daysWithPosts ?? 0}<span className="text-lg text-gray-400 font-normal">/{comp?.overall?.totalWorkingDays ?? 0}</span></div>
+                <div className="text-xs text-gray-500 mt-0.5">days posted this month</div>
                 <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
                   <span className="flex items-center gap-1">
                     <Activity size={12} className="text-indigo-500" />
