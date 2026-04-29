@@ -15,6 +15,10 @@ import {
   BarChart3,
   ArrowRight,
   RefreshCw,
+  Heart,
+  MessageCircle,
+  Share2,
+  Eye,
 } from "lucide-react";
 
 interface PlatformFollower {
@@ -42,6 +46,10 @@ interface DashboardClientData {
   totalFollowers: number;
   followerGrowth: number;
   platformFollowers: PlatformFollower[];
+  totalLikes: number;
+  totalComments: number;
+  totalShares: number;
+  totalViews: number;
 }
 
 interface ComplianceData {
@@ -128,6 +136,7 @@ export function DashboardClient({
   const totalPostsThisMonth = clients.reduce((s, c) => s + c.postsThisMonth, 0);
     const totalDaysPosted = Object.values(compliance).reduce((s, c) => s + (c.overall?.daysWithPosts ?? 0), 0);
     const totalWorkingDays = Object.values(compliance).length > 0 ? (Object.values(compliance)[0]?.overall?.totalWorkingDays ?? 0) : 0;
+  const totalEngagement = clients.reduce((s, c) => s + c.totalLikes + c.totalComments + c.totalShares, 0);
 
   // Sort clients by compliance % descending
   const sorted = [...clients].sort((a, b) => {
@@ -154,7 +163,7 @@ export function DashboardClient({
       </div>
 
       {/* Summary KPI row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Posts This Month</div>
           <div className="text-3xl font-bold text-gray-900 mt-1">{totalPostsThisMonth}</div>
@@ -178,6 +187,11 @@ export function DashboardClient({
           <div className="text-xs text-gray-400 mt-1">
             {lastRefresh && <>Updated {lastRefresh}</>}
           </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Engagement</div>
+          <div className="text-3xl font-bold text-gray-900 mt-1">{formatNumber(totalEngagement)}</div>
+          <div className="text-xs text-gray-400 mt-1">likes + comments + shares</div>
         </div>
       </div>
 
@@ -221,6 +235,24 @@ export function DashboardClient({
                   <span className="flex items-center gap-1">
                     <Activity size={12} className="text-indigo-500" />
                     {client.totalPosts} total all time
+                  </span>
+                </div>
+                <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                  <span className="flex items-center gap-1" title="Likes">
+                    <Heart size={12} className="text-red-400" />
+                    {formatNumber(client.totalLikes)}
+                  </span>
+                  <span className="flex items-center gap-1" title="Comments">
+                    <MessageCircle size={12} className="text-blue-400" />
+                    {formatNumber(client.totalComments)}
+                  </span>
+                  <span className="flex items-center gap-1" title="Shares">
+                    <Share2 size={12} className="text-green-400" />
+                    {formatNumber(client.totalShares)}
+                  </span>
+                  <span className="flex items-center gap-1" title="Views">
+                    <Eye size={12} className="text-purple-400" />
+                    {formatNumber(client.totalViews)}
                   </span>
                 </div>
               </div>
