@@ -103,6 +103,7 @@ export function ComplianceDashboard({ clientId, platforms }: { clientId: string;
   const [view, setView] = useState<"listing" | "calendar">("listing");
   const [data, setData] = useState<ComplianceData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>("");
 
   // Month navigation
   const now = new Date();
@@ -123,14 +124,36 @@ export function ComplianceDashboard({ clientId, platforms }: { clientId: string;
   const [selYear, selMonth] = selectedMonth.split("-").map(Number);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
-    fetch(`/api/clients/${clientId}/compliance?month=${selectedMonth}`)
-      .then((r) => r.json())
-      .then((res) => {
-        setData(res.data ?? null);
+    setError("");
+    (async () => {
+      let lastErr = "";
+      for (let i = 0; i < 3; i++) {
+        try {
+          const r = await fetch(`/api/clients/${clientId}/compliance?month=${selectedMonth}`, { cache: "no-store" });
+          const ct = r.headers.get("content-type") || "";
+          if (!ct.includes("application/json")) {
+            lastErr = `Server returned non-JSON (HTTP ${r.status})`;
+          } else {
+            const res = await r.json();
+            if (!cancelled) {
+              setData(res.data ?? null);
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (e) {
+          lastErr = e instanceof Error ? e.message : "Network error";
+        }
+        await new Promise((res) => setTimeout(res, 250 * (i + 1)));
+      }
+      if (!cancelled) {
+        setError(lastErr || "Could not load compliance data");
         setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      }
+    })();
+    return () => { cancelled = true; };
   }, [clientId, selectedMonth]);
 
   if (loading) {
@@ -143,10 +166,18 @@ export function ComplianceDashboard({ clientId, platforms }: { clientId: string;
     );
   }
 
+  if (error) {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center text-xs text-amber-800">
+        Could not load compliance data: {error}
+      </div>
+    );
+  }
+
   if (!data) {
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-sm text-gray-400">
-        No compliance data available.
+        No compliance data available yet for this month — run a sync from the button above.
       </div>
     );
   }

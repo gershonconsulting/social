@@ -70,34 +70,46 @@ export function BeforeAfterPanel({ clientId }: { clientId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [attempt, setAttempt] = useState(0);
+
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setError("");
     (async () => {
-      try {
-        const r = await fetch(`/api/clients/${clientId}/before-after`, { cache: "no-store" });
-        const ct = r.headers.get("content-type") || "";
-        if (!ct.includes("application/json")) {
-          if (!cancelled) {
-            setError(`Server returned a non-JSON response (HTTP ${r.status})`);
-            setLoading(false);
+      let lastErr = "";
+      // 3-attempt retry on transient edge-runtime 5xx (Cloudflare worker hits
+      // CPU/memory limits intermittently; same pattern as posts-listing).
+      for (let i = 0; i < 3; i++) {
+        try {
+          const r = await fetch(`/api/clients/${clientId}/before-after`, { cache: "no-store" });
+          const ct = r.headers.get("content-type") || "";
+          if (!ct.includes("application/json")) {
+            lastErr = `Server returned a non-JSON response (HTTP ${r.status})`;
+          } else {
+            const j = await r.json();
+            if (!cancelled) {
+              if (j.success) {
+                setData(j.data);
+                setLoading(false);
+                return;
+              } else {
+                lastErr = j.error || "Failed to load";
+              }
+            }
           }
-          return;
+        } catch (e) {
+          lastErr = e instanceof Error ? e.message : "Network error";
         }
-        const j = await r.json();
-        if (!cancelled) {
-          if (j.success) setData(j.data);
-          else setError(j.error || "Failed to load");
-          setLoading(false);
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Network error");
-          setLoading(false);
-        }
+        await new Promise((res) => setTimeout(res, 250 * (i + 1)));
+      }
+      if (!cancelled) {
+        setError(lastErr || "Could not load before/after comparison");
+        setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [clientId]);
+  }, [clientId, attempt]);
 
   if (loading) {
     return (
@@ -110,9 +122,17 @@ export function BeforeAfterPanel({ clientId }: { clientId: string }) {
 
   if (error) {
     return (
-      <div className="bg-amber-50 border border-amber-200 rounded-xl px-6 py-4 text-xs text-amber-800 flex items-center gap-2">
-        <AlertTriangle size={14} />
-        Could not load before/after comparison: {error}
+      <div className="bg-amber-50 border border-amber-200 rounded-xl px-6 py-4 text-xs text-amber-800 flex items-center gap-3 justify-between">
+        <span className="inline-flex items-center gap-2">
+          <AlertTriangle size={14} />
+          Could not load before/after comparison: {error}
+        </span>
+        <button
+          onClick={() => setAttempt((a) => a + 1)}
+          className="px-3 py-1 text-xs font-medium text-amber-900 bg-white border border-amber-300 rounded-lg hover:bg-amber-100"
+        >
+          Retry
+        </button>
       </div>
     );
   }
