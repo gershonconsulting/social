@@ -48,6 +48,7 @@ export function ClientsPageClient() {
   const [error, setError] = useState<string>("");
   const [attempt, setAttempt] = useState(0);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
 
   const applySuggestedName = async (clientId: string, suggestion: string) => {
     setRenaming(clientId);
@@ -100,11 +101,18 @@ export function ClientsPageClient() {
     return () => { cancelled = true; };
   }, [attempt]);
 
+  const visibleClients = useMemo(() => {
+    if (!clients) return null;
+    if (categoryFilter === "ALL") return clients;
+    return clients.filter((c) => (c.clientType ?? "").toUpperCase() === categoryFilter);
+  }, [clients, categoryFilter]);
+
   const summary = useMemo(() => {
-    if (!clients) return "";
-    const active = clients.filter((c) => c.status === "ACTIVE").length;
-    return `${active} active · ${clients.length} total`;
-  }, [clients]);
+    if (!visibleClients) return "";
+    const active = visibleClients.filter((c) => c.status === "ACTIVE").length;
+    const totalLabel = categoryFilter === "ALL" ? "total" : categoryFilter.charAt(0) + categoryFilter.slice(1).toLowerCase();
+    return `${active} active · ${visibleClients.length} ${totalLabel}`;
+  }, [visibleClients, categoryFilter]);
 
   return (
     <div>
@@ -147,6 +155,41 @@ export function ClientsPageClient() {
       )}
 
       {!loading && !error && clients && (
+        <>
+          {/* Category tabs */}
+          <div className="flex flex-wrap gap-1.5 mb-4 pb-3">
+            {[
+              { key: "ALL", label: "All" },
+              { key: "CAMPAIGN", label: "Campaign" },
+              { key: "CLIENT", label: "Client" },
+              { key: "PROSPECT", label: "Prospect" },
+              { key: "PARTNER", label: "Partner" },
+              { key: "COMPETITION", label: "Competition" },
+              { key: "INTERNAL", label: "Internal" },
+            ].map((t) => {
+              const count = t.key === "ALL"
+                ? clients.length
+                : clients.filter((c) => (c.clientType ?? "").toUpperCase() === t.key).length;
+              const active = categoryFilter === t.key;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setCategoryFilter(t.key)}
+                  className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
+                    active
+                      ? "bg-red-600 text-white"
+                      : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50"
+                  }`}
+                >
+                  {t.label}
+                  <span className={`ml-1.5 text-xs ${active ? "text-red-100" : "text-gray-400"}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -162,7 +205,7 @@ export function ClientsPageClient() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {clients.map((client) => {
+                {(visibleClients ?? []).map((client) => {
                   const errorConns = client.platformConnections.filter(
                     (c) => c.connectionStatus === "ERROR" || c.connectionStatus === "EXPIRED"
                   );
@@ -247,10 +290,12 @@ export function ClientsPageClient() {
                     </tr>
                   );
                 })}
-                {clients.length === 0 && (
+                {(visibleClients?.length ?? 0) === 0 && (
                   <tr>
                     <td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-400">
-                      No companies yet. Add one above.
+                      {categoryFilter === "ALL"
+                        ? "No companies yet. Add one above."
+                        : `No companies in '${categoryFilter.charAt(0) + categoryFilter.slice(1).toLowerCase()}' yet.`}
                     </td>
                   </tr>
                 )}
@@ -258,6 +303,7 @@ export function ClientsPageClient() {
             </table>
           </div>
         </div>
+        </>
       )}
     </div>
   );
