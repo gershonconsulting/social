@@ -15,6 +15,7 @@ import { ComplianceDashboard } from "@/components/clients/compliance-dashboard";
 import { PostsListing } from "@/components/clients/posts-listing";
 import { BeforeAfterPanel } from "@/components/clients/before-after-panel";
 import { TestConnectionButton } from "@/components/clients/test-connection-button";
+import { ConnectionUrlEditor } from "@/components/clients/connection-url-editor";
 import { HashtagCloud } from "@/components/clients/hashtag-cloud";
 import { WordCloud } from "@/components/clients/word-cloud";
 import { CompanyLogo } from "@/components/clients/company-logo";
@@ -154,19 +155,12 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                       )}
                     </div>
                     <div className="text-xs text-gray-400 mt-0.5">
-                      {conn.externalAccountUrl ? (
-                        <a
-                          href={conn.externalAccountUrl.startsWith("http") ? conn.externalAccountUrl : `https://${conn.externalAccountUrl}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline inline-flex items-center gap-1"
-                        >
-                          <ExternalLink size={10} />
-                          {conn.externalAccountName ?? conn.externalAccountUrl.replace(/^https?:\/\/(?:www\.)?/, "")}
-                        </a>
-                      ) : (
-                        <span>{conn.externalAccountName ?? "Not configured"}</span>
-                      )}
+                      <ConnectionUrlEditor
+                        connectionId={conn.id}
+                        platform={conn.platform}
+                        initialUrl={conn.externalAccountUrl}
+                        initialName={conn.externalAccountName}
+                      />
                     </div>
                   </div>
                 </div>
