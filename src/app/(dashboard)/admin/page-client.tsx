@@ -444,6 +444,7 @@ export default function AdminPage() {
                     onChange={(e) => setNewClientType(e.target.value)}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
                   >
+                    <option value="CAMPAIGN">Campaign</option>
                     <option value="CLIENT">Client</option>
                     <option value="PROSPECT">Prospect</option>
                     <option value="PARTNER">Partner</option>
@@ -524,6 +525,7 @@ export default function AdminPage() {
         <div className="flex items-center gap-1 mb-4">
           {[
             { key: "ALL", label: "All" },
+            { key: "CAMPAIGN", label: "Campaigns" },
             { key: "CLIENT", label: "Clients" },
             { key: "PROSPECT", label: "Prospects" },
             { key: "PARTNER", label: "Partners" },
