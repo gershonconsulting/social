@@ -87,7 +87,7 @@ export function ClientCategoryEditor({
   return (
     <div ref={containerRef} className="relative inline-block">
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => { setError(""); setOpen((o) => !o); }}
         disabled={saving}
         className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border transition-colors disabled:opacity-50 ${badgeClass}`}
         title="Change category"

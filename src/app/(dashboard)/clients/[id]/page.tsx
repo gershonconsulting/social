@@ -13,6 +13,7 @@ import { ClientNameEditor } from "@/components/clients/client-name-editor";
 import { ClientCategoryEditor } from "@/components/clients/client-category-editor";
 import { ComplianceDashboard } from "@/components/clients/compliance-dashboard";
 import { PostsListing } from "@/components/clients/posts-listing";
+import { BeforeAfterPanel } from "@/components/clients/before-after-panel";
 import { HashtagCloud } from "@/components/clients/hashtag-cloud";
 import { WordCloud } from "@/components/clients/word-cloud";
 import { CompanyLogo } from "@/components/clients/company-logo";
@@ -102,6 +103,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
       {/* Posting Compliance — THE BIG NUMBER */}
       <ComplianceDashboard clientId={client.id} platforms={allPlatforms} />
+
+      {/* Before us · After us comparison around the campaign start date */}
+      <BeforeAfterPanel clientId={client.id} />
 
       {/* Recent Posts */}
                   <PostsListing clientId={client.id} />
