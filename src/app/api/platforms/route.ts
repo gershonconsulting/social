@@ -2,6 +2,7 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { Platform, ConnectionStatus, PostingMode } from "@prisma/client";
+import { propagateTokensForPlatform } from "@/lib/jobs/token-propagate";
 import { z } from "zod";
 
 const createPlatformSchema = z.object({
@@ -59,6 +60,15 @@ export async function POST(req: NextRequest) {
       enforcementEndDate: connData.enforcementEndDate ? new Date(connData.enforcementEndDate) : null,
     },
   });
+
+  // Olivier's UX requirement: a new company shouldn't sit in PENDING just
+  // because we already authorized this platform on another company. Try to
+  // propagate an existing valid token from a sibling connection. Best-effort.
+  try {
+    await propagateTokensForPlatform(connData.platform as Platform);
+  } catch {
+    // Non-fatal — the row is created either way.
+  }
 
   // Create associated posting schedule
   await prisma.postingSchedule.create({

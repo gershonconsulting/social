@@ -109,6 +109,8 @@ export function SettingsPageClient() {
         subtitle="Manage your platform connections and API credentials"
       />
 
+      <ApplyTokensToPendingButton onDone={() => setAttempt((a) => a + 1)} />
+
       <TestAllConnectionsButton
         connectionIds={Object.values(connections).flat().map((c) => c.id)}
         onDone={() => setAttempt((a) => a + 1)}
@@ -242,6 +244,64 @@ function TestAllConnectionsButton({
         className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-60 inline-flex items-center gap-2 whitespace-nowrap"
       >
         {running ? "Testing…" : `Test all (${connectionIds.length})`}
+      </button>
+    </div>
+  );
+}
+
+function ApplyTokensToPendingButton({ onDone }: { onDone: () => void }) {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ totalApplied: number; results: Array<{ platform: string; appliedTo: number; skipped: string | null }> } | null>(null);
+  const [error, setError] = useState("");
+
+  async function run() {
+    setRunning(true);
+    setResult(null);
+    setError("");
+    try {
+      const r = await fetch("/api/settings/propagate-tokens", { method: "POST" });
+      const ct = r.headers.get("content-type") || "";
+      if (!ct.includes("application/json")) {
+        setError(`Non-JSON HTTP ${r.status}`);
+      } else {
+        const j = await r.json();
+        if (j.success) {
+          setResult(j.data);
+          onDone();
+        } else {
+          setError(j.error || "Failed");
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between gap-4">
+      <div>
+        <div className="text-sm font-semibold text-gray-900">Apply existing tokens to PENDING connections</div>
+        <div className="text-xs text-gray-500 mt-0.5">
+          Companies created after a platform was authorized may have PENDING connections
+          even though you have a valid token. This copies your token onto every PENDING
+          row of the same platform so they flip to CONNECTED. Safe to run repeatedly.
+        </div>
+        {result && (
+          <div className="text-xs mt-1.5 text-green-700">
+            Applied to {result.totalApplied} connection{result.totalApplied !== 1 ? "s" : ""}.
+            {result.results.filter((r) => r.appliedTo > 0).map((r) => ` ${r.platform}: ${r.appliedTo}`).join(" ·")}
+          </div>
+        )}
+        {error && <div className="text-xs mt-1.5 text-red-700">{error}</div>}
+      </div>
+      <button
+        onClick={run}
+        disabled={running}
+        className="px-3 py-2 text-sm font-medium text-white bg-gray-700 rounded-lg hover:bg-gray-800 disabled:opacity-60 inline-flex items-center gap-2 whitespace-nowrap"
+      >
+        {running ? "Applying…" : "Apply to pending"}
       </button>
     </div>
   );

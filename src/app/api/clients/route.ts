@@ -159,6 +159,16 @@ export async function POST(req: NextRequest) {
         },
       });
     }
+
+    // Olivier's UX rule: a brand-new company should NOT sit in PENDING just
+    // because we already authorized that platform on a different company.
+    // Copy any existing valid OAuth token from a sibling connection of the
+    // same platform onto these freshly-created PENDING rows. Best-effort.
+    try {
+      await propagateTokensForAllPlatforms();
+    } catch {
+      // Non-fatal — the client + connections still exist either way.
+    }
   }
 
   // Audit log
