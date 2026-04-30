@@ -1,0 +1,228 @@
+"use client";
+
+import { useEffect, useState, useMemo } from "react";
+import Link from "next/link";
+import { Plus, AlertTriangle, RefreshCw, Loader2 } from "lucide-react";
+import { Header } from "@/components/layout/header";
+import { ConnectionBadge } from "@/components/ui/connection-badge";
+import { formatDate, formatRelative } from "@/lib/utils";
+
+interface PlatformConn {
+  platform: string;
+  connectionStatus: string;
+  lastSyncAt: string | null;
+  isMandatory?: boolean;
+}
+
+interface Client {
+  id: string;
+  slug: string;
+  name: string;
+  status: string;
+  clientType: string | null;
+  campaignStartDate: string | null;
+  platformConnections: PlatformConn[];
+}
+
+const CLIENT_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Draft",
+  ACTIVE: "Active",
+  PAUSED: "Paused",
+  INCOMPLETE_SETUP: "Incomplete Setup",
+  ARCHIVED: "Archived",
+};
+
+const CATEGORY_BADGE: Record<string, string> = {
+  CLIENT: "bg-blue-50 text-blue-700",
+  PROSPECT: "bg-purple-50 text-purple-700",
+  PARTNER: "bg-teal-50 text-teal-700",
+  COMPETITION: "bg-orange-50 text-orange-700",
+  COMPANY: "bg-emerald-50 text-emerald-700",
+  INTERNAL: "bg-gray-100 text-gray-600",
+};
+
+export function ClientsPageClient() {
+  const [clients, setClients] = useState<Client[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>("");
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    (async () => {
+      let lastErr = "";
+      for (let i = 0; i < 3; i++) {
+        try {
+          const r = await fetch("/api/clients", { cache: "no-store" });
+          if (!r.ok) {
+            let body: { error?: string } | null = null;
+            try { body = await r.json(); } catch {}
+            lastErr = body?.error || `HTTP ${r.status}`;
+          } else {
+            const j = await r.json();
+            if (!cancelled) {
+              setClients(j?.data ?? []);
+              setLoading(false);
+            }
+            return;
+          }
+        } catch (e) {
+          lastErr = e instanceof Error ? e.message : "Network error";
+        }
+        await new Promise((res) => setTimeout(res, 250 * (i + 1)));
+      }
+      if (!cancelled) {
+        setError(lastErr || "Could not load companies");
+        setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [attempt]);
+
+  const summary = useMemo(() => {
+    if (!clients) return "";
+    const active = clients.filter((c) => c.status === "ACTIVE").length;
+    return `${active} active · ${clients.length} total`;
+  }, [clients]);
+
+  return (
+    <div>
+      <Header
+        title="Companies"
+        subtitle={summary || "Loading…"}
+        actions={
+          <Link
+            href="/admin?tab=clients&action=new"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-[#FE1B04] rounded-lg hover:bg-[#d11200] transition-colors"
+          >
+            <Plus size={15} />
+            Add Company
+          </Link>
+        }
+      />
+
+      {loading && (
+        <div className="flex items-center justify-center gap-2 py-16 text-sm text-gray-400">
+          <Loader2 size={16} className="animate-spin" />
+          Loading companies…
+        </div>
+      )}
+
+      {!loading && error && (
+        <div className="mx-auto max-w-md mt-8 p-6 text-center bg-amber-50 border border-amber-200 rounded-xl">
+          <AlertTriangle size={20} className="mx-auto text-amber-600 mb-2" />
+          <div className="text-sm font-semibold text-amber-900">
+            Could not load companies
+          </div>
+          <div className="text-xs text-amber-800 mt-1">{error}</div>
+          <button
+            onClick={() => setAttempt((a) => a + 1)}
+            className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-900 bg-white border border-amber-300 rounded-lg hover:bg-amber-100"
+          >
+            <RefreshCw size={12} />
+            Retry
+          </button>
+        </div>
+      )}
+
+      {!loading && !error && clients && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="text-left px-6 py-3 font-medium text-gray-500">Company</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Category</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Platforms</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Campaign Start</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Last Sync</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Issues</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {clients.map((client) => {
+                  const errorConns = client.platformConnections.filter(
+                    (c) => c.connectionStatus === "ERROR" || c.connectionStatus === "EXPIRED"
+                  );
+                  const lastSync = client.platformConnections
+                    .map((c) => c.lastSyncAt)
+                    .filter(Boolean)
+                    .sort()
+                    .reverse()[0];
+                  const ct = client.clientType || "";
+                  const ctLabel = ct ? ct.charAt(0) + ct.slice(1).toLowerCase() : "—";
+                  return (
+                    <tr key={client.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <Link
+                          href={`/clients/${client.id}`}
+                          className="font-medium text-gray-900 hover:text-red-600"
+                        >
+                          {client.name}
+                        </Link>
+                        <div className="text-xs text-gray-400 mt-0.5">{client.slug}</div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${CATEGORY_BADGE[ct] ?? "bg-gray-50 text-gray-500"}`}>
+                          {ctLabel}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4">
+                        <span
+                          className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                            client.status === "ACTIVE"
+                              ? "bg-green-50 text-green-700"
+                              : client.status === "PAUSED"
+                                ? "bg-amber-50 text-amber-700"
+                                : "bg-gray-50 text-gray-500"
+                          }`}
+                        >
+                          {CLIENT_STATUS_LABELS[client.status] ?? client.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {client.platformConnections.map((conn) => (
+                            <ConnectionBadge key={conn.platform} status={conn.connectionStatus} />
+                          ))}
+                          {client.platformConnections.length === 0 && (
+                            <span className="text-xs text-gray-400">No platforms</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-xs text-gray-500">
+                        {formatDate(client.campaignStartDate)}
+                      </td>
+                      <td className="px-4 py-4 text-xs text-gray-500">
+                        {formatRelative(lastSync ?? undefined)}
+                      </td>
+                      <td className="px-4 py-4">
+                        {errorConns.length > 0 ? (
+                          <span className="text-xs text-red-600 font-medium">
+                            {errorConns.length} error{errorConns.length !== 1 ? "s" : ""}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-300">None</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {clients.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-400">
+                      No companies yet. Add one above.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
