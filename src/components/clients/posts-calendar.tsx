@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, XCircle, ExternalLink } from "lucide-react";
 
 interface CalendarDay {
   date: string;
@@ -8,8 +8,17 @@ interface CalendarDay {
   postCount: number;
 }
 
+interface CalendarPost {
+  id: string;
+  platform: string;
+  postUrl: string | null;
+  postTextSnippet: string | null;
+  publishedDateLocal: string;
+}
+
 export function PostsCalendar({ clientId, platform }: { clientId: string; platform?: string }) {
   const [calendar, setCalendar] = useState<CalendarDay[]>([]);
+  const [postsByDate, setPostsByDate] = useState<Record<string, CalendarPost[]>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -20,6 +29,13 @@ export function PostsCalendar({ clientId, platform }: { clientId: string; platfo
       .then((r) => r.json())
       .then((data) => {
         setCalendar(data.data?.calendar ?? []);
+        const byDate: Record<string, CalendarPost[]> = {};
+        for (const p of (data.data?.posts ?? []) as CalendarPost[]) {
+          if (!p.publishedDateLocal) continue;
+          if (!byDate[p.publishedDateLocal]) byDate[p.publishedDateLocal] = [];
+          byDate[p.publishedDateLocal].push(p);
+        }
+        setPostsByDate(byDate);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -100,17 +116,47 @@ export function PostsCalendar({ clientId, platform }: { clientId: string; platfo
                 const dayNum = parseInt(day.date.split("-")[2], 10);
                 const isToday = day.date === new Date().toISOString().split("T")[0];
 
-                return (
-                  <div
-                    key={day.date}
-                    className={`aspect-square rounded-md flex flex-col items-center justify-center text-xs relative
+                const dayPosts = postsByDate[day.date] || [];
+                const linkablePost = dayPosts.find((p) => p.postUrl);
+                const titleText = day.hasPost
+                  ? `${day.date}: ${day.postCount} post(s)` +
+                    (dayPosts.length
+                      ? "\n\n" + dayPosts.map((p) => `• [${p.platform}] ${(p.postTextSnippet || "").slice(0, 80)}`).join("\n")
+                      : "")
+                  : `${day.date}: No post`;
+                const cellClass = `aspect-square rounded-md flex flex-col items-center justify-center text-xs relative transition-colors
                       ${day.hasPost
-                        ? "bg-green-50 border border-green-200"
+                        ? "bg-green-50 border border-green-200 hover:bg-green-100"
                         : "bg-red-50 border border-red-200"
                       }
                       ${isToday ? "ring-2 ring-blue-400" : ""}
-                    `}
-                    title={`${day.date}: ${day.hasPost ? day.postCount + " post(s)" : "No post"}`}
+                    `;
+                if (day.hasPost && linkablePost?.postUrl) {
+                  return (
+                    <a
+                      key={day.date}
+                      href={linkablePost.postUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={cellClass + " group cursor-pointer"}
+                      title={titleText}
+                    >
+                      <span className="text-[10px] font-medium text-green-700">{dayNum}</span>
+                      <CheckCircle2 size={14} className="text-green-500 mt-0.5 group-hover:hidden" />
+                      <ExternalLink size={14} className="text-green-700 mt-0.5 hidden group-hover:block" />
+                      {day.postCount > 1 && (
+                        <span className="absolute top-0.5 right-1 text-[9px] font-bold text-green-700 bg-white rounded-full px-1">
+                          {day.postCount}
+                        </span>
+                      )}
+                    </a>
+                  );
+                }
+                return (
+                  <div
+                    key={day.date}
+                    className={cellClass}
+                    title={titleText}
                   >
                     <span className={`text-[10px] font-medium ${day.hasPost ? "text-green-700" : "text-red-600"}`}>
                       {dayNum}

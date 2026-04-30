@@ -28,6 +28,16 @@ interface PlatformFollower {
   growth: number;
 }
 
+interface Bucket {
+  posts: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  views: number;
+}
+
+type WindowKey = "lastWeek" | "lastMonth" | "thisMonth" | "thisYear" | "allTime";
+
 interface DashboardClientData {
   id: string;
   name: string;
@@ -50,6 +60,7 @@ interface DashboardClientData {
   totalComments: number;
   totalShares: number;
   totalViews: number;
+  buckets: Record<WindowKey, Bucket>;
 }
 
 interface ComplianceData {
@@ -91,6 +102,14 @@ const PLATFORM_LABELS: Record<string, string> = {
   YOUTUBE: "YouTube",
 };
 
+const WINDOW_LABEL: Record<WindowKey, string> = {
+  lastWeek: "Last Week",
+  lastMonth: "Last Month",
+  thisMonth: "This Month",
+  thisYear: "This Year",
+  allTime: "All Time",
+};
+
 export function DashboardClient({
   clients,
   totalPosts,
@@ -105,6 +124,8 @@ export function DashboardClient({
   const [compliance, setCompliance] = useState<Record<string, ComplianceData>>({});
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState("");
+  const [windowKey, setWindowKey] = useState<WindowKey>("thisMonth");
+  const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
 
   const fetchCompliance = useCallback(async () => {
     setLoading(true);
@@ -133,13 +154,32 @@ export function DashboardClient({
     fetchCompliance();
   }, [fetchCompliance]);
 
-  const totalPostsThisMonth = clients.reduce((s, c) => s + c.postsThisMonth, 0);
-    const totalDaysPosted = Object.values(compliance).reduce((s, c) => s + (c.overall?.daysWithPosts ?? 0), 0);
-    const totalWorkingDays = Object.values(compliance).length > 0 ? (Object.values(compliance)[0]?.overall?.totalWorkingDays ?? 0) : 0;
-  const totalEngagement = clients.reduce((s, c) => s + c.totalLikes + c.totalComments + c.totalShares, 0);
+  // Filter by category tab
+  const filtered = clients.filter((c) =>
+    categoryFilter === "ALL" ? true : (c.clientType ?? "").toUpperCase() === categoryFilter
+  );
 
-  // Sort clients by compliance % descending
-  const sorted = [...clients].sort((a, b) => {
+  // Aggregate KPIs across the *visible* clients for the *selected window*
+  const windowedTotals = filtered.reduce(
+    (acc, c) => {
+      const b = c.buckets?.[windowKey] || { posts: 0, likes: 0, comments: 0, shares: 0, views: 0 };
+      acc.posts += b.posts;
+      acc.likes += b.likes;
+      acc.comments += b.comments;
+      acc.shares += b.shares;
+      acc.views += b.views;
+      return acc;
+    },
+    { posts: 0, likes: 0, comments: 0, shares: 0, views: 0 }
+  );
+  const totalEngagement = windowedTotals.likes + windowedTotals.comments + windowedTotals.shares;
+  const connectedPlatformCount = filtered.reduce(
+    (s, c) => s + c.platformConnections.filter((p) => p.connectionStatus === "CONNECTED").length,
+    0
+  );
+
+  // Sort clients by compliance % descending (within filter)
+  const sorted = [...filtered].sort((a, b) => {
     const aP = compliance[a.id]?.overall?.percentage ?? -1;
     const bP = compliance[b.id]?.overall?.percentage ?? -1;
     return bP - aP;
@@ -148,48 +188,95 @@ export function DashboardClient({
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-sm text-gray-500 mt-1">Social media performance overview</p>
         </div>
-        <button
-          onClick={fetchCompliance}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
-        >
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            value={windowKey}
+            onChange={(e) => setWindowKey(e.target.value as WindowKey)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white"
+            title="Time window"
+          >
+            <option value="lastWeek">Last week</option>
+            <option value="lastMonth">Last month</option>
+            <option value="thisMonth">This month</option>
+            <option value="thisYear">This year</option>
+            <option value="allTime">All time</option>
+          </select>
+          <button
+            onClick={fetchCompliance}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            Refresh
+          </button>
+        </div>
       </div>
 
-      {/* Summary KPI row */}
+      {/* Category tabs */}
+      <div className="flex flex-wrap gap-1.5 mb-6 border-b border-gray-200 pb-3">
+        {[
+          { key: "ALL", label: "All" },
+          { key: "CAMPAIGN", label: "Campaign" },
+          { key: "CLIENT", label: "Client" },
+          { key: "PROSPECT", label: "Prospect" },
+          { key: "PARTNER", label: "Partner" },
+          { key: "COMPETITION", label: "Competition" },
+          { key: "INTERNAL", label: "Internal" },
+        ].map((t) => {
+          const count = t.key === "ALL"
+            ? clients.length
+            : clients.filter((c) => (c.clientType ?? "").toUpperCase() === t.key).length;
+          const active = categoryFilter === t.key;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setCategoryFilter(t.key)}
+              className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
+                active
+                  ? "bg-red-600 text-white"
+                  : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              {t.label}
+              <span className={`ml-1.5 text-xs ${active ? "text-red-100" : "text-gray-400"}`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Summary KPI row — windowed; Total Followers removed (per Olivier:
+          aggregating followers across companies is meaningless). */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Posts This Month</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{totalPostsThisMonth}</div>
-          <div className="text-xs text-gray-400 mt-1">{totalPosts} total all time</div>
+          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">{WINDOW_LABEL[windowKey]} Posts</div>
+          <div className="text-3xl font-bold text-gray-900 mt-1">{windowedTotals.posts.toLocaleString()}</div>
+          <div className="text-xs text-gray-400 mt-1">{categoryFilter === "ALL" ? "across all categories" : `in ${categoryFilter.charAt(0) + categoryFilter.slice(1).toLowerCase()}`}</div>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Followers</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{formatNumber(totalFollowers)}</div>
-          <div className="text-xs text-gray-400 mt-1">across all platforms</div>
+          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">{WINDOW_LABEL[windowKey]} Likes</div>
+          <div className="text-3xl font-bold text-gray-900 mt-1">{formatNumber(windowedTotals.likes)}</div>
+          <div className="text-xs text-gray-400 mt-1">across visible companies</div>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Active Companies</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">{activeClients}</div>
-          <div className="text-xs text-gray-400 mt-1">being tracked</div>
+          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Companies</div>
+          <div className="text-3xl font-bold text-gray-900 mt-1">{filtered.length}</div>
+          <div className="text-xs text-gray-400 mt-1">in the selected category</div>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Platforms Connected</div>
-          <div className="text-3xl font-bold text-gray-900 mt-1">
-            {clients.reduce((s, c) => s + c.platformConnections.filter(p => p.connectionStatus === "CONNECTED").length, 0)}
-          </div>
+          <div className="text-3xl font-bold text-gray-900 mt-1">{connectedPlatformCount}</div>
           <div className="text-xs text-gray-400 mt-1">
             {lastRefresh && <>Updated {lastRefresh}</>}
           </div>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Engagement</div>
+          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">{WINDOW_LABEL[windowKey]} Engagement</div>
           <div className="text-3xl font-bold text-gray-900 mt-1">{formatNumber(totalEngagement)}</div>
           <div className="text-xs text-gray-400 mt-1">likes + comments + shares</div>
         </div>

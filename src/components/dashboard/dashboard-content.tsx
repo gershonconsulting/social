@@ -44,28 +44,49 @@ async function getDashboardData() {
     ? `${now.getFullYear() - 1}-12`
     : `${now.getFullYear()}-${String(now.getMonth()).padStart(2, "0")}`;
 
+  // Window boundaries — used so the dashboard can re-aggregate by Last week,
+  // Last Month, This month, This year, All time without each company card
+  // having to re-filter the raw post stream.
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const lastWeekStart = new Date(today);
+  lastWeekStart.setDate(today.getDate() - 7);
+  const thisYearStr = String(now.getFullYear());
+
   return clients.map((client) => {
     const postCounts: Record<string, number> = {};
-    let postsThisMonth = 0;
-    let postsLastMonth = 0;
+    const buckets = {
+      lastWeek:   { posts: 0, likes: 0, comments: 0, shares: 0, views: 0 },
+      lastMonth:  { posts: 0, likes: 0, comments: 0, shares: 0, views: 0 },
+      thisMonth:  { posts: 0, likes: 0, comments: 0, shares: 0, views: 0 },
+      thisYear:   { posts: 0, likes: 0, comments: 0, shares: 0, views: 0 },
+      allTime:    { posts: 0, likes: 0, comments: 0, shares: 0, views: 0 },
+    };
     for (const post of client.socialPosts) {
       postCounts[post.platform] = (postCounts[post.platform] || 0) + 1;
-      if (post.publishedDateLocal.startsWith(thisMonth)) postsThisMonth++;
-      if (post.publishedDateLocal.startsWith(lastMonth)) postsLastMonth++;
-    }
-    const totalPosts = Object.values(postCounts).reduce((s, c) => s + c, 0);
+      const ds = post.publishedDateLocal;
+      const d = new Date(ds + "T00:00:00Z");
+      const likes = post.likeCount || 0;
+      const comments = post.commentCount || 0;
+      const shares = post.shareCount || 0;
+      const views = post.viewCount || 0;
 
-    // Compute engagement totals
-    let totalLikes = 0;
-    let totalComments = 0;
-    let totalShares = 0;
-    let totalViews = 0;
-    for (const post of client.socialPosts) {
-      totalLikes += post.likeCount || 0;
-      totalComments += post.commentCount || 0;
-      totalShares += post.shareCount || 0;
-      totalViews += post.viewCount || 0;
+      const bump = (b: typeof buckets.lastWeek) => {
+        b.posts++; b.likes += likes; b.comments += comments; b.shares += shares; b.views += views;
+      };
+      bump(buckets.allTime);
+      if (ds.startsWith(thisYearStr)) bump(buckets.thisYear);
+      if (ds.startsWith(thisMonth)) bump(buckets.thisMonth);
+      if (ds.startsWith(lastMonth)) bump(buckets.lastMonth);
+      if (d >= lastWeekStart && d <= today) bump(buckets.lastWeek);
     }
+    const totalPosts = buckets.allTime.posts;
+    const postsThisMonth = buckets.thisMonth.posts;
+    const postsLastMonth = buckets.lastMonth.posts;
+    const totalLikes = buckets.allTime.likes;
+    const totalComments = buckets.allTime.comments;
+    const totalShares = buckets.allTime.shares;
+    const totalViews = buckets.allTime.views;
 
     // Compute follower totals and growth
     const latestFollowers: Record<string, number> = {};
@@ -114,6 +135,7 @@ async function getDashboardData() {
       totalComments,
       totalShares,
       totalViews,
+      buckets,
     };
   });
 }
