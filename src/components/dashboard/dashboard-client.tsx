@@ -99,7 +99,6 @@ const PLATFORM_LABELS: Record<string, string> = {
   FACEBOOK: "Facebook",
   INSTAGRAM: "Instagram",
   TIKTOK: "TikTok",
-  YOUTUBE: "YouTube",
 };
 
 const WINDOW_LABEL: Record<WindowKey, string> = {

@@ -67,13 +67,6 @@ const PLATFORM_MATCHERS: { platform: string; test: (url: string) => boolean; cle
       return m ? m[1] : url;
     },
   },
-  {
-    platform: "YOUTUBE",
-    test: (url) => /youtube\.com\/(c\/|channel\/|@)[a-zA-Z0-9_-]+/i.test(url),
-    clean: (url) => {
-      const m = url.match(/(https?:\/\/(?:www\.)?youtube\.com\/(?:c\/|channel\/|@)[a-zA-Z0-9_-]+)\/?/i);
-      return m ? m[1] : url;
-    },
   },
   {
     platform: "TIKTOK",

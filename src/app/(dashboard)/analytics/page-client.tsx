@@ -44,7 +44,6 @@ const PLATFORM_LABELS: Record<string, string> = {
   TWITTER: "X / Twitter",
   FACEBOOK: "Facebook",
   INSTAGRAM: "Instagram",
-  YOUTUBE: "YouTube",
   GOOGLE_BUSINESS: "Google Business",
 };
 
@@ -53,7 +52,6 @@ const PLATFORM_COLOR: Record<string, string> = {
   TWITTER: "bg-gray-700",
   FACEBOOK: "bg-indigo-500",
   INSTAGRAM: "bg-pink-500",
-  YOUTUBE: "bg-red-500",
   GOOGLE_BUSINESS: "bg-green-600",
 };
 

@@ -8,7 +8,6 @@ const PLATFORM_LABELS: Record<string, string> = {
   GOOGLE_BUSINESS: "Google Business",
   FACEBOOK: "Facebook",
   INSTAGRAM: "Instagram",
-  YOUTUBE: "YouTube",
 };
 
 const PLATFORM_COLORS: Record<string, string> = {
@@ -17,7 +16,6 @@ const PLATFORM_COLORS: Record<string, string> = {
   GOOGLE_BUSINESS: "bg-amber-500",
   FACEBOOK: "bg-blue-500",
   INSTAGRAM: "bg-pink-500",
-  YOUTUBE: "bg-red-600",
 };
 
 interface PlatformCompliance {

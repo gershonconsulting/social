@@ -10,7 +10,6 @@ const PLATFORM_OPTIONS = [
   { value: "TWITTER", label: "X / Twitter" },
   { value: "FACEBOOK", label: "Facebook" },
   { value: "INSTAGRAM", label: "Instagram" },
-  { value: "YOUTUBE", label: "YouTube" },
 ];
 
 export function PostsTabs({ clientId, platforms }: { clientId: string; platforms: string[] }) {

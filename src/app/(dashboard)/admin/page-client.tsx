@@ -62,7 +62,6 @@ const PLATFORM_ICONS: Record<string, string> = {
   GOOGLE_BUSINESS: "G",
   FACEBOOK: "f",
   INSTAGRAM: "ig",
-  YOUTUBE: "\u25b6",
   TIKTOK: "\u266a",
   PINTEREST: "P",
   THREADS: "@",

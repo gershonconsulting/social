@@ -9,7 +9,6 @@ const PLATFORM_HINTS: Record<string, string> = {
   GOOGLE_BUSINESS: "Set in /admin (location ID is required)",
   FACEBOOK: "https://www.facebook.com/<page-name>",
   INSTAGRAM: "https://www.instagram.com/<handle>",
-  YOUTUBE: "https://www.youtube.com/@<channel>",
 };
 
 export function ConnectionUrlEditor({

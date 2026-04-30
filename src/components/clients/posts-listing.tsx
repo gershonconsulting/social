@@ -20,7 +20,6 @@ const PLATFORM_LABELS: Record<string, string> = {
   TWITTER: "X / Twitter",
   FACEBOOK: "Facebook",
   INSTAGRAM: "Instagram",
-  YOUTUBE: "YouTube",
   GOOGLE_BUSINESS: "Google Business",
 };
 

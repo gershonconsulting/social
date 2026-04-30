@@ -29,7 +29,6 @@ const PLATFORM_LABELS_MAP: Record<string, string> = {
   FACEBOOK: "Facebook",
   INSTAGRAM: "Instagram",
   TIKTOK: "TikTok",
-  YOUTUBE: "YouTube",
   THREADS: "Threads",
   PINTEREST: "Pinterest",
   MEDIUM: "Medium",

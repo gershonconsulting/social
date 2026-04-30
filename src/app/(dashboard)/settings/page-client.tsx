@@ -111,6 +111,8 @@ export function SettingsPageClient() {
 
       <ApplyTokensToPendingButton onDone={() => setAttempt((a) => a + 1)} />
 
+      <RemoveYouTubeDataButton onDone={() => setAttempt((a) => a + 1)} />
+
       <TestAllConnectionsButton
         connectionIds={Object.values(connections).flat().map((c) => c.id)}
         onDone={() => setAttempt((a) => a + 1)}
@@ -302,6 +304,70 @@ function ApplyTokensToPendingButton({ onDone }: { onDone: () => void }) {
         className="px-3 py-2 text-sm font-medium text-white bg-gray-700 rounded-lg hover:bg-gray-800 disabled:opacity-60 inline-flex items-center gap-2 whitespace-nowrap"
       >
         {running ? "Applying…" : "Apply to pending"}
+      </button>
+    </div>
+  );
+}
+
+function RemoveYouTubeDataButton({ onDone }: { onDone: () => void }) {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ connectionsRemoved: number } | null>(null);
+  const [error, setError] = useState("");
+
+  async function run() {
+    if (!confirm("Remove EVERY YouTube platform connection and its posts / compliance / follower data?\n\nThis is irreversible. Use only if you are sure YouTube is no longer a tracked platform.")) {
+      return;
+    }
+    setRunning(true);
+    setResult(null);
+    setError("");
+    try {
+      const r = await fetch("/api/admin/cleanup-platform", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform: "YOUTUBE" }),
+      });
+      const ct = r.headers.get("content-type") || "";
+      if (!ct.includes("application/json")) {
+        setError(`Non-JSON HTTP ${r.status}`);
+      } else {
+        const j = await r.json();
+        if (j.success) {
+          setResult(j.data);
+          onDone();
+        } else {
+          setError(j.error || "Failed");
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between gap-4">
+      <div>
+        <div className="text-sm font-semibold text-gray-900">Remove YouTube data</div>
+        <div className="text-xs text-gray-500 mt-0.5">
+          YouTube is no longer a tracked platform. Click to permanently delete every YouTube
+          platform connection + its posts, compliance, follower snapshots, and schedules.
+        </div>
+        {result && (
+          <div className="text-xs mt-1.5 text-green-700">
+            Removed {result.connectionsRemoved} YouTube connection{result.connectionsRemoved !== 1 ? "s" : ""}
+            {" "}and all related data.
+          </div>
+        )}
+        {error && <div className="text-xs mt-1.5 text-red-700">{error}</div>}
+      </div>
+      <button
+        onClick={run}
+        disabled={running}
+        className="px-3 py-2 text-sm font-medium text-white bg-red-700 rounded-lg hover:bg-red-800 disabled:opacity-60 inline-flex items-center gap-2 whitespace-nowrap"
+      >
+        {running ? "Removing…" : "Remove YouTube data"}
       </button>
     </div>
   );

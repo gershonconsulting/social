@@ -19,7 +19,6 @@ const PLATFORM_LABELS: Record<string, string> = {
   FACEBOOK: "Facebook",
   INSTAGRAM: "Instagram",
   TIKTOK: "TikTok",
-  YOUTUBE: "YouTube",
 };
 
 export function ClientSyncButton({ clientId }: { clientId: string }) {
