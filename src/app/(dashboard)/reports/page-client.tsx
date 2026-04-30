@@ -31,7 +31,7 @@ export default function ReportsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/clients")
+    fetch("/api/clients?clientType=CAMPAIGN")
       .then((r) => r.json())
       .then((d) => {
         if (d.success) setClients(d.data);
@@ -87,18 +87,18 @@ export default function ReportsPage() {
 
   return (
     <div>
-      <Header title="Monthly Reports" subtitle="Posting objective compliance by client and platform" />
+      <Header title="Monthly Reports" subtitle="Posting objective compliance by campaign and platform" />
 
       {/* Filters */}
       <div className="flex items-center gap-4 mb-6">
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Client</label>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Campaign</label>
           <select
             value={selectedClientId}
             onChange={(e) => setSelectedClientId(e.target.value)}
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
           >
-            <option value="">Select a client…</option>
+            <option value="">Select a campaign…</option>
             {clients.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
@@ -146,9 +146,22 @@ export default function ReportsPage() {
         <div className="text-red-600 text-sm p-4 bg-red-50 rounded-lg">{error}</div>
       )}
 
-      {!loading && !report && !selectedClientId && (
+      {!loading && !report && !selectedClientId && clients.length > 0 && (
         <div className="text-center py-16 text-gray-400 text-sm">
-          Select a client to view monthly compliance reports.
+          Select a campaign to view monthly compliance reports.
+        </div>
+      )}
+
+      {!loading && clients.length === 0 && (
+        <div className="mx-auto max-w-md mt-8 p-6 text-center bg-amber-50 border border-amber-200 rounded-xl">
+          <div className="text-sm font-semibold text-amber-900 mb-1">
+            No campaigns yet
+          </div>
+          <div className="text-xs text-amber-800">
+            Monthly reports cover companies categorized as Campaign. Tag a
+            company as Campaign on its per-client page (or in the Companies
+            list) and it will show up here.
+          </div>
         </div>
       )}
 
