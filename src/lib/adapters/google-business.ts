@@ -17,6 +17,7 @@
 
 import { PlatformAdapter, buildUnavailableResult, toLocalDateString, toLocalTime, truncateSnippet } from "./base";
 import { AdapterConfig, AdapterFetchResult, NormalizedPost } from "@/types";
+import prisma from "@/lib/db";
 
 const GBP_API_BASE = "https://mybusiness.googleapis.com/v4";
 const GBP_ACCOUNTS_API = "https://mybusinessaccountmanagement.googleapis.com/v1";
@@ -54,12 +55,27 @@ function parseToken(tokenReference: string): TokenData {
   try {
     const parsed = JSON.parse(tokenReference);
     if (parsed.accessToken) {
-      return parsed as TokenData;
+      // Normalize expiresAt — the OAuth callback stores it as an ISO date
+      // string, but the rest of this file expects a millisecond timestamp.
+      // Without this normalization the "is expired?" comparison was a
+      // string < number compare, so refreshes either fired constantly or
+      // never fired at all (depending on the date), which silently broke
+      // GMB connections after the first hour.
+      let expiresAt: number | undefined;
+      if (typeof parsed.expiresAt === "number") {
+        expiresAt = parsed.expiresAt;
+      } else if (typeof parsed.expiresAt === "string" && parsed.expiresAt) {
+        const t = Date.parse(parsed.expiresAt);
+        if (!Number.isNaN(t)) expiresAt = t;
+      }
+      return {
+        accessToken: parsed.accessToken,
+        refreshToken: parsed.refreshToken || undefined,
+        expiresAt,
+      };
     }
-    // If JSON but no accessToken field, treat the whole thing as unknown
     return { accessToken: tokenReference };
   } catch {
-    // Not JSON — treat as a raw access token string
     return { accessToken: tokenReference };
   }
 }
@@ -95,19 +111,47 @@ async function refreshAccessToken(refreshToken: string): Promise<{ accessToken: 
 }
 
 /**
- * Get a valid access token, refreshing if necessary.
+ * Get a valid access token, refreshing if necessary. When a refresh succeeds
+ * AND a connectionId is provided, the new token is persisted back to
+ * platformConnection.tokenReference so subsequent calls don't re-refresh.
+ *
+ * Without persistence, every adapter call would burn a refresh-token use cycle
+ * — Google rate-limits this and eventually revokes the refresh token, which
+ * was a major contributor to GMB connections silently disconnecting.
  */
-async function getAccessToken(tokenRef: string): Promise<string | null> {
+async function getAccessToken(tokenRef: string, connectionId?: string): Promise<string | null> {
   const tokenData = parseToken(tokenRef);
 
   // Check if token is expired (with 5 min buffer)
-  if (tokenData.expiresAt && tokenData.expiresAt < Date.now() + 300_000) {
-    if (tokenData.refreshToken) {
-      const refreshed = await refreshAccessToken(tokenData.refreshToken);
-      if (refreshed) return refreshed.accessToken;
+  const expired = !!tokenData.expiresAt && tokenData.expiresAt < Date.now() + 300_000;
+
+  if (expired) {
+    if (!tokenData.refreshToken) {
+      return null;
     }
-    // Token expired and no refresh possible
-    return null;
+    const refreshed = await refreshAccessToken(tokenData.refreshToken);
+    if (!refreshed) return null;
+
+    // Persist the refreshed access token (and existing refresh token) so we
+    // don't ask Google for a new one every single call.
+    if (connectionId) {
+      try {
+        await prisma.platformConnection.update({
+          where: { id: connectionId },
+          data: {
+            tokenReference: JSON.stringify({
+              accessToken: refreshed.accessToken,
+              refreshToken: tokenData.refreshToken,
+              expiresAt: refreshed.expiresAt, // ms timestamp
+            }),
+            tokenExpiresAt: new Date(refreshed.expiresAt),
+          },
+        });
+      } catch {
+        // Non-fatal: returning the refreshed token still works for this call.
+      }
+    }
+    return refreshed.accessToken;
   }
 
   return tokenData.accessToken;
@@ -207,7 +251,7 @@ export class GoogleBusinessAdapter implements PlatformAdapter {
       );
     }
 
-    const accessToken = await getAccessToken(config.tokenReference);
+    const accessToken = await getAccessToken(config.tokenReference, config.connectionId);
     if (!accessToken) {
       return buildUnavailableResult(
         "TOKEN_EXPIRED",
@@ -314,7 +358,7 @@ export class GoogleBusinessAdapter implements PlatformAdapter {
       return { valid: false, error: "No OAuth token configured" };
     }
 
-    const accessToken = await getAccessToken(config.tokenReference);
+    const accessToken = await getAccessToken(config.tokenReference, config.connectionId);
     if (!accessToken) {
       return { valid: false, error: "Token expired and could not be refreshed" };
     }

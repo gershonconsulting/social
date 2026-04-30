@@ -6,6 +6,7 @@ import { Plus, AlertTriangle, RefreshCw, Loader2 } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { ConnectionBadge } from "@/components/ui/connection-badge";
 import { formatDate, formatRelative } from "@/lib/utils";
+import { inferCleanName } from "@/lib/clients/clean-name";
 
 interface PlatformConn {
   platform: string;
@@ -46,6 +47,24 @@ export function ClientsPageClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
   const [attempt, setAttempt] = useState(0);
+  const [renaming, setRenaming] = useState<string | null>(null);
+
+  const applySuggestedName = async (clientId: string, suggestion: string) => {
+    setRenaming(clientId);
+    try {
+      const r = await fetch(`/api/clients/${clientId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: suggestion }),
+      });
+      if (r.ok) {
+        setClients((prev) => prev?.map((c) => (c.id === clientId ? { ...c, name: suggestion } : c)) ?? prev);
+      }
+    } catch {}
+    finally {
+      setRenaming(null);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -164,6 +183,23 @@ export function ClientsPageClient() {
                           {client.name}
                         </Link>
                         <div className="text-xs text-gray-400 mt-0.5">{client.slug}</div>
+                        {(() => {
+                          const suggested = inferCleanName(client.name);
+                          if (suggested && suggested !== client.name && suggested.length >= 2) {
+                            const isSaving = renaming === client.id;
+                            return (
+                              <button
+                                onClick={() => !isSaving && applySuggestedName(client.id, suggested)}
+                                disabled={isSaving}
+                                title={`Original: ${client.name}`}
+                                className="mt-1 inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 rounded-full px-2 py-0.5 disabled:opacity-50"
+                              >
+                                {isSaving ? "Renaming…" : `Use "${suggested}"`}
+                              </button>
+                            );
+                          }
+                          return null;
+                        })()}
                       </td>
                       <td className="px-4 py-4">
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${CATEGORY_BADGE[ct] ?? "bg-gray-50 text-gray-500"}`}>
