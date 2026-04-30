@@ -4,50 +4,59 @@ import { syncPlatformConnection, runBackfill, syncFollowerSnapshots } from "@/li
 import { recomputeClientCompliance } from "@/lib/compliance/engine";
 
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => ({}));
-  const { type, clientId, platformConnectionId, since, until } = body;
+  try {
+    const body = await req.json().catch(() => ({}));
+    const { type, clientId, platformConnectionId, since, until } = body;
 
-  if (!type) {
-    return NextResponse.json({ success: false, error: "type is required" }, { status: 400 });
-  }
-
-  const sinceDate = since ? new Date(since) : new Date(new Date().setDate(new Date().getDate() - 7));
-  const untilDate = until ? new Date(until) : new Date();
-
-  switch (type) {
-    case "platform": {
-      if (!platformConnectionId) {
-        return NextResponse.json({ success: false, error: "platformConnectionId is required" }, { status: 400 });
-      }
-      const result = await syncPlatformConnection(platformConnectionId, sinceDate, untilDate, null);
-      return NextResponse.json({ success: result.success, data: result });
+    if (!type) {
+      return NextResponse.json({ success: false, error: "type is required" }, { status: 400 });
     }
 
-    case "backfill": {
-      if (!clientId) {
-        return NextResponse.json({ success: false, error: "clientId is required" }, { status: 400 });
-      }
-      const result = await runBackfill(clientId, sinceDate, untilDate, null);
-      return NextResponse.json({ success: result.success, data: result });
-    }
+    const sinceDate = since ? new Date(since) : new Date(new Date().setDate(new Date().getDate() - 7));
+    const untilDate = until ? new Date(until) : new Date();
 
-    case "followers": {
-      if (!clientId) {
-        return NextResponse.json({ success: false, error: "clientId is required" }, { status: 400 });
+    switch (type) {
+      case "platform": {
+        if (!platformConnectionId) {
+          return NextResponse.json({ success: false, error: "platformConnectionId is required" }, { status: 400 });
+        }
+        const result = await syncPlatformConnection(platformConnectionId, sinceDate, untilDate, null);
+        return NextResponse.json({ success: result.success, data: result });
       }
-      await syncFollowerSnapshots(clientId);
-      return NextResponse.json({ success: true, message: "Follower sync complete" });
-    }
 
-    case "recompute": {
-      if (!clientId) {
-        return NextResponse.json({ success: false, error: "clientId is required" }, { status: 400 });
+      case "backfill": {
+        if (!clientId) {
+          return NextResponse.json({ success: false, error: "clientId is required" }, { status: 400 });
+        }
+        const result = await runBackfill(clientId, sinceDate, untilDate, null);
+        return NextResponse.json({ success: result.success, data: result });
       }
-      const results = await recomputeClientCompliance(clientId, sinceDate, untilDate);
-      return NextResponse.json({ success: true, data: results });
-    }
 
-    default:
-      return NextResponse.json({ success: false, error: "Unknown sync type: " + type }, { status: 400 });
+      case "followers": {
+        if (!clientId) {
+          return NextResponse.json({ success: false, error: "clientId is required" }, { status: 400 });
+        }
+        await syncFollowerSnapshots(clientId);
+        return NextResponse.json({ success: true, message: "Follower sync complete" });
+      }
+
+      case "recompute": {
+        if (!clientId) {
+          return NextResponse.json({ success: false, error: "clientId is required" }, { status: 400 });
+        }
+        const results = await recomputeClientCompliance(clientId, sinceDate, untilDate);
+        return NextResponse.json({ success: true, data: results });
+      }
+
+      default:
+        return NextResponse.json({ success: false, error: "Unknown sync type: " + type }, { status: 400 });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Sync failed";
+    // The Cloudflare edge runtime times out long syncs at the worker level —
+    // when that happens the worker returns an HTML error page and this
+    // catch never fires. But for in-handler errors (auth, DB, adapter
+    // throws), this gives the client a parseable JSON response.
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

@@ -48,8 +48,32 @@ export function ClientSyncButton({ clientId }: { clientId: string }) {
           until: new Date().toISOString(),
         }),
       });
-      const data = await res.json();
       setLoading(false);
+
+      // Worker timeouts return an HTML error page, not JSON. Handle that gracefully.
+      const ct = res.headers.get("content-type") || "";
+      if (!ct.includes("application/json")) {
+        if (res.status === 524 || res.status === 504) {
+          setTopLevelError(
+            "Sync took longer than the edge worker's time budget. Posts and followers " +
+            "may already be partially updated — reload the page to see what landed, " +
+            "and try Sync Now again to fill in the rest."
+          );
+        } else {
+          setTopLevelError(
+            `Sync endpoint returned a non-JSON response (HTTP ${res.status}). ` +
+            "This usually means the Cloudflare worker timed out mid-sync. " +
+            "Reload to see partial results and retry."
+          );
+        }
+        return;
+      }
+
+      const data = await res.json().catch(() => null);
+      if (!data) {
+        setTopLevelError("Could not parse sync response.");
+        return;
+      }
       if (data.success && data.data?.perPlatform) {
         setResults(data.data.perPlatform as PlatformResult[]);
       } else if (data.error) {
