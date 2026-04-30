@@ -10,6 +10,7 @@ import Link from "next/link";
 import { ExternalLink, Calendar, Plug } from "lucide-react";
 import { ClientSyncButton } from "@/components/clients/client-sync-button";
 import { ClientNameEditor } from "@/components/clients/client-name-editor";
+import { ClientCategoryEditor } from "@/components/clients/client-category-editor";
 import { ComplianceDashboard } from "@/components/clients/compliance-dashboard";
 import { PostsListing } from "@/components/clients/posts-listing";
 import { HashtagCloud } from "@/components/clients/hashtag-cloud";
@@ -80,6 +81,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             <h1 className="text-2xl font-bold text-gray-900">
               <ClientNameEditor clientId={client.id} initialName={client.name} />
             </h1>
+            <div className="mt-2">
+              <ClientCategoryEditor clientId={client.id} initialClientType={client.clientType} />
+            </div>
             <p className="text-sm text-gray-500 mt-1">
               {client.timezone} · Campaign started {formatDate(client.campaignStartDate)}
             </p>
