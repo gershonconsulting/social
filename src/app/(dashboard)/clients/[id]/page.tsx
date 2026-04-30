@@ -181,7 +181,22 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                       )}
                     </div>
                   )}
-                  <ConnectionBadge status={conn.connectionStatus} />
+                  <div className="flex flex-col items-end gap-1">
+                    <ConnectionBadge status={conn.connectionStatus} />
+                    {(conn.connectionStatus === "EXPIRED" || conn.connectionStatus === "ERROR" || conn.connectionStatus === "DISCONNECTED") && (
+                      <Link
+                        href="/settings"
+                        className="text-xs text-red-600 hover:text-red-700 hover:underline font-medium"
+                      >
+                        Reconnect →
+                      </Link>
+                    )}
+                    {conn.lastSyncError && (
+                      <span className="text-[10px] text-red-500 max-w-[220px] text-right truncate" title={conn.lastSyncError}>
+                        {conn.lastSyncError}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             );

@@ -70,10 +70,12 @@ async function getDashboardData() {
     // Compute follower totals and growth
     const latestFollowers: Record<string, number> = {};
     const previousFollowers: Record<string, number> = {};
+    // Snapshots are ordered desc — first snap per platform is latest, second is previous.
+    // Use 'in' instead of falsy check so a legit 0-follower snapshot isn't ignored.
     for (const snap of client.followerSnapshots) {
-      if (!latestFollowers[snap.platform]) {
+      if (!(snap.platform in latestFollowers)) {
         latestFollowers[snap.platform] = snap.followerCount;
-      } else if (!previousFollowers[snap.platform]) {
+      } else if (!(snap.platform in previousFollowers)) {
         previousFollowers[snap.platform] = snap.followerCount;
       }
     }

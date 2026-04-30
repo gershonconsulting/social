@@ -219,7 +219,7 @@ export function DashboardClient({
                     )}
                     <h3 className="font-semibold text-gray-900 text-sm">{client.name}</h3>
                   </div>
-                  {!loading && (
+                  {!loading && (comp?.overall?.totalWorkingDays ?? 0) > 0 && (
                     <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${complianceBadgeBg(pct)}`}>
                       {pct}% of goal
                     </span>
@@ -229,8 +229,17 @@ export function DashboardClient({
 
               {/* KPI Section */}
               <div className="px-5 pb-3">
-                <div className="text-4xl font-bold text-gray-900">{comp?.overall?.daysWithPosts ?? 0}<span className="text-lg text-gray-400 font-normal">/{comp?.overall?.totalWorkingDays ?? 0}</span></div>
-                <div className="text-xs text-gray-500 mt-0.5">days posted this month</div>
+                {(comp?.overall?.totalWorkingDays ?? 0) > 0 ? (
+                  <>
+                    <div className="text-4xl font-bold text-gray-900">{comp?.overall?.daysWithPosts ?? 0}<span className="text-lg text-gray-400 font-normal">/{comp?.overall?.totalWorkingDays}</span></div>
+                    <div className="text-xs text-gray-500 mt-0.5">days posted this month</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-4xl font-bold text-gray-300">—</div>
+                    <div className="text-xs text-gray-400 mt-0.5">no compliance data yet · run sync</div>
+                  </>
+                )}
                 <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
                   <span className="flex items-center gap-1">
                     <Activity size={12} className="text-indigo-500" />
@@ -282,19 +291,21 @@ export function DashboardClient({
                 </div>
               )}
 
-              {/* Progress Bar */}
-              <div className="px-5 pb-3">
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-gray-500">Goal progress</span>
-                  <span className={`font-bold ${complianceColor(pct)}`}>{loading ? "..." : `${pct}%`}</span>
+              {/* Progress Bar — hidden when no compliance data computed */}
+              {(comp?.overall?.totalWorkingDays ?? 0) > 0 && (
+                <div className="px-5 pb-3">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-gray-500">Goal progress</span>
+                    <span className={`font-bold ${complianceColor(pct)}`}>{loading ? "..." : `${pct}%`}</span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full transition-all duration-500 ${progressBarColor(pct)}`}
+                      style={{ width: `${Math.min(pct, 100)}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full bg-gray-100 rounded-full h-2">
-                  <div
-                    className={`h-2 rounded-full transition-all duration-500 ${progressBarColor(pct)}`}
-                    style={{ width: `${Math.min(pct, 100)}%` }}
-                  />
-                </div>
-              </div>
+              )}
 
               {/* View Dashboard Button */}
               <div className="px-5 pb-5 pt-2">
