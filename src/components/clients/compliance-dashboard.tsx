@@ -307,7 +307,6 @@ function ComplianceListing({ data }: { data: ComplianceData }) {
         <thead className="bg-gray-50 border-b border-gray-100">
           <tr>
             <th className="text-left px-6 py-3 font-medium text-gray-500 text-xs">Date</th>
-            <th className="text-left px-4 py-3 font-medium text-gray-500 text-xs">Day</th>
             {trackedPlatforms.map((p) => (
               <th key={p} className="text-center px-4 py-3 font-medium text-gray-500 text-xs">
                 {PLATFORM_LABELS[p] ?? p}
@@ -323,33 +322,33 @@ function ComplianceListing({ data }: { data: ComplianceData }) {
 
             return (
               <tr key={day.date} className={`hover:bg-gray-50 ${isToday ? "bg-blue-50/50" : ""}`}>
-                <td className="px-6 py-3 text-xs font-mono text-gray-600 whitespace-nowrap">
-                  {day.date}
+                <td className="px-6 py-3 text-xs whitespace-nowrap">
+                  <span className="font-mono text-gray-700">{day.date}</span>
+                  <span className="ml-2 text-gray-400">{dayName}</span>
                   {isToday && <span className="ml-2 text-blue-600 font-medium">Today</span>}
                 </td>
-                <td className="px-4 py-3 text-xs text-gray-500">{dayName}</td>
                 {trackedPlatforms.map((p) => {
                   const info = day.platforms[p];
                   if (!info) {
                     return (
-                      <td key={p} className="px-4 py-3 text-center">
-                        <Minus size={14} className="text-gray-300 mx-auto" />
+                      <td key={p} className="px-4 py-3 text-center text-gray-300 text-base leading-none">
+                        —
                       </td>
                     );
                   }
                   return (
                     <td key={p} className="px-4 py-3 text-center">
                       {info.hasPost ? (
-                        <div className="flex items-center justify-center gap-1">
-                          <CheckCircle2 size={16} className="text-green-500" />
+                        <div className="inline-flex items-center justify-center gap-1">
+                          <span className="text-base leading-none" aria-label="Posted" title={`${info.postCount} post${info.postCount !== 1 ? "s" : ""} on ${day.date}`}>✅</span>
                           {info.postCount > 1 && (
-                            <span className="text-[10px] text-green-600 font-medium">
+                            <span className="text-[10px] text-green-700 font-semibold">
                               x{info.postCount}
                             </span>
                           )}
                         </div>
                       ) : (
-                        <XCircle size={16} className="text-red-400 mx-auto" />
+                        <span className="text-base leading-none" aria-label="No post" title={`No post on ${day.date}`}>❌</span>
                       )}
                     </td>
                   );
