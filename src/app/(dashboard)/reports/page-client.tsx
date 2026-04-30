@@ -152,6 +152,24 @@ export default function ReportsPage() {
         </div>
       )}
 
+      {!loading && !error && selectedClientId && availableMonths.length === 0 && (
+        <div className="mx-auto max-w-md mt-8 p-6 text-center bg-amber-50 border border-amber-200 rounded-xl">
+          <div className="text-sm font-semibold text-amber-900 mb-1">
+            No report data yet for this client
+          </div>
+          <div className="text-xs text-amber-800">
+            We have neither compliance records nor posts in any month for this client.
+            Run a sync from the client page, then come back.
+          </div>
+        </div>
+      )}
+
+      {!loading && !error && selectedClientId && availableMonths.length > 0 && !selectedMonth && (
+        <div className="text-center py-16 text-gray-400 text-sm">
+          Pick a month to view the report.
+        </div>
+      )}
+
       {!loading && report && (
         <div className="space-y-6">
           {/* Executive summary */}
