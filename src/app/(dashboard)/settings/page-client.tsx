@@ -109,6 +109,11 @@ export function SettingsPageClient() {
         subtitle="Manage your platform connections and API credentials"
       />
 
+      <TestAllConnectionsButton
+        connectionIds={Object.values(connections).flat().map((c) => c.id)}
+        onDone={() => setAttempt((a) => a + 1)}
+      />
+
       <SettingsConnections
         connections={connections}
         linkedinConfigured={config.linkedinConfigured}
@@ -165,6 +170,79 @@ function ConfigRow({ name, description, ok }: { name: string; description: strin
           {ok ? "Configured" : "Not set"}
         </span>
       </div>
+    </div>
+  );
+}
+
+function TestAllConnectionsButton({
+  connectionIds,
+  onDone,
+}: {
+  connectionIds: string[];
+  onDone: () => void;
+}) {
+  const [running, setRunning] = useState(false);
+  const [results, setResults] = useState<Record<string, { ok: boolean; status?: string; error?: string }>>({});
+
+  async function runAll() {
+    if (connectionIds.length === 0) return;
+    setRunning(true);
+    setResults({});
+    const next: typeof results = {};
+    for (const id of connectionIds) {
+      try {
+        const r = await fetch(`/api/platforms/${id}/test`, { method: "POST" });
+        const ct = r.headers.get("content-type") || "";
+        if (!ct.includes("application/json")) {
+          next[id] = { ok: false, error: `Non-JSON HTTP ${r.status}` };
+          continue;
+        }
+        const j = await r.json();
+        next[id] = {
+          ok: !!j.success,
+          status: j?.data?.status,
+          error: j?.data?.error || j?.error,
+        };
+      } catch (e) {
+        next[id] = { ok: false, error: e instanceof Error ? e.message : "Network error" };
+      }
+      // Update incrementally so the user sees progress
+      setResults({ ...next });
+    }
+    setRunning(false);
+    onDone();
+  }
+
+  const passed = Object.values(results).filter((r) => r.ok).length;
+  const failed = Object.values(results).filter((r) => !r.ok).length;
+  const totalRun = Object.keys(results).length;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between gap-4">
+      <div>
+        <div className="text-sm font-semibold text-gray-900">Verify connections</div>
+        <div className="text-xs text-gray-500 mt-0.5">
+          Probes every platform connection above with its stored token. Updates the badge to
+          CONNECTED / EXPIRED / ERROR / PENDING based on what the API actually returns.
+        </div>
+        {totalRun > 0 && (
+          <div className="text-xs mt-1.5">
+            <span className="text-green-700 font-medium">{passed} ok</span>
+            {" · "}
+            <span className="text-red-700 font-medium">{failed} failing</span>
+            {totalRun < connectionIds.length && (
+              <> · <span className="text-gray-500">{totalRun}/{connectionIds.length} tested</span></>
+            )}
+          </div>
+        )}
+      </div>
+      <button
+        onClick={runAll}
+        disabled={running || connectionIds.length === 0}
+        className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-60 inline-flex items-center gap-2 whitespace-nowrap"
+      >
+        {running ? "Testing…" : `Test all (${connectionIds.length})`}
+      </button>
     </div>
   );
 }

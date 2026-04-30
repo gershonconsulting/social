@@ -14,6 +14,7 @@ import { ClientCategoryEditor } from "@/components/clients/client-category-edito
 import { ComplianceDashboard } from "@/components/clients/compliance-dashboard";
 import { PostsListing } from "@/components/clients/posts-listing";
 import { BeforeAfterPanel } from "@/components/clients/before-after-panel";
+import { TestConnectionButton } from "@/components/clients/test-connection-button";
 import { HashtagCloud } from "@/components/clients/hashtag-cloud";
 import { WordCloud } from "@/components/clients/word-cloud";
 import { CompanyLogo } from "@/components/clients/company-logo";
@@ -187,7 +188,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                   )}
                   <div className="flex flex-col items-end gap-1">
                     <ConnectionBadge status={conn.connectionStatus} />
-                    {(conn.connectionStatus === "EXPIRED" || conn.connectionStatus === "ERROR" || conn.connectionStatus === "DISCONNECTED") && (
+                    <TestConnectionButton connectionId={conn.id} />
+                    {(conn.connectionStatus === "EXPIRED" || conn.connectionStatus === "ERROR" || conn.connectionStatus === "PENDING" || conn.connectionStatus === "DISCONNECTED") && (
                       <Link
                         href="/settings"
                         className="text-xs text-red-600 hover:text-red-700 hover:underline font-medium"
