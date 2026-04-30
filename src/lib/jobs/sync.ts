@@ -317,12 +317,28 @@ export async function runDailySync(triggeredById: string | null = null): Promise
 /**
  * Run a backfill for a specific client from a start date.
  */
+export interface PlatformSyncResult {
+  platform: string;
+  externalAccountName: string | null;
+  postsUpserted: number;
+  followerCount: number | null;
+  success: boolean;
+  error: string | null;
+}
+
+export interface BackfillResult {
+  success: boolean;
+  error?: string;
+  perPlatform: PlatformSyncResult[];
+  totals: { posts: number; succeededPlatforms: number; failedPlatforms: number };
+}
+
 export async function runBackfill(
   clientId: string,
   since: Date,
   until: Date = new Date(),
   triggeredById: string | null = null
-): Promise<{ success: boolean; error?: string }> {
+): Promise<BackfillResult> {
   const job = await prisma.syncJob.create({
     data: {
       jobType: SyncJobType.BACKFILL,
@@ -336,20 +352,78 @@ export async function runBackfill(
   });
 
   try {
+    const client = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
     const connections = await prisma.platformConnection.findMany({
       where: { clientId, isEnabled: true },
     });
 
-    let total = 0;
+    const perPlatform: PlatformSyncResult[] = [];
     let succeeded = 0;
     let failed = 0;
+    let totalPosts = 0;
     const errors: string[] = [];
 
     for (const conn of connections) {
-      total++;
+      // 1. Pull posts
       const result = await syncPlatformConnection(conn.id, since, until, triggeredById);
+
+      // 2. Pull current follower count for this platform (Sync Now is a
+      //    user-triggered "give me everything fresh now" action — Olivier wants
+      //    follower data refreshed on every click, not just on the daily cron).
+      let followerCount: number | null = null;
+      let followerErr: string | null = null;
+      if (result.success) {
+        try {
+          const adapter = getAdapter(conn.platform);
+          if (adapter && conn.connectionStatus === ConnectionStatus.CONNECTED) {
+            const cfg: AdapterConfig = {
+              platform: conn.platform,
+              clientId,
+              connectionId: conn.id,
+              externalAccountId: conn.externalAccountId ?? "",
+              tokenReference: conn.tokenReference,
+              timezone: client.timezone,
+            };
+            followerCount = await adapter.fetchFollowerCount(cfg);
+            if (followerCount !== null) {
+              const today = formatInTimeZone(new Date(), client.timezone, "yyyy-MM-dd");
+              await prisma.followerSnapshot.upsert({
+                where: {
+                  clientId_platformConnectionId_snapshotDateLocal: {
+                    clientId,
+                    platformConnectionId: conn.id,
+                    snapshotDateLocal: today,
+                  },
+                },
+                create: {
+                  clientId,
+                  platformConnectionId: conn.id,
+                  platform: conn.platform,
+                  snapshotDateLocal: today,
+                  followerCount,
+                },
+                update: { followerCount },
+              });
+            }
+          }
+        } catch (e) {
+          followerErr = e instanceof Error ? e.message : String(e);
+        }
+      }
+
+      const ps: PlatformSyncResult = {
+        platform: conn.platform,
+        externalAccountName: conn.externalAccountName,
+        postsUpserted: result.postsUpserted,
+        followerCount,
+        success: result.success,
+        error: result.error || followerErr || null,
+      };
+      perPlatform.push(ps);
+
       if (result.success) {
         succeeded++;
+        totalPosts += result.postsUpserted;
       } else {
         failed++;
         errors.push(conn.platform + ": " + result.error);
@@ -361,14 +435,18 @@ export async function runBackfill(
       data: {
         status: failed === 0 ? SyncStatus.COMPLETED : succeeded === 0 ? SyncStatus.FAILED : SyncStatus.PARTIAL,
         finishedAt: new Date(),
-        itemsProcessed: total,
+        itemsProcessed: connections.length,
         itemsSucceeded: succeeded,
         itemsFailed: failed,
         errorLogJson: errors.length > 0 ? JSON.stringify(errors) : null,
       },
     });
 
-    return { success: true };
+    return {
+      success: failed === 0 || succeeded > 0,
+      perPlatform,
+      totals: { posts: totalPosts, succeededPlatforms: succeeded, failedPlatforms: failed },
+    };
   } catch (err) {
     await prisma.syncJob.update({
       where: { id: job.id },
@@ -379,6 +457,11 @@ export async function runBackfill(
       },
     });
 
-    return { success: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+      perPlatform: [],
+      totals: { posts: 0, succeededPlatforms: 0, failedPlatforms: 0 },
+    };
   }
 }
