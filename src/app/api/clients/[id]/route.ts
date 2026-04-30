@@ -24,69 +24,90 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const client = await prisma.client.findUnique({
-    where: { id },
-    include: {
-      platformConnections: {
-        include: { postingSchedules: true },
-        orderBy: { platform: "asc" },
+  try {
+    const { id } = await params;
+    const client = await prisma.client.findUnique({
+      where: { id },
+      include: {
+        platformConnections: {
+          include: {
+            postingSchedules: true,
+            followerSnapshots: {
+              orderBy: { snapshotDateLocal: "desc" },
+              take: 31,
+            },
+          },
+          orderBy: { platform: "asc" },
+        },
       },
-    },
-  });
+    });
 
-  if (!client) {
-    return NextResponse.json({ success: false, error: "Client not found" }, { status: 404 });
+    if (!client) {
+      return NextResponse.json({ success: false, error: "Client not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, data: client });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to load client";
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
-
-  return NextResponse.json({ success: true, data: client });
 }
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const client = await prisma.client.findUnique({ where: { id } });
-  if (!client) {
-    return NextResponse.json({ success: false, error: "Client not found" }, { status: 404 });
+  try {
+    const { id } = await params;
+    const client = await prisma.client.findUnique({ where: { id } });
+    if (!client) {
+      return NextResponse.json({ success: false, error: "Client not found" }, { status: 404 });
+    }
+
+    const body = await req.json().catch(() => null);
+    const parsed = updateClientSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { success: false, error: "Validation failed", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+
+    const updated = await prisma.client.update({
+      where: { id },
+      data: {
+        ...parsed.data,
+        campaignStartDate: parsed.data.campaignStartDate
+          ? new Date(parsed.data.campaignStartDate)
+          : parsed.data.campaignStartDate === null ? null : undefined,
+        reportingStartDate: parsed.data.reportingStartDate
+          ? new Date(parsed.data.reportingStartDate)
+          : parsed.data.reportingStartDate === null ? null : undefined,
+      },
+    });
+
+    // Audit log is best-effort — do not let an audit failure roll back the user-facing update.
+    try {
+      await prisma.auditLog.create({
+        data: {
+          actorUserId: null,
+          actionType: "CLIENT_UPDATED",
+          entityType: "Client",
+          entityId: client.id,
+          beforeJson: JSON.stringify(client),
+          afterJson: JSON.stringify(updated),
+        },
+      });
+    } catch {
+      // ignore — audit failures should not break edits
+    }
+
+    return NextResponse.json({ success: true, data: updated });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to update client";
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
-
-  const body = await req.json().catch(() => null);
-  const parsed = updateClientSchema.safeParse(body);
-
-  if (!parsed.success) {
-    return NextResponse.json(
-      { success: false, error: "Validation failed", details: parsed.error.flatten() },
-      { status: 400 }
-    );
-  }
-
-  const updated = await prisma.client.update({
-    where: { id },
-    data: {
-      ...parsed.data,
-      campaignStartDate: parsed.data.campaignStartDate
-        ? new Date(parsed.data.campaignStartDate)
-        : parsed.data.campaignStartDate === null ? null : undefined,
-      reportingStartDate: parsed.data.reportingStartDate
-        ? new Date(parsed.data.reportingStartDate)
-        : parsed.data.reportingStartDate === null ? null : undefined,
-    },
-  });
-
-  await prisma.auditLog.create({
-    data: {
-      actorUserId: null,
-      actionType: "CLIENT_UPDATED",
-      entityType: "Client",
-      entityId: client.id,
-      beforeJson: JSON.stringify(client),
-      afterJson: JSON.stringify(updated),
-    },
-  });
-
-  return NextResponse.json({ success: true, data: updated });
 }
 
 export async function DELETE(

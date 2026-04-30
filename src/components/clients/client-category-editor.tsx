@@ -3,20 +3,21 @@ import { useState, useRef, useEffect } from "react";
 import { ChevronDown, Loader2, Check } from "lucide-react";
 
 const CATEGORY_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "CAMPAIGN", label: "Campaign" },
   { value: "CLIENT", label: "Client" },
   { value: "PROSPECT", label: "Prospect" },
   { value: "PARTNER", label: "Partner" },
   { value: "COMPETITION", label: "Competition" },
-  { value: "COMPANY", label: "Company" },
   { value: "INTERNAL", label: "Internal" },
 ];
 
 const BADGE_STYLES: Record<string, string> = {
+  CAMPAIGN: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100",
   CLIENT: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100",
   PROSPECT: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100",
   PARTNER: "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100",
   COMPETITION: "bg-red-50 text-red-700 border-red-200 hover:bg-red-100",
-  COMPANY: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100",
+  COMPANY: "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100",
   INTERNAL: "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100",
 };
 
@@ -52,23 +53,31 @@ export function ClientCategoryEditor({
     }
     setSaving(true);
     setError("");
-    try {
-      const resp = await fetch(`/api/clients/${clientId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientType: value }),
-      });
-      if (!resp.ok) {
-        const body = await resp.json().catch(() => ({}));
-        throw new Error(body?.error || `Failed (HTTP ${resp.status})`);
+    let lastErr = "";
+    // Tiny retry: the per-client PATCH endpoint intermittently 500s on edge
+    // runtime cold-starts. Try up to 3 times before surfacing failure.
+    for (let i = 0; i < 3; i++) {
+      try {
+        const resp = await fetch(`/api/clients/${clientId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clientType: value }),
+        });
+        if (resp.ok) {
+          setCurrent(value);
+          setOpen(false);
+          setSaving(false);
+          return;
+        }
+        const body: { error?: string } | null = await resp.json().catch(() => null);
+        lastErr = body?.error || `Failed (HTTP ${resp.status})`;
+      } catch (e) {
+        lastErr = e instanceof Error ? e.message : "Network error";
       }
-      setCurrent(value);
-      setOpen(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
-    } finally {
-      setSaving(false);
+      await new Promise((res) => setTimeout(res, 250 * (i + 1)));
     }
+    setError(lastErr || "Save failed");
+    setSaving(false);
   };
 
   const currentLabel =

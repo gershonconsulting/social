@@ -12,6 +12,7 @@ export function ClientNameEditor({
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(initialName);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -29,22 +30,34 @@ export function ClientNameEditor({
     }
 
     setSaving(true);
-    try {
-      const resp = await fetch(`/api/clients/${clientId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim() }),
-      });
-      if (!resp.ok) throw new Error("Failed to update");
-      setEditing(false);
-      // Refresh the page to show updated name everywhere
-      window.location.reload();
-    } catch {
-      setName(initialName);
-      setEditing(false);
-    } finally {
-      setSaving(false);
+    setError("");
+    let lastErr = "";
+    // Retry transient 500s instead of silently reverting the rename.
+    for (let i = 0; i < 3; i++) {
+      try {
+        const resp = await fetch(`/api/clients/${clientId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: name.trim() }),
+        });
+        if (resp.ok) {
+          setSaving(false);
+          setEditing(false);
+          // Soft refresh that keeps the user on this page (window.location.reload
+          // can land on a Cloudflare Worker error page during edge cold-starts;
+          // a router.refresh() is more forgiving).
+          window.location.assign(window.location.pathname + window.location.search);
+          return;
+        }
+        const body: { error?: string } | null = await resp.json().catch(() => null);
+        lastErr = body?.error || `Failed (HTTP ${resp.status})`;
+      } catch (e) {
+        lastErr = e instanceof Error ? e.message : "Network error";
+      }
+      await new Promise((r) => setTimeout(r, 250 * (i + 1)));
     }
+    setSaving(false);
+    setError(lastErr || "Could not save name");
   };
 
   const cancel = () => {
@@ -100,6 +113,11 @@ export function ClientNameEditor({
       >
         <X size={18} />
       </button>
+      {error && (
+        <span className="ml-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-0.5">
+          {error}
+        </span>
+      )}
     </span>
   );
 }
