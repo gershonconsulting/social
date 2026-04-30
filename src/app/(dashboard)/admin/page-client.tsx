@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/header";
-import { Plus, Loader2, RefreshCw, Archive, RotateCcw, Globe, Search, Pencil, Check, X, ExternalLink } from "lucide-react";
+import { Plus, Loader2, RefreshCw, Archive, RotateCcw, Globe, Search, Pencil, Check, X, ExternalLink, Trash2 } from "lucide-react";
 import { slugify, formatDate, formatRelative, PLATFORM_LABELS } from "@/lib/utils";
 import { ConnectionBadge } from "@/components/ui/connection-badge";
 
@@ -84,6 +84,9 @@ export default function AdminPage() {
 
   const [websiteInput, setWebsiteInput] = useState("");
   const [newClientType, setNewClientType] = useState<string>("CLIENT");
+  const [newCampaignStartDate, setNewCampaignStartDate] = useState<string>(
+    new Date().toISOString().slice(0, 10)
+  );
   const [discovery, setDiscovery] = useState<DiscoveryResult | null>(null);
   const [editName, setEditName] = useState("");
   const [editSlug, setEditSlug] = useState("");
@@ -205,7 +208,9 @@ export default function AdminPage() {
           website: discovery.website,
           clientType: newClientType,
           status: "ACTIVE",
-          campaignStartDate: new Date().toISOString(),
+          campaignStartDate: newCampaignStartDate
+            ? new Date(newCampaignStartDate + "T00:00:00").toISOString()
+            : new Date().toISOString(),
           platformConnections: connections,
         }),
       });
@@ -220,6 +225,7 @@ export default function AdminPage() {
         setEditSlug("");
         setSelectedPlatforms({});
         setNewClientType("CLIENT");
+        setNewCampaignStartDate(new Date().toISOString().slice(0, 10));
         loadClients();
       } else {
         setFormError(data.error ?? "Failed to create company");
@@ -239,6 +245,23 @@ export default function AdminPage() {
     setEditSlug("");
     setSelectedPlatforms({});
     setFormError("");
+  }
+
+  async function handleHardDelete(clientId: string, clientName: string) {
+    const confirmed = confirm(
+      `PERMANENTLY DELETE "${clientName}"?\n\n` +
+      `This removes the company AND all of its posts, compliance records, ` +
+      `follower snapshots, and platform connections. THIS CANNOT BE UNDONE.\n\n` +
+      `If you just want to hide it but keep the data, use Archive instead.`
+    );
+    if (!confirmed) return;
+    const res = await fetch(`/api/clients/${clientId}?hard=true`, { method: "DELETE" });
+    const data = await res.json().catch(() => null);
+    if (data?.success) {
+      loadClients();
+    } else {
+      alert(`Delete failed: ${data?.error ?? "Unknown error"}`);
+    }
   }
 
   async function handleArchive(clientId: string) {
@@ -437,20 +460,31 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                <div className="mb-5">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
-                  <select
-                    value={newClientType}
-                    onChange={(e) => setNewClientType(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-                  >
-                    <option value="CAMPAIGN">Campaign</option>
-                    <option value="CLIENT">Client</option>
-                    <option value="PROSPECT">Prospect</option>
-                    <option value="PARTNER">Partner</option>
-                    <option value="COMPETITION">Competition</option>
-                    <option value="INTERNAL">Internal</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-4 mb-5">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
+                    <select
+                      value={newClientType}
+                      onChange={(e) => setNewClientType(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                    >
+                      <option value="CAMPAIGN">Campaign</option>
+                      <option value="CLIENT">Client</option>
+                      <option value="PROSPECT">Prospect</option>
+                      <option value="PARTNER">Partner</option>
+                      <option value="COMPETITION">Competition</option>
+                      <option value="INTERNAL">Internal</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Campaign Start Date</label>
+                    <input
+                      type="date"
+                      value={newCampaignStartDate}
+                      onChange={(e) => setNewCampaignStartDate(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                  </div>
                 </div>
 
                 <div className="mb-5">
@@ -742,10 +776,19 @@ export default function AdminPage() {
                             </button>
                             <button
                               onClick={() => handleArchive(client.id)}
-                              className="inline-flex items-center gap-1 px-2 py-1 text-xs text-red-600 bg-red-50 rounded hover:bg-red-100"
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs text-amber-600 bg-amber-50 rounded hover:bg-amber-100"
+                              title="Archive — soft delete, historical data preserved"
                             >
                               <Archive size={11} />
                               Archive
+                            </button>
+                            <button
+                              onClick={() => handleHardDelete(client.id, client.name)}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs text-red-700 bg-red-100 rounded hover:bg-red-200"
+                              title="Delete permanently — removes posts, compliance, followers, the company itself"
+                            >
+                              <Trash2 size={11} />
+                              Delete
                             </button>
                           </>
                         ) : (

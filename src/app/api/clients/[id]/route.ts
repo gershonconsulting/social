@@ -114,13 +114,47 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  try {
   const { id } = await params;
   const { searchParams } = new URL(req.url);
   const reason = searchParams.get("reason") ?? "Archived by admin";
+  const hard = searchParams.get("hard") === "true";
 
   const client = await prisma.client.findUnique({ where: { id } });
   if (!client) {
     return NextResponse.json({ success: false, error: "Client not found" }, { status: 404 });
+  }
+
+  // Hard delete: permanently remove this client and ALL related rows.
+  // Schema doesn't declare onDelete: Cascade, so we delete children first,
+  // wrapped in a transaction so a failure mid-delete leaves no orphans.
+  if (hard) {
+    const connectionIds = await prisma.platformConnection.findMany({
+      where: { clientId: id },
+      select: { id: true },
+    });
+    const connIdList = connectionIds.map((c) => c.id);
+
+    await prisma.$transaction([
+      prisma.dailyCompliance.deleteMany({ where: { clientId: id } }),
+      prisma.followerSnapshot.deleteMany({ where: { clientId: id } }),
+      prisma.socialPost.deleteMany({ where: { clientId: id } }),
+      prisma.postingSchedule.deleteMany({ where: { platformConnectionId: { in: connIdList } } }),
+      prisma.platformConnection.deleteMany({ where: { clientId: id } }),
+      prisma.syncJob.deleteMany({ where: { clientId: id } }),
+      prisma.auditLog.create({
+        data: {
+          actorUserId: null,
+          actionType: "CLIENT_HARD_DELETED",
+          entityType: "Client",
+          entityId: id,
+          beforeJson: JSON.stringify(client),
+          afterJson: null,
+        },
+      }),
+      prisma.client.delete({ where: { id } }),
+    ]);
+    return NextResponse.json({ success: true, data: { hardDeleted: true, id } });
   }
 
   if (client.status === ClientStatus.ARCHIVED) {
@@ -143,5 +177,9 @@ export async function DELETE(
     },
   });
 
-  return NextResponse.json({ success: true, data: archived });
+    return NextResponse.json({ success: true, data: archived });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to delete client";
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
+  }
 }
