@@ -2,6 +2,7 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { ClientStatus, ClientType, ConnectionStatus, Platform } from "@prisma/client";
+import { propagateTokensForAllPlatforms } from "@/lib/jobs/token-propagate";
 import { z } from "zod";
 
 const platformConnectionSchema = z.object({

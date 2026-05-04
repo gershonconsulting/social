@@ -67,7 +67,6 @@ const PLATFORM_MATCHERS: { platform: string; test: (url: string) => boolean; cle
       return m ? m[1] : url;
     },
   },
-  },
   {
     platform: "TIKTOK",
     test: (url) => /tiktok\.com\/@[a-zA-Z0-9._-]+/i.test(url),
