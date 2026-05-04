@@ -16,6 +16,8 @@ import { PostsListing } from "@/components/clients/posts-listing";
 import { BeforeAfterPanel } from "@/components/clients/before-after-panel";
 import { TestConnectionButton } from "@/components/clients/test-connection-button";
 import { ConnectionUrlEditor } from "@/components/clients/connection-url-editor";
+import { CampaignDateEditor } from "@/components/clients/campaign-date-editor";
+import { PlatformIcon } from "@/components/ui/platform-icon";
 import { HashtagCloud } from "@/components/clients/hashtag-cloud";
 import { WordCloud } from "@/components/clients/word-cloud";
 import { CompanyLogo } from "@/components/clients/company-logo";
@@ -87,7 +89,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               <ClientCategoryEditor clientId={client.id} initialClientType={client.clientType} />
             </div>
             <p className="text-sm text-gray-500 mt-1">
-              {client.timezone} · Campaign started {formatDate(client.campaignStartDate)}
+              {client.timezone} · <CampaignDateEditor clientId={client.id} initialDate={client.campaignStartDate ? client.campaignStartDate.toISOString() : null} />
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -146,6 +148,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             return (
               <div key={conn.id} className="px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
+                  <PlatformIcon platform={conn.platform} size={36} />
                   <div>
                     <div className="text-sm font-medium text-gray-900">
                       {PLATFORM_LABELS_MAP[conn.platform] ?? conn.platform}
