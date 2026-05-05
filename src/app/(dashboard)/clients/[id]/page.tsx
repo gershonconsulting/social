@@ -21,6 +21,7 @@ import { PlatformIcon } from "@/components/ui/platform-icon";
 import { HashtagCloud } from "@/components/clients/hashtag-cloud";
 import { WordCloud } from "@/components/clients/word-cloud";
 import { CompanyLogo } from "@/components/clients/company-logo";
+import { ConnectionHealthBanner } from "@/components/dashboard/connection-health-banner";
 
 export const dynamic = "force-dynamic";
 
@@ -103,6 +104,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           </div>
         </div>
       </div>
+
+      <ConnectionHealthBanner />
 
       {/* Posting Compliance — THE BIG NUMBER */}
       <ComplianceDashboard clientId={client.id} platforms={allPlatforms} />
