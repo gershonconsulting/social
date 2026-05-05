@@ -1,246 +1,250 @@
 /**
- * X / Twitter Adapter
+ * X / Twitter Adapter — public-syndication mode.
  *
- * Uses the Twitter API v2 to fetch tweets from a specified account
- * and follower statistics.
+ * Olivier's directive: 'I don't want to use the paid developer program from
+ * twitter. Use my personal account to review the pages and collect the
+ * information. It is only for me this platform!'
  *
- * Required: Bearer token (app-only) for read access, or OAuth 2.0 user token.
- * externalAccountId: Twitter user ID
- * tokenReference: Bearer token or OAuth access token
+ * Approach: fetch the same public syndication endpoint that powers Twitter's
+ * embeddable widgets. No auth, no Bearer token, no Developer Portal account.
+ * Works for any public profile.
+ *
+ * Endpoint:
+ *   GET https://syndication.twitter.com/srv/timeline-profile/screen-name/{handle}
+ *
+ * Response: HTML page that embeds a <script id="__NEXT_DATA__"> tag with the
+ * full timeline payload as JSON. We extract that JSON and walk it for tweets.
+ *
+ * Limitations:
+ *  - Returns ~20-25 most recent tweets (good enough for daily sync windows).
+ *  - Works only for PUBLIC accounts. Protected accounts can't be scraped.
+ *  - Twitter rate-limits per IP; for a single-user platform syncing ~10
+ *    accounts/day this is comfortably below the threshold.
+ *  - Follower count is not exposed by syndication; we read it from the same
+ *    HTML if Twitter renders it, otherwise return null.
+ *
+ * Storage: tokenReference and externalAccountId are NOT required. The handle
+ * is taken from externalAccountUrl or externalAccountName.
  */
 
 import { PlatformAdapter, buildUnavailableResult, toLocalDateString, toLocalTime, truncateSnippet } from "./base";
 import { AdapterConfig, AdapterFetchResult, NormalizedPost } from "@/types";
 import prisma from "@/lib/db";
 
-const TWITTER_API_BASE = "https://api.twitter.com/2";
+const SYNDICATION_BASE = "https://syndication.twitter.com/srv/timeline-profile/screen-name";
 
-interface TwitterTweet {
-  id: string;
-  text: string;
-  created_at: string;
-  attachments?: { media_keys?: string[] };
-}
-
-interface TwitterUserResponse {
-  data?: {
-    id: string;
-    name: string;
-    username: string;
-    public_metrics?: { followers_count: number; following_count: number };
+type SyndicationTweet = {
+  id_str?: string;
+  created_at?: string;
+  full_text?: string;
+  text?: string;
+  entities?: {
+    media?: Array<unknown>;
   };
+  user?: {
+    id_str?: string;
+    screen_name?: string;
+    name?: string;
+    followers_count?: number;
+  };
+};
+
+/**
+ * Resolve the @handle for a connection from URL or display name.
+ */
+async function resolveHandle(config: AdapterConfig): Promise<string | null> {
+  // Already cached?
+  try {
+    const conn = await prisma.platformConnection.findUnique({
+      where: { id: config.connectionId },
+      select: { externalAccountUrl: true, externalAccountName: true },
+    });
+    if (!conn) return null;
+    if (conn.externalAccountUrl) {
+      const m = conn.externalAccountUrl.match(/(?:twitter|x)\.com\/(?:#!\/)?@?([A-Za-z0-9_]{1,15})/i);
+      if (m) return m[1];
+    }
+    if (conn.externalAccountName) {
+      const cleaned = conn.externalAccountName.replace(/^@/, "").trim();
+      if (/^[A-Za-z0-9_]{1,15}$/.test(cleaned)) return cleaned;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
-interface TwitterTweetsResponse {
-  data?: TwitterTweet[];
-  meta?: { next_token?: string; result_count?: number };
-  errors?: { title: string; detail: string }[];
+/**
+ * Extract the __NEXT_DATA__ JSON blob from a syndication HTML response.
+ */
+function extractNextData(html: string): unknown | null {
+  const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+  if (!m) return null;
+  try {
+    return JSON.parse(m[1]);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Walk a parsed __NEXT_DATA__ object and pull out tweet objects.
+ * The shape changes; rather than hard-code one path we recursively look for
+ * objects with id_str + created_at + (full_text|text), which is the unique
+ * signature of a Twitter status.
+ */
+function harvestTweets(node: unknown, out: SyndicationTweet[] = []): SyndicationTweet[] {
+  if (!node || typeof node !== "object") return out;
+  if (Array.isArray(node)) {
+    for (const item of node) harvestTweets(item, out);
+    return out;
+  }
+  const obj = node as Record<string, unknown>;
+  if (
+    typeof obj.id_str === "string" &&
+    typeof obj.created_at === "string" &&
+    (typeof obj.full_text === "string" || typeof obj.text === "string")
+  ) {
+    out.push(obj as SyndicationTweet);
+  }
+  for (const v of Object.values(obj)) harvestTweets(v, out);
+  return out;
 }
 
 export class TwitterAdapter implements PlatformAdapter {
   readonly platform = "TWITTER";
-
-  private authHeaders(token: string): HeadersInit {
-    return { Authorization: `Bearer ${token}` };
-  }
 
   async fetchPosts(
     config: AdapterConfig,
     since: Date,
     until: Date
   ): Promise<AdapterFetchResult> {
-    if (!config.tokenReference) {
+    const handle = await resolveHandle(config);
+    if (!handle) {
       return buildUnavailableResult(
-        "NO_TOKEN",
-        "No X/Twitter Bearer token configured. Please reconnect the X account.",
+        "NO_HANDLE",
+        "Could not determine the X / Twitter handle for this connection. Set the account URL.",
         false
       );
     }
 
-    // Auto-discover user_id from @username if the connection doesn't have one yet.
-    // We try externalAccountId first (legacy), then derive a username from
-    // externalAccountName, then from the externalAccountUrl path.
-    let userId: string | null = config.externalAccountId;
-    if (!userId) {
-      const handle = await this.discoverUserId(config);
-      if (!handle) {
-        return buildUnavailableResult(
-          "NO_ACCOUNT_ID",
-          "Could not determine the X/Twitter user — set the account URL or username on this connection.",
-          false
-        );
-      }
-      userId = handle;
-    }
-
     try {
-      const startTime = since.toISOString();
-      const endTime = until.toISOString();
-
-      const params = new URLSearchParams({
-        max_results: "100",
-        start_time: startTime,
-        end_time: endTime,
-        "tweet.fields": "created_at,text,attachments",
-        exclude: "replies,retweets",
+      const url = `${SYNDICATION_BASE}/${encodeURIComponent(handle)}`;
+      const r = await fetch(url, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+          Accept: "text/html,*/*",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+        redirect: "follow",
       });
 
-      const response = await fetch(
-        `${TWITTER_API_BASE}/users/${userId}/tweets?${params}`,
-        { headers: this.authHeaders(config.tokenReference) }
-      );
-
-      if (response.status === 401) {
+      if (r.status === 404) {
         return buildUnavailableResult(
-          "TOKEN_EXPIRED",
-          "X/Twitter API returned 401. Access token may be expired or invalid.",
+          "NOT_FOUND",
+          `X profile @${handle} not found.`,
           false
         );
       }
-
-      if (response.status === 403) {
+      if (r.status === 401 || r.status === 403) {
         return buildUnavailableResult(
-          "PERMISSION_DENIED",
-          "X/Twitter API returned 403. Account may have insufficient API access level.",
+          "PROTECTED_OR_BLOCKED",
+          "X returned forbidden — the profile may be protected or Twitter blocked the request.",
           false
         );
       }
-
-      if (response.status === 429) {
+      if (!r.ok) {
+        const body = await r.text().catch(() => "");
         return buildUnavailableResult(
-          "RATE_LIMITED",
-          "X/Twitter API rate limit reached. Will retry after window resets.",
+          `HTTP_${r.status}`,
+          `X syndication error ${r.status}: ${body.slice(0, 200)}`,
+          r.status >= 500
+        );
+      }
+
+      const html = await r.text();
+      const nextData = extractNextData(html);
+      if (!nextData) {
+        return buildUnavailableResult(
+          "PARSE_FAILED",
+          "Could not parse the X syndication response. Twitter may have changed the page format.",
           true
         );
       }
 
-      if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        return buildUnavailableResult(
-          `HTTP_${response.status}`,
-          `X/Twitter API error ${response.status}: ${body.slice(0, 200)}`,
-          response.status >= 500
-        );
-      }
-
-      const data: TwitterTweetsResponse = await response.json();
+      const tweets = harvestTweets(nextData);
       const posts: NormalizedPost[] = [];
 
-      for (const tweet of data.data ?? []) {
-        const publishedAtUtc = new Date(tweet.created_at);
+      for (const tw of tweets) {
+        if (!tw.id_str || !tw.created_at) continue;
+        const publishedAtUtc = new Date(tw.created_at);
+        if (Number.isNaN(publishedAtUtc.getTime())) continue;
+        // Window filter
+        if (publishedAtUtc < since || publishedAtUtc > until) continue;
+
+        const text = tw.full_text || tw.text || "";
         const publishedAtLocal = toLocalTime(publishedAtUtc, config.timezone);
         const publishedDateLocal = toLocalDateString(publishedAtUtc, config.timezone);
-
-        // Build public URL using username if available; fall back to ID-based URL
-        const username = config.externalAccountId; // Store username in externalAccountId for cleaner URLs
-        const postUrl = `https://x.com/i/web/status/${tweet.id}`;
+        const postUrl = `https://x.com/${handle}/status/${tw.id_str}`;
 
         posts.push({
-          externalPostId: tweet.id,
+          externalPostId: tw.id_str,
           postUrl,
-          postTextSnippet: truncateSnippet(tweet.text),
-          hasMedia: (tweet.attachments?.media_keys?.length ?? 0) > 0,
+          postTextSnippet: truncateSnippet(text),
+          hasMedia: Array.isArray(tw.entities?.media) && (tw.entities!.media!.length > 0),
           publishedAtUtc,
           publishedAtLocal,
           publishedDateLocal,
-          rawPayload: tweet as unknown as Record<string, unknown>,
+          rawPayload: tw as unknown as Record<string, unknown>,
         });
       }
 
-      return { posts, followerCount: null, error: null, errorCode: null, isRetryable: false };
+      // Persist the resolved handle as externalAccountId/Name (one less lookup later)
+      try {
+        await prisma.platformConnection.update({
+          where: { id: config.connectionId },
+          data: { externalAccountId: handle, externalAccountName: handle },
+        });
+      } catch {
+        // non-fatal
+      }
+
+      // Try to extract follower count from the response if Twitter rendered it
+      const firstUser = tweets.find((t) => t.user?.followers_count != null)?.user;
+      const followerCount = firstUser?.followers_count ?? null;
+
+      return { posts, followerCount, error: null, errorCode: null, isRetryable: false };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return buildUnavailableResult("NETWORK_ERROR", `Failed to reach X/Twitter API: ${message}`, true);
-    }
-  }
-
-  /**
-   * Look up an X user_id by @username using the bearer token, then persist
-   * it back to platformConnection.externalAccountId so future syncs skip the
-   * lookup.
-   */
-  private async discoverUserId(config: AdapterConfig): Promise<string | null> {
-    if (!config.tokenReference) return null;
-    // Find a username to look up
-    let username: string | null = null;
-    if (config.externalAccountId) return config.externalAccountId;
-    // Try to extract from connection URL or name via the DB
-    try {
-      const conn = await prisma.platformConnection.findUnique({
-        where: { id: config.connectionId },
-        select: { externalAccountUrl: true, externalAccountName: true },
-      });
-      if (!conn) return null;
-      if (conn.externalAccountUrl) {
-        const m = conn.externalAccountUrl.match(/(?:twitter|x)\.com\/(?:#!\/)?@?([A-Za-z0-9_]{1,15})/i);
-        if (m) username = m[1];
-      }
-      if (!username && conn.externalAccountName) {
-        const cleaned = conn.externalAccountName.replace(/^@/, "").trim();
-        if (/^[A-Za-z0-9_]{1,15}$/.test(cleaned)) username = cleaned;
-      }
-      if (!username) return null;
-
-      const r = await fetch(`${TWITTER_API_BASE}/users/by/username/${encodeURIComponent(username)}`, {
-        headers: this.authHeaders(config.tokenReference),
-      });
-      if (!r.ok) return null;
-      const j = (await r.json()) as { data?: { id?: string; username?: string } };
-      if (!j.data?.id) return null;
-
-      // Persist for next time
-      await prisma.platformConnection.update({
-        where: { id: config.connectionId },
-        data: {
-          externalAccountId: j.data.id,
-          externalAccountName: j.data.username ?? username,
-        },
-      });
-      return j.data.id;
-    } catch {
-      return null;
+      return buildUnavailableResult("NETWORK_ERROR", `Failed to reach X syndication: ${message}`, true);
     }
   }
 
   async fetchFollowerCount(config: AdapterConfig): Promise<number | null> {
-    if (!config.tokenReference) return null;
-    let userId: string | null = config.externalAccountId;
-    if (!userId) {
-      userId = await this.discoverUserId(config);
-      if (!userId) return null;
-    }
-
+    // Syndication endpoint embeds follower count alongside tweets — easiest is
+    // to call fetchPosts with a tight window and read the count it captured.
+    const handle = await resolveHandle(config);
+    if (!handle) return null;
     try {
-      const response = await fetch(
-        `${TWITTER_API_BASE}/users/${userId}?user.fields=public_metrics`,
-        { headers: this.authHeaders(config.tokenReference) }
-      );
-
-      if (!response.ok) return null;
-      const data: TwitterUserResponse = await response.json();
-      return data.data?.public_metrics?.followers_count ?? null;
+      const r = await fetch(`${SYNDICATION_BASE}/${encodeURIComponent(handle)}`, {
+        headers: { "User-Agent": "Mozilla/5.0" },
+      });
+      if (!r.ok) return null;
+      const html = await r.text();
+      const nextData = extractNextData(html);
+      if (!nextData) return null;
+      const tweets = harvestTweets(nextData);
+      const firstUser = tweets.find((t) => t.user?.followers_count != null)?.user;
+      return firstUser?.followers_count ?? null;
     } catch {
       return null;
     }
   }
 
-  async validateConnection(config: AdapterConfig): Promise<{ valid: boolean; error?: string }> {
-    if (!config.tokenReference) {
-      return { valid: false, error: "No bearer token configured" };
-    }
-
-    try {
-      const response = await fetch(`${TWITTER_API_BASE}/users/me`, {
-        headers: this.authHeaders(config.tokenReference),
-      });
-
-      if (response.status === 401) return { valid: false, error: "Token expired or invalid" };
-      if (response.status === 403) return { valid: false, error: "Insufficient API access level" };
-      if (!response.ok) return { valid: false, error: `HTTP ${response.status}` };
-
-      return { valid: true };
-    } catch (err) {
-      return { valid: false, error: err instanceof Error ? err.message : "Network error" };
-    }
+  async validateConnection(_config: AdapterConfig): Promise<{ valid: boolean; error?: string }> {
+    // Public-syndication mode has no token to validate. The handle resolution
+    // happens lazily in fetchPosts.
+    return { valid: true };
   }
 }

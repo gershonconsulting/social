@@ -39,80 +39,17 @@ const PLATFORMS = [
   },
 ];
 
-function TwitterCredentialsForm({ onSaved }: { onSaved: () => void }) {
-  const [bearer, setBearer] = useState("");
-  const [showBearer, setShowBearer] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-
-  const handleSave = async () => {
-    if (bearer.trim().length < 20) {
-      setError("Paste the Bearer Token from your Twitter Developer Portal (typically 100+ characters).");
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      const resp = await fetch("/api/settings/twitter", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bearerToken: bearer.trim() }),
-      });
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({ error: "Failed to save" }));
-        throw new Error(data.error || "Failed to save token");
-      }
-      setSuccess(true);
-      setBearer("");
-      onSaved();
-      setTimeout(() => setSuccess(false), 3000);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save");
-    } finally {
-      setSaving(false);
-    }
-  };
-
+function TwitterCredentialsForm({ onSaved: _onSaved }: { onSaved: () => void }) {
   return (
-    <div className="mt-3 space-y-2 max-w-md">
-      <div className="text-xs text-gray-500 mb-2">
-        X / Twitter requires an app-level <span className="font-mono">Bearer Token</span> for API reads.
-        Get one from{" "}
-        <a href="https://developer.twitter.com/en/portal/projects" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-          your Twitter Developer Portal project
-        </a>{" "}
-        (Keys and tokens → Bearer Token → Generate). One token works for every X account you track.
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Bearer Token</label>
-        <div className="relative">
-          <input
-            type={showBearer ? "text" : "password"}
-            value={bearer}
-            onChange={(e) => setBearer(e.target.value)}
-            className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-9 font-mono"
-            placeholder="AAAAAAAAAAAAAAAAAAAAA…"
-          />
-          <button
-            type="button"
-            onClick={() => setShowBearer(!showBearer)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-          >
-            {showBearer ? <EyeOff size={14} /> : <Eye size={14} />}
-          </button>
-        </div>
-      </div>
-      {error && <p className="text-xs text-red-600">{error}</p>}
-      {success && <p className="text-xs text-green-600">Bearer token saved across all X / Twitter connections.</p>}
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-      >
-        {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-        {saving ? "Saving..." : "Save Bearer Token"}
-      </button>
+    <div className="mt-3 max-w-md text-xs text-gray-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
+      <div className="font-semibold text-blue-900 mb-1">No setup required</div>
+      X / Twitter is read directly from the public profile pages of each tracked
+      account using Twitter\'s own embed/syndication endpoint — no Developer
+      Portal, no Bearer token, no per-account login. Just make sure each
+      connection\'s URL points at the right{" "}
+      <span className="font-mono">x.com/&lt;handle&gt;</span>. Posts from public
+      profiles will start flowing on the next sync. Protected (private) profiles
+      can\'t be read this way.
     </div>
   );
 }
