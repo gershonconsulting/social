@@ -439,6 +439,7 @@ export async function runBackfill(
         itemsSucceeded: succeeded,
         itemsFailed: failed,
         errorLogJson: errors.length > 0 ? JSON.stringify(errors) : null,
+        resultsJson: JSON.stringify(perPlatform),
       },
     });
 

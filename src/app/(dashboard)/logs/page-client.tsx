@@ -4,6 +4,15 @@ import { useEffect, useState } from "react";
 import { Loader2, AlertTriangle, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import { Header } from "@/components/layout/header";
 
+interface PlatformResult {
+  platform: string;
+  externalAccountName: string | null;
+  postsUpserted: number;
+  followerCount: number | null;
+  success: boolean;
+  error: string | null;
+}
+
 interface SyncJob {
   id: string;
   jobType: string;
@@ -14,11 +23,20 @@ interface SyncJob {
   itemsSucceeded: number;
   itemsFailed: number;
   errorLogJson: string | null;
+  resultsJson: string | null;
   notes: string | null;
   scopeType: string | null;
   client: { name: string; slug: string } | null;
   triggeredBy: { name: string | null; email: string | null } | null;
 }
+
+const PLATFORM_LABELS: Record<string, string> = {
+  LINKEDIN: "LinkedIn",
+  TWITTER: "X / Twitter",
+  GOOGLE_BUSINESS: "Google Business",
+  FACEBOOK: "Facebook",
+  INSTAGRAM: "Instagram",
+};
 
 const STATUS_BADGE: Record<string, string> = {
   COMPLETED: "bg-green-50 text-green-700",
@@ -219,6 +237,49 @@ export function LogsPageClient() {
                       <tr key={job.id + "-d"} className="bg-gray-50">
                         <td colSpan={8} className="px-8 py-3 text-xs">
                           {job.notes && (<div className="mb-2"><span className="font-semibold">Notes:</span> <span className="text-gray-700">{job.notes}</span></div>)}
+                          {(() => {
+                            let perPlatform: PlatformResult[] = [];
+                            if (job.resultsJson) {
+                              try {
+                                const parsed = JSON.parse(job.resultsJson);
+                                if (Array.isArray(parsed)) perPlatform = parsed as PlatformResult[];
+                              } catch {}
+                            }
+                            if (perPlatform.length === 0) return null;
+                            return (
+                              <div className="mb-3">
+                                <div className="font-semibold mb-1">Per-platform breakdown:</div>
+                                <table className="w-full text-xs border border-gray-200 bg-white rounded">
+                                  <thead className="bg-gray-100">
+                                    <tr>
+                                      <th className="text-left px-2 py-1 font-medium">Platform</th>
+                                      <th className="text-left px-2 py-1 font-medium">Account</th>
+                                      <th className="text-center px-2 py-1 font-medium">Posts upserted</th>
+                                      <th className="text-center px-2 py-1 font-medium">Follower count</th>
+                                      <th className="text-left px-2 py-1 font-medium">Result</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100">
+                                    {perPlatform.map((p) => (
+                                      <tr key={p.platform}>
+                                        <td className="px-2 py-1">{PLATFORM_LABELS[p.platform] ?? p.platform}</td>
+                                        <td className="px-2 py-1 text-gray-500">{p.externalAccountName ?? "—"}</td>
+                                        <td className="px-2 py-1 text-center">{p.postsUpserted}</td>
+                                        <td className="px-2 py-1 text-center">{p.followerCount ?? "—"}</td>
+                                        <td className="px-2 py-1">
+                                          {p.success ? (
+                                            <span className="text-green-700">OK</span>
+                                          ) : (
+                                            <span className="text-red-700" title={p.error || ""}>{(p.error || "Failed").slice(0, 80)}</span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            );
+                          })()}
                           {errors.length > 0 && (
                             <div>
                               <div className="font-semibold mb-1">Errors ({errors.length}):</div>

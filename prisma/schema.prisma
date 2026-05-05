@@ -316,6 +316,7 @@ model SyncJob {
   itemsSucceeded  Int           @default(0)
   itemsFailed     Int           @default(0)
   errorLogJson    String?       @db.Text
+  resultsJson     String?       @db.Text
   notes           String?
   createdAt       DateTime      @default(now())
 
