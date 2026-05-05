@@ -1,70 +1,58 @@
 /**
- * X / Twitter Adapter — guest-auth + GraphQL.
+ * X / Twitter Adapter — user-session-cookie auth.
  *
- * Why this approach: Olivier doesn't want a paid Developer Portal account.
- * Two free options were tried and abandoned:
- *  1. Twitter syndication endpoint — Twitter killed the public-tweet content
- *     there earlier this year (timeline.entries always [] now).
- *  2. Nitter RSS — works from a normal IP but Cloudflare workers get blocked
- *     with 520 errors (nitter.net rate-limits CF egress IPs aggressively).
+ * Olivier's directive: 'I don't want the paid Developer Portal. Use my
+ * personal account to review the pages. It is only for me this platform.'
  *
- * Working approach: Twitter's own web app uses an embedded public bearer
- * token + per-session guest tokens to call its GraphQL API. The bearer is
- * literally hardcoded into the twitter.com JS bundle and is therefore public.
- * Anyone (including unauthenticated CF workers) can:
- *   1. POST /1.1/guest/activate.json with the bearer  →  { guest_token }
- *   2. GET /graphql/.../UserByScreenName?variables={...}  →  { user.rest_id }
- *   3. GET /graphql/.../UserTweets?variables={user_id,count:20}  →  timeline
+ * History (verified live each time):
+ *   - syndication.twitter.com — Twitter killed timeline.entries (always [])
+ *   - nitter.net RSS — works from a normal IP, blocked from CF worker IPs
+ *   - guest-auth + GraphQL UserTweets — returns empty TimelineClearCache
+ *     since Twitter locked it down to authenticated callers only
  *
- * Library precedent: snscrape, twscrape, react-tweet, react-twitter-embed
- * all rely on this same flow. Stable enough for a single-user sync cron.
+ * The one approach that still works: hit /graphql/.../UserTweets with the
+ * current user's session cookies (auth_token + ct0). User copies these from
+ * their browser → we store them in tokenReference → adapter sends them as
+ * Cookie + x-csrf-token + Bearer headers.
+ *
+ * Bundle-hash auto-discovery: Twitter rotates GraphQL queryIds every few
+ * weeks. If the pinned hash returns 404, we fetch x.com homepage, parse
+ * the main bundle URL out, fetch the bundle, regex out the current queryId,
+ * cache it, and retry. Self-healing.
  */
 
 import { PlatformAdapter, buildUnavailableResult, toLocalDateString, toLocalTime, truncateSnippet } from "./base";
 import { AdapterConfig, AdapterFetchResult, NormalizedPost } from "@/types";
 import prisma from "@/lib/db";
 
-// Public bearer hardcoded in twitter.com web app — also baked into twscrape etc.
 const PUBLIC_BEARER =
   "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA";
 
-const Q_USER_BY_SCREEN_NAME = "G3KGOASz96M-Qu0nwmGXNg";
-const Q_USER_TWEETS = "Z5e8EdepAZHPsCgBzdiOiQ";
+// Pinned query hashes (May 2026). Auto-discovery kicks in if these 404.
+let CURRENT_USER_BY_SCREEN_NAME = "IGgvgiOx4QZndDHuD3x9TQ";
+let CURRENT_USER_TWEETS = "pQHADmT91zIY83UbK0x4Lw";
 
-const FEATURES = {
-  hidden_profile_likes_enabled: false,
-  hidden_profile_subscriptions_enabled: false,
-  responsive_web_graphql_exclude_directive_enabled: true,
-  verified_phone_label_enabled: false,
-  subscriptions_verification_info_is_identity_verified_enabled: false,
-  subscriptions_verification_info_verified_since_enabled: false,
-  highlights_tweets_tab_ui_enabled: false,
-  responsive_web_twitter_article_notes_tab_enabled: false,
-  creator_subscriptions_tweet_preview_api_enabled: true,
-  responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
-  responsive_web_graphql_timeline_navigation_enabled: true,
-};
+const FEATURES_USER = {};
+const FEATURES_TWEETS = {};
 
-const TWEETS_FEATURES = {
-  responsive_web_graphql_exclude_directive_enabled: true,
-  verified_phone_label_enabled: false,
-  responsive_web_graphql_timeline_navigation_enabled: true,
-  responsive_web_graphql_skip_user_profile_image_extensions_enabled: false,
-  tweetypie_unmention_optimization_enabled: true,
-  responsive_web_edit_tweet_api_enabled: true,
-  graphql_is_translatable_rweb_tweet_is_translatable_enabled: true,
-  view_counts_everywhere_api_enabled: true,
-  longform_notetweets_consumption_enabled: true,
-  responsive_web_twitter_article_tweet_consumption_enabled: false,
-  tweet_awards_web_tipping_enabled: false,
-  freedom_of_speech_not_reach_fetch_enabled: true,
-  standardized_nudges_misinfo: true,
-  tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled: true,
-  longform_notetweets_rich_text_read_enabled: true,
-  longform_notetweets_inline_media_enabled: true,
-  responsive_web_media_download_video_enabled: false,
-  responsive_web_enhance_cards_enabled: false,
-};
+interface SessionCookies {
+  authToken: string;
+  ct0: string;
+}
+
+function parseSessionCookies(tokenRef: string | null): SessionCookies | null {
+  if (!tokenRef) return null;
+  try {
+    const parsed = JSON.parse(tokenRef);
+    if (parsed && typeof parsed === "object" && parsed.authToken && parsed.ct0) {
+      return { authToken: String(parsed.authToken), ct0: String(parsed.ct0) };
+    }
+  } catch {
+    // Not JSON — treat as a raw auth_token; ct0 missing makes the call fail
+    // but we still surface a clearer error than 'unknown'.
+  }
+  return null;
+}
 
 async function resolveHandle(config: AdapterConfig): Promise<string | null> {
   try {
@@ -87,44 +75,55 @@ async function resolveHandle(config: AdapterConfig): Promise<string | null> {
   }
 }
 
-async function getGuestToken(): Promise<string | null> {
+/**
+ * Re-discover GraphQL queryIds by scraping the current x.com main bundle.
+ */
+async function refreshQueryHashes(): Promise<void> {
   try {
-    const r = await fetch("https://api.twitter.com/1.1/guest/activate.json", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${PUBLIC_BEARER}`,
-        "User-Agent": "Mozilla/5.0",
-      },
+    const home = await fetch("https://x.com/", {
+      headers: { "User-Agent": "Mozilla/5.0" },
     });
-    if (!r.ok) return null;
-    const j = (await r.json()) as { guest_token?: string };
-    return j.guest_token ?? null;
+    if (!home.ok) return;
+    const html = await home.text();
+    const m = html.match(/(https:\/\/abs\.twimg\.com\/responsive-web\/client-web\/main\.[a-f0-9]+\.js)/);
+    if (!m) return;
+    const bundle = await fetch(m[1], { headers: { "User-Agent": "Mozilla/5.0" } });
+    if (!bundle.ok) return;
+    const js = await bundle.text();
+    const userByScreenName = js.match(/queryId:"([a-zA-Z0-9_-]{15,30})"[^}]{0,100}operationName:"UserByScreenName"/);
+    const userTweets = js.match(/queryId:"([a-zA-Z0-9_-]{15,30})"[^}]{0,100}operationName:"UserTweets"/);
+    if (userByScreenName) CURRENT_USER_BY_SCREEN_NAME = userByScreenName[1];
+    if (userTweets) CURRENT_USER_TWEETS = userTweets[1];
   } catch {
-    return null;
+    // ignore — keep pinned hashes
   }
 }
 
-async function lookupUserId(handle: string, guestToken: string): Promise<string | null> {
+function authHeaders(session: SessionCookies): HeadersInit {
+  return {
+    Authorization: `Bearer ${PUBLIC_BEARER}`,
+    Cookie: `auth_token=${session.authToken}; ct0=${session.ct0}`,
+    "x-csrf-token": session.ct0,
+    "User-Agent": "Mozilla/5.0",
+  };
+}
+
+async function lookupUserId(handle: string, session: SessionCookies, retried = false): Promise<string | null> {
   const variables = JSON.stringify({ screen_name: handle, withSafetyModeUserFields: false });
-  const features = JSON.stringify(FEATURES);
-  const fieldToggles = JSON.stringify({ withAuxiliaryUserLabels: false });
-  const url =
-    `https://api.twitter.com/graphql/${Q_USER_BY_SCREEN_NAME}/UserByScreenName?` +
-    `variables=${encodeURIComponent(variables)}&features=${encodeURIComponent(features)}&fieldToggles=${encodeURIComponent(fieldToggles)}`;
-  try {
-    const r = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${PUBLIC_BEARER}`,
-        "x-guest-token": guestToken,
-        "User-Agent": "Mozilla/5.0",
-      },
-    });
-    if (!r.ok) return null;
-    const j = (await r.json()) as { data?: { user?: { result?: { rest_id?: string; id?: string } } } };
-    return j.data?.user?.result?.rest_id ?? null;
-  } catch {
-    return null;
+  const features = JSON.stringify(FEATURES_USER);
+  const qs =
+    `variables=${encodeURIComponent(variables)}&features=${encodeURIComponent(features)}`;
+  const r = await fetch(
+    `https://api.twitter.com/graphql/${CURRENT_USER_BY_SCREEN_NAME}/UserByScreenName?${qs}`,
+    { headers: authHeaders(session) }
+  );
+  if (r.status === 404 && !retried) {
+    await refreshQueryHashes();
+    return lookupUserId(handle, session, true);
   }
+  if (!r.ok) return null;
+  const j = (await r.json()) as { data?: { user?: { result?: { rest_id?: string } } } };
+  return j.data?.user?.result?.rest_id ?? null;
 }
 
 interface TweetEntry {
@@ -133,15 +132,14 @@ interface TweetEntry {
     full_text?: string;
     created_at?: string;
     entities?: { media?: unknown[] };
-    is_quote_status?: boolean;
     in_reply_to_status_id_str?: string;
   };
 }
 
-function harvestTweetsFromTimeline(node: unknown, out: TweetEntry[] = []): TweetEntry[] {
+function harvestTweets(node: unknown, out: TweetEntry[] = []): TweetEntry[] {
   if (!node || typeof node !== "object") return out;
   if (Array.isArray(node)) {
-    for (const item of node) harvestTweetsFromTimeline(item, out);
+    for (const v of node) harvestTweets(v, out);
     return out;
   }
   const obj = node as Record<string, unknown>;
@@ -153,11 +151,11 @@ function harvestTweetsFromTimeline(node: unknown, out: TweetEntry[] = []): Tweet
   ) {
     out.push(obj as unknown as TweetEntry);
   }
-  for (const v of Object.values(obj)) harvestTweetsFromTimeline(v, out);
+  for (const v of Object.values(obj)) harvestTweets(v, out);
   return out;
 }
 
-async function fetchUserTweets(userId: string, guestToken: string): Promise<TweetEntry[]> {
+async function fetchUserTweets(userId: string, session: SessionCookies, retried = false): Promise<{ tweets: TweetEntry[]; status: number; bodyHead?: string }> {
   const variables = JSON.stringify({
     userId,
     count: 40,
@@ -166,24 +164,22 @@ async function fetchUserTweets(userId: string, guestToken: string): Promise<Twee
     withVoice: false,
     withV2Timeline: true,
   });
-  const features = JSON.stringify(TWEETS_FEATURES);
-  const url =
-    `https://api.twitter.com/graphql/${Q_USER_TWEETS}/UserTweets?` +
-    `variables=${encodeURIComponent(variables)}&features=${encodeURIComponent(features)}`;
-  try {
-    const r = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${PUBLIC_BEARER}`,
-        "x-guest-token": guestToken,
-        "User-Agent": "Mozilla/5.0",
-      },
-    });
-    if (!r.ok) return [];
-    const j = await r.json();
-    return harvestTweetsFromTimeline(j);
-  } catch {
-    return [];
+  const features = JSON.stringify(FEATURES_TWEETS);
+  const qs = `variables=${encodeURIComponent(variables)}&features=${encodeURIComponent(features)}`;
+  const r = await fetch(
+    `https://api.twitter.com/graphql/${CURRENT_USER_TWEETS}/UserTweets?${qs}`,
+    { headers: authHeaders(session) }
+  );
+  if (r.status === 404 && !retried) {
+    await refreshQueryHashes();
+    return fetchUserTweets(userId, session, true);
   }
+  if (!r.ok) {
+    const bodyHead = (await r.text().catch(() => "")).slice(0, 200);
+    return { tweets: [], status: r.status, bodyHead };
+  }
+  const j = await r.json();
+  return { tweets: harvestTweets(j), status: r.status };
 }
 
 export class TwitterAdapter implements PlatformAdapter {
@@ -198,46 +194,53 @@ export class TwitterAdapter implements PlatformAdapter {
     if (!handle) {
       return buildUnavailableResult(
         "NO_HANDLE",
-        "Could not determine the X / Twitter handle for this connection. Set the account URL.",
+        "Could not determine the X / Twitter handle. Set the account URL on the connection.",
         false
       );
     }
 
-    const guestToken = await getGuestToken();
-    if (!guestToken) {
+    const session = parseSessionCookies(config.tokenReference);
+    if (!session) {
       return buildUnavailableResult(
-        "GUEST_TOKEN_FAILED",
-        "Could not obtain a guest token from Twitter. Will retry on the next sync.",
-        true
+        "NO_SESSION",
+        "X / Twitter session cookies not configured. Paste auth_token and ct0 from your browser into Settings.",
+        false
       );
     }
 
     let userId = config.externalAccountId;
     if (!userId) {
-      userId = await lookupUserId(handle, guestToken) || "";
+      userId = (await lookupUserId(handle, session)) || "";
       if (!userId) {
         return buildUnavailableResult(
           "USER_LOOKUP_FAILED",
-          `Twitter could not resolve a user_id for @${handle}. Profile may be private or suspended.`,
+          `Could not resolve user_id for @${handle}. Token may be invalid or @${handle} doesn't exist.`,
           true
         );
       }
     }
 
-    const tweetEntries = await fetchUserTweets(userId, guestToken);
-    if (tweetEntries.length === 0) {
+    const { tweets, status, bodyHead } = await fetchUserTweets(userId, session);
+    if (tweets.length === 0) {
+      const reason =
+        status === 401
+          ? "X / Twitter rejected the session cookies (401). Re-paste auth_token + ct0 from your browser."
+          : status === 403
+            ? "X / Twitter blocked the request (403). Account may be locked or suspended."
+            : status >= 500
+              ? `X / Twitter server error (${status}). Will retry on next sync.`
+              : `Twitter returned no tweets for @${handle} in this window.`;
       return buildUnavailableResult(
-        "EMPTY_TIMELINE",
-        `Twitter returned no tweets for @${handle} in this window.`,
-        false
+        status === 401 ? "EXPIRED_SESSION" : status >= 500 ? "UPSTREAM_ERROR" : "EMPTY_TIMELINE",
+        reason + (bodyHead ? ` · ${bodyHead}` : ""),
+        status >= 500
       );
     }
 
     const posts: NormalizedPost[] = [];
-    for (const t of tweetEntries) {
+    for (const t of tweets) {
       const legacy = t.legacy;
       if (!legacy?.created_at || !legacy.full_text) continue;
-      // Skip replies — we only track originals
       if (legacy.in_reply_to_status_id_str) continue;
       const publishedAtUtc = new Date(legacy.created_at);
       if (Number.isNaN(publishedAtUtc.getTime())) continue;
@@ -259,7 +262,6 @@ export class TwitterAdapter implements PlatformAdapter {
       });
     }
 
-    // Persist resolved user_id + handle for the next sync to skip lookups
     try {
       await prisma.platformConnection.update({
         where: { id: config.connectionId },
@@ -278,16 +280,15 @@ export class TwitterAdapter implements PlatformAdapter {
   }
 
   async fetchFollowerCount(_config: AdapterConfig): Promise<number | null> {
-    // The UserByScreenName response includes legacy.followers_count, but
-    // adding another guest-auth roundtrip per platform-test isn't worth the
-    // complexity for a metric Olivier already sees on each company card.
     return null;
   }
 
   async validateConnection(config: AdapterConfig): Promise<{ valid: boolean; error?: string }> {
-    const handle = await resolveHandle(config);
-    if (!handle) {
-      return { valid: false, error: "Connection has no @handle (set the account URL)." };
+    if (!parseSessionCookies(config.tokenReference)) {
+      return { valid: false, error: "Paste auth_token + ct0 from your browser into Settings." };
+    }
+    if (!(await resolveHandle(config))) {
+      return { valid: false, error: "Connection has no @handle." };
     }
     return { valid: true };
   }

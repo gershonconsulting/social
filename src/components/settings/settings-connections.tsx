@@ -26,7 +26,7 @@ const PLATFORMS = [
     name: "X / Twitter",
     icon: "\ud835\udd4f",
     color: "gray",
-    description: "X / Twitter is read directly from public profile pages — no setup or API key required.",
+    description: "Paste your X / Twitter session cookies (auth_token + ct0) so we can fetch tweets through your logged-in account.",
     connectMethod: "syndication" as const,
   },
   {
@@ -39,17 +39,98 @@ const PLATFORMS = [
   },
 ];
 
-function TwitterCredentialsForm({ onSaved: _onSaved }: { onSaved: () => void }) {
+function TwitterCredentialsForm({ onSaved }: { onSaved: () => void }) {
+  const [authToken, setAuthToken] = useState("");
+  const [ct0, setCt0] = useState("");
+  const [showSecrets, setShowSecrets] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const handleSave = async () => {
+    if (authToken.trim().length < 20 || ct0.trim().length < 20) {
+      setError("Both auth_token and ct0 must be 20+ characters. Copy them from your browser cookies on x.com.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const resp = await fetch("/api/settings/twitter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ authToken: authToken.trim(), ct0: ct0.trim() }),
+      });
+      const j = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(j.error || "Failed to save");
+      setSuccess(true);
+      setAuthToken("");
+      setCt0("");
+      onSaved();
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <div className="mt-3 max-w-md text-xs text-gray-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
-      <div className="font-semibold text-blue-900 mb-1">No setup required</div>
-      X / Twitter is read directly from the public profile pages of each tracked
-      account using Twitter\'s own embed/syndication endpoint — no Developer
-      Portal, no Bearer token, no per-account login. Just make sure each
-      connection\'s URL points at the right{" "}
-      <span className="font-mono">x.com/&lt;handle&gt;</span>. Posts from public
-      profiles will start flowing on the next sync. Protected (private) profiles
-      can\'t be read this way.
+    <div className="mt-3 max-w-md space-y-3 text-xs">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 text-gray-700">
+        <div className="font-semibold text-blue-900 mb-1">Use your X login session</div>
+        Twitter killed every free-API path for unauthenticated reads. To fetch
+        tweets without paying for the Developer Portal, paste your own X session
+        cookies below.
+        <div className="mt-2">
+          <span className="font-semibold">How to get them:</span>
+          <ol className="list-decimal ml-5 mt-1 space-y-0.5">
+            <li>Log into <span className="font-mono">https://x.com</span> in your browser.</li>
+            <li>Open DevTools → Application → Cookies → <span className="font-mono">https://x.com</span>.</li>
+            <li>Copy the <b>Value</b> column for cookies named <span className="font-mono">auth_token</span> and <span className="font-mono">ct0</span>.</li>
+            <li>Paste them below.</li>
+          </ol>
+        </div>
+      </div>
+      <div>
+        <label className="block font-medium text-gray-600 mb-1">auth_token</label>
+        <input
+          type={showSecrets ? "text" : "password"}
+          value={authToken}
+          onChange={(e) => setAuthToken(e.target.value)}
+          className="w-full px-3 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+          placeholder="64+ hex characters"
+        />
+      </div>
+      <div>
+        <label className="block font-medium text-gray-600 mb-1">ct0</label>
+        <input
+          type={showSecrets ? "text" : "password"}
+          value={ct0}
+          onChange={(e) => setCt0(e.target.value)}
+          className="w-full px-3 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+          placeholder="32+ hex characters"
+        />
+      </div>
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setShowSecrets((s) => !s)}
+          className="inline-flex items-center gap-1 text-gray-500 hover:text-gray-700"
+        >
+          {showSecrets ? <EyeOff size={12} /> : <Eye size={12} />}
+          {showSecrets ? "Hide" : "Show"} values
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+        >
+          {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+          {saving ? "Saving..." : "Save session cookies"}
+        </button>
+      </div>
+      {error && <p className="text-red-600">{error}</p>}
+      {success && <p className="text-green-600">Session saved. Run Sync Now on a client to fetch tweets.</p>}
     </div>
   );
 }
