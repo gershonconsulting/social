@@ -26,8 +26,8 @@ const PLATFORMS = [
     name: "X / Twitter",
     icon: "\ud835\udd4f",
     color: "gray",
-    description: "Enter your X/Twitter credentials to monitor tweets, mentions, and engagement.",
-    connectMethod: "credentials" as const,
+    description: "X / Twitter is read directly from public profile pages — no setup or API key required.",
+    connectMethod: "syndication" as const,
   },
   {
     key: "GOOGLE_BUSINESS",
@@ -98,7 +98,7 @@ export function SettingsConnections({
       }
       setConnecting(platform.key);
       window.location.href = `/api/auth/linkedin/connect`;
-    } else if (platform.connectMethod === "credentials" && platform.key === "TWITTER") {
+    } else if (platform.key === "TWITTER") {
       setShowTwitterForm(true);
     } else if (platform.connectMethod === "google-oauth" && platform.key === "GOOGLE_BUSINESS") {
       if (!googleConfigured) {
@@ -144,10 +144,10 @@ export function SettingsConnections({
                       {platform.description}
                     </p>
                     <div className="text-[10px] text-gray-400 mt-1">
-                      {platform.connectMethod === "credentials"
-                        ? "Connection: Username & Password"
-                        : platform.connectMethod === "google-oauth"
+                      {platform.connectMethod === "google-oauth"
                         ? "Connection: Google Account (Gmail)"
+                        : platform.connectMethod === "syndication"
+                        ? "Connection: Public profile (no auth)"
                         : "Connection: OAuth 2.0"}
                     </div>
 

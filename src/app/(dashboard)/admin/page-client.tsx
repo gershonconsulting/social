@@ -639,7 +639,7 @@ export default function AdminPage() {
                     <td className="px-4 py-3">
                       {client.platformConnections.length > 0 ? (
                         <div className="space-y-1.5">
-                          {client.platformConnections.map((conn) => (
+                          {client.platformConnections.filter((c) => ["LINKEDIN","TWITTER","GOOGLE_BUSINESS"].includes(c.platform)).map((conn) => (
                             <div key={conn.id} className="flex items-start gap-2">
                               <span className="inline-flex items-center justify-center w-5 h-5 bg-gray-100 rounded text-[10px] font-bold text-gray-500 mt-0.5 shrink-0">
                                 {PLATFORM_ICONS[conn.platform] ?? "?"}

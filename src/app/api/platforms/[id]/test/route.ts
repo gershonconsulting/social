@@ -32,8 +32,11 @@ export async function POST(
 
     const platformLabel = conn.platform;
 
-    // No token? Mark PENDING — there's nothing to test.
-    if (!conn.tokenReference) {
+    // For platforms that need OAuth, no token = PENDING. Twitter is an exception:
+    // we read public profiles via syndication, so a missing token is fine — the
+    // adapter just needs the @handle (resolved from the connection's URL).
+    const platformsThatNeedToken = new Set(["LINKEDIN", "GOOGLE_BUSINESS"]);
+    if (!conn.tokenReference && platformsThatNeedToken.has(conn.platform)) {
       await prisma.platformConnection.update({
         where: { id },
         data: {
@@ -70,6 +73,20 @@ export async function POST(
       });
     }
 
+    // Sanitize legacy Twitter {username,password} JSON: pass null instead so the
+    // adapter doesn't choke on it. Twitter no longer needs a token at all.
+    let tokenForAdapter: string | null = conn.tokenReference;
+    if (conn.platform === "TWITTER" && tokenForAdapter) {
+      try {
+        const maybe = JSON.parse(tokenForAdapter);
+        if (maybe && typeof maybe === "object" && ("username" in maybe || "password" in maybe)) {
+          tokenForAdapter = null;
+        }
+      } catch {
+        // not JSON — leave as is
+      }
+    }
+
     let probeError: string | null = null;
     let followerCount: number | null = null;
     try {
@@ -78,7 +95,7 @@ export async function POST(
         clientId: conn.clientId,
         connectionId: conn.id,
         externalAccountId: conn.externalAccountId ?? "",
-        tokenReference: conn.tokenReference,
+        tokenReference: tokenForAdapter,
         timezone: conn.client?.timezone ?? "America/New_York",
       });
     } catch (e) {

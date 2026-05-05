@@ -111,6 +111,8 @@ export function SettingsPageClient() {
 
       <ApplyTokensToPendingButton onDone={() => setAttempt((a) => a + 1)} />
 
+      <CleanupUnsupportedPlatformsButton onDone={() => setAttempt((a) => a + 1)} />
+
       <TestAllConnectionsButton
         connectionIds={Object.values(connections).flat().map((c) => c.id)}
         onDone={() => setAttempt((a) => a + 1)}
@@ -302,6 +304,63 @@ function ApplyTokensToPendingButton({ onDone }: { onDone: () => void }) {
         className="px-3 py-2 text-sm font-medium text-white bg-gray-700 rounded-lg hover:bg-gray-800 disabled:opacity-60 inline-flex items-center gap-2 whitespace-nowrap"
       >
         {running ? "Applying…" : "Apply to pending"}
+      </button>
+    </div>
+  );
+}
+
+function CleanupUnsupportedPlatformsButton({ onDone }: { onDone: () => void }) {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<string>("");
+  const [error, setError] = useState("");
+
+  async function run() {
+    if (!confirm("Permanently delete every Facebook, Instagram, TikTok, Pinterest, Threads, Medium, Reddit, Blog/RSS connection and all of their posts/compliance/follower data?\n\nThese platforms are no longer tracked. THIS CANNOT BE UNDONE.")) return;
+    setRunning(true);
+    setResult("");
+    setError("");
+    let totalRemoved = 0;
+    const platforms = ["FACEBOOK", "INSTAGRAM", "TIKTOK", "PINTEREST", "THREADS", "MEDIUM", "REDDIT", "BLOG_RSS", "YOUTUBE"];
+    try {
+      for (const p of platforms) {
+        const r = await fetch("/api/admin/cleanup-platform", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ platform: p }),
+        });
+        const ct = r.headers.get("content-type") || "";
+        if (ct.includes("application/json")) {
+          const j = await r.json();
+          if (j.success) totalRemoved += j.data?.connectionsRemoved ?? 0;
+        }
+      }
+      setResult(`Removed ${totalRemoved} unsupported-platform connection${totalRemoved === 1 ? "" : "s"} and all related data.`);
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between gap-4">
+      <div>
+        <div className="text-sm font-semibold text-gray-900">Remove unsupported-platform data</div>
+        <div className="text-xs text-gray-500 mt-0.5">
+          We only track LinkedIn, X / Twitter, and Google Business now. Click to permanently delete every
+          Facebook / Instagram / TikTok / Pinterest / Threads / Medium / Reddit / Blog-RSS / YouTube connection
+          + their posts, compliance, follower snapshots, and schedules.
+        </div>
+        {result && <div className="text-xs mt-1.5 text-green-700">{result}</div>}
+        {error && <div className="text-xs mt-1.5 text-red-700">{error}</div>}
+      </div>
+      <button
+        onClick={run}
+        disabled={running}
+        className="px-3 py-2 text-sm font-medium text-white bg-red-700 rounded-lg hover:bg-red-800 disabled:opacity-60 inline-flex items-center gap-2 whitespace-nowrap"
+      >
+        {running ? "Removing…" : "Remove unsupported"}
       </button>
     </div>
   );
