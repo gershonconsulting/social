@@ -1,59 +1,30 @@
 /**
- * X / Twitter Adapter — public-syndication mode.
+ * X / Twitter Adapter — Nitter RSS mode.
  *
- * Olivier's directive: 'I don't want to use the paid developer program from
- * twitter. Use my personal account to review the pages and collect the
- * information. It is only for me this platform!'
+ * Background: Olivier's directive is no paid Developer Portal account.
+ * Twitter killed the unauthenticated syndication endpoint earlier in 2025
+ * (HTML still loads, but timeline.entries[] is always empty), so the
+ * previous scrape stopped working.
  *
- * Approach: fetch the same public syndication endpoint that powers Twitter's
- * embeddable widgets. No auth, no Bearer token, no Developer Portal account.
- * Works for any public profile.
+ * Working free alternative: Nitter is an open-source Twitter front-end that
+ * exposes RSS at https://{instance}/{handle}/rss with tweet titles, links,
+ * and timestamps. Parsing that gives us last ~20 tweets per handle.
  *
- * Endpoint:
- *   GET https://syndication.twitter.com/srv/timeline-profile/screen-name/{handle}
+ * We use nitter.net as the primary instance; it's the most stable. If a sync
+ * call returns 403 (cloudflare bot challenge) or 5xx, we surface the error
+ * and the cron retries on the next firing.
  *
- * Response: HTML page that embeds a <script id="__NEXT_DATA__"> tag with the
- * full timeline payload as JSON. We extract that JSON and walk it for tweets.
- *
- * Limitations:
- *  - Returns ~20-25 most recent tweets (good enough for daily sync windows).
- *  - Works only for PUBLIC accounts. Protected accounts can't be scraped.
- *  - Twitter rate-limits per IP; for a single-user platform syncing ~10
- *    accounts/day this is comfortably below the threshold.
- *  - Follower count is not exposed by syndication; we read it from the same
- *    HTML if Twitter renders it, otherwise return null.
- *
- * Storage: tokenReference and externalAccountId are NOT required. The handle
- * is taken from externalAccountUrl or externalAccountName.
+ * Storage: tokenReference NOT required. Handle is taken from
+ * externalAccountUrl ("https://x.com/{handle}") or externalAccountName.
  */
 
 import { PlatformAdapter, buildUnavailableResult, toLocalDateString, toLocalTime, truncateSnippet } from "./base";
 import { AdapterConfig, AdapterFetchResult, NormalizedPost } from "@/types";
 import prisma from "@/lib/db";
 
-const SYNDICATION_BASE = "https://syndication.twitter.com/srv/timeline-profile/screen-name";
+const NITTER_BASE = "https://nitter.net";
 
-type SyndicationTweet = {
-  id_str?: string;
-  created_at?: string;
-  full_text?: string;
-  text?: string;
-  entities?: {
-    media?: Array<unknown>;
-  };
-  user?: {
-    id_str?: string;
-    screen_name?: string;
-    name?: string;
-    followers_count?: number;
-  };
-};
-
-/**
- * Resolve the @handle for a connection from URL or display name.
- */
 async function resolveHandle(config: AdapterConfig): Promise<string | null> {
-  // Already cached?
   try {
     const conn = await prisma.platformConnection.findUnique({
       where: { id: config.connectionId },
@@ -75,40 +46,61 @@ async function resolveHandle(config: AdapterConfig): Promise<string | null> {
 }
 
 /**
- * Extract the __NEXT_DATA__ JSON blob from a syndication HTML response.
+ * Decode XML/HTML entities in RSS content.
  */
-function extractNextData(html: string): unknown | null {
-  const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
-  if (!m) return null;
-  try {
-    return JSON.parse(m[1]);
-  } catch {
-    return null;
-  }
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCharCode(parseInt(n, 10)));
+}
+
+interface NitterItem {
+  tweetId: string;
+  text: string;
+  publishedAtUtc: Date;
+  hasMedia: boolean;
 }
 
 /**
- * Walk a parsed __NEXT_DATA__ object and pull out tweet objects.
- * The shape changes; rather than hard-code one path we recursively look for
- * objects with id_str + created_at + (full_text|text), which is the unique
- * signature of a Twitter status.
+ * Parse a Nitter RSS feed into a list of items.
  */
-function harvestTweets(node: unknown, out: SyndicationTweet[] = []): SyndicationTweet[] {
-  if (!node || typeof node !== "object") return out;
-  if (Array.isArray(node)) {
-    for (const item of node) harvestTweets(item, out);
-    return out;
+function parseNitterRss(xml: string, handle: string): NitterItem[] {
+  const items: NitterItem[] = [];
+  // Match each <item>...</item> block
+  const itemRe = /<item>([\s\S]*?)<\/item>/g;
+  let m: RegExpExecArray | null;
+  while ((m = itemRe.exec(xml)) !== null) {
+    const block = m[1];
+    const linkMatch = block.match(/<link>([^<]+)<\/link>/);
+    const titleMatch = block.match(/<title>([\s\S]*?)<\/title>/);
+    const dateMatch = block.match(/<pubDate>([^<]+)<\/pubDate>/);
+    const descMatch = block.match(/<description>([\s\S]*?)<\/description>/);
+    if (!linkMatch || !dateMatch) continue;
+
+    const link = linkMatch[1];
+    // Status ID is the trailing digits in the URL
+    const idMatch = link.match(/\/status\/(\d+)/);
+    if (!idMatch) continue;
+    const tweetId = idMatch[1];
+
+    let text = titleMatch ? decodeEntities(titleMatch[1]).trim() : "";
+    // Strip leading "Username:" or "Display / @handle:" prefix Nitter sometimes adds
+    text = text.replace(new RegExp(`^[^:]+/\\s*@${handle}:`, "i"), "").trim();
+    text = text.replace(/^R to @[^:]+:\s*/i, "").trim();
+
+    const publishedAtUtc = new Date(dateMatch[1]);
+    if (Number.isNaN(publishedAtUtc.getTime())) continue;
+
+    const hasMedia = !!descMatch && /<img|<video/i.test(descMatch[1]);
+
+    items.push({ tweetId, text, publishedAtUtc, hasMedia });
   }
-  const obj = node as Record<string, unknown>;
-  if (
-    typeof obj.id_str === "string" &&
-    typeof obj.created_at === "string" &&
-    (typeof obj.full_text === "string" || typeof obj.text === "string")
-  ) {
-    out.push(obj as SyndicationTweet);
-  }
-  for (const v of Object.values(obj)) harvestTweets(v, out);
-  return out;
+  return items;
 }
 
 export class TwitterAdapter implements PlatformAdapter {
@@ -129,13 +121,12 @@ export class TwitterAdapter implements PlatformAdapter {
     }
 
     try {
-      const url = `${SYNDICATION_BASE}/${encodeURIComponent(handle)}`;
+      const url = `${NITTER_BASE}/${encodeURIComponent(handle)}/rss`;
       const r = await fetch(url, {
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-          Accept: "text/html,*/*",
-          "Accept-Language": "en-US,en;q=0.9",
+          Accept: "application/rss+xml, application/xml, text/xml, */*",
         },
         redirect: "follow",
       });
@@ -143,108 +134,88 @@ export class TwitterAdapter implements PlatformAdapter {
       if (r.status === 404) {
         return buildUnavailableResult(
           "NOT_FOUND",
-          `X profile @${handle} not found.`,
+          `X profile @${handle} not found on Nitter (private or non-existent).`,
           false
         );
       }
-      if (r.status === 401 || r.status === 403) {
+      if (r.status === 403) {
         return buildUnavailableResult(
-          "PROTECTED_OR_BLOCKED",
-          "X returned forbidden — the profile may be protected or Twitter blocked the request.",
-          false
+          "BOT_CHALLENGED",
+          "Nitter mirror returned a bot-challenge page. Will retry on the next cron tick.",
+          true
         );
       }
       if (!r.ok) {
         const body = await r.text().catch(() => "");
         return buildUnavailableResult(
           `HTTP_${r.status}`,
-          `X syndication error ${r.status}: ${body.slice(0, 200)}`,
+          `Nitter mirror error ${r.status}: ${body.slice(0, 200)}`,
           r.status >= 500
         );
       }
 
-      const html = await r.text();
-      const nextData = extractNextData(html);
-      if (!nextData) {
+      const xml = await r.text();
+      if (!xml.includes("<item>")) {
         return buildUnavailableResult(
-          "PARSE_FAILED",
-          "Could not parse the X syndication response. Twitter may have changed the page format.",
-          true
+          "EMPTY_FEED",
+          "Nitter returned an empty feed for @" + handle + " (the account may have no recent public tweets).",
+          false
         );
       }
 
-      const tweets = harvestTweets(nextData);
+      const items = parseNitterRss(xml, handle);
       const posts: NormalizedPost[] = [];
 
-      for (const tw of tweets) {
-        if (!tw.id_str || !tw.created_at) continue;
-        const publishedAtUtc = new Date(tw.created_at);
-        if (Number.isNaN(publishedAtUtc.getTime())) continue;
-        // Window filter
-        if (publishedAtUtc < since || publishedAtUtc > until) continue;
-
-        const text = tw.full_text || tw.text || "";
-        const publishedAtLocal = toLocalTime(publishedAtUtc, config.timezone);
-        const publishedDateLocal = toLocalDateString(publishedAtUtc, config.timezone);
-        const postUrl = `https://x.com/${handle}/status/${tw.id_str}`;
+      for (const it of items) {
+        if (it.publishedAtUtc < since || it.publishedAtUtc > until) continue;
+        const publishedAtLocal = toLocalTime(it.publishedAtUtc, config.timezone);
+        const publishedDateLocal = toLocalDateString(it.publishedAtUtc, config.timezone);
+        const postUrl = `https://x.com/${handle}/status/${it.tweetId}`;
 
         posts.push({
-          externalPostId: tw.id_str,
+          externalPostId: it.tweetId,
           postUrl,
-          postTextSnippet: truncateSnippet(text),
-          hasMedia: Array.isArray(tw.entities?.media) && (tw.entities!.media!.length > 0),
-          publishedAtUtc,
+          postTextSnippet: truncateSnippet(it.text),
+          hasMedia: it.hasMedia,
+          publishedAtUtc: it.publishedAtUtc,
           publishedAtLocal,
           publishedDateLocal,
-          rawPayload: tw as unknown as Record<string, unknown>,
+          rawPayload: { tweetId: it.tweetId, text: it.text } as unknown as Record<string, unknown>,
         });
       }
 
-      // Persist the resolved handle as externalAccountId/Name (one less lookup later)
+      // Persist the resolved handle so subsequent calls have it cached
       try {
         await prisma.platformConnection.update({
           where: { id: config.connectionId },
-          data: { externalAccountId: handle, externalAccountName: handle },
+          data: {
+            externalAccountId: handle,
+            externalAccountName: handle,
+            connectionStatus: "CONNECTED",
+            lastSyncError: null,
+          },
         });
       } catch {
         // non-fatal
       }
 
-      // Try to extract follower count from the response if Twitter rendered it
-      const firstUser = tweets.find((t) => t.user?.followers_count != null)?.user;
-      const followerCount = firstUser?.followers_count ?? null;
-
-      return { posts, followerCount, error: null, errorCode: null, isRetryable: false };
+      return { posts, followerCount: null, error: null, errorCode: null, isRetryable: false };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return buildUnavailableResult("NETWORK_ERROR", `Failed to reach X syndication: ${message}`, true);
+      return buildUnavailableResult("NETWORK_ERROR", `Failed to reach Nitter: ${message}`, true);
     }
   }
 
-  async fetchFollowerCount(config: AdapterConfig): Promise<number | null> {
-    // Syndication endpoint embeds follower count alongside tweets — easiest is
-    // to call fetchPosts with a tight window and read the count it captured.
+  /** Nitter doesn't expose follower counts. */
+  async fetchFollowerCount(_config: AdapterConfig): Promise<number | null> {
+    return null;
+  }
+
+  async validateConnection(config: AdapterConfig): Promise<{ valid: boolean; error?: string }> {
     const handle = await resolveHandle(config);
-    if (!handle) return null;
-    try {
-      const r = await fetch(`${SYNDICATION_BASE}/${encodeURIComponent(handle)}`, {
-        headers: { "User-Agent": "Mozilla/5.0" },
-      });
-      if (!r.ok) return null;
-      const html = await r.text();
-      const nextData = extractNextData(html);
-      if (!nextData) return null;
-      const tweets = harvestTweets(nextData);
-      const firstUser = tweets.find((t) => t.user?.followers_count != null)?.user;
-      return firstUser?.followers_count ?? null;
-    } catch {
-      return null;
+    if (!handle) {
+      return { valid: false, error: "Connection has no @handle (set the account URL)." };
     }
-  }
-
-  async validateConnection(_config: AdapterConfig): Promise<{ valid: boolean; error?: string }> {
-    // Public-syndication mode has no token to validate. The handle resolution
-    // happens lazily in fetchPosts.
     return { valid: true };
   }
 }
