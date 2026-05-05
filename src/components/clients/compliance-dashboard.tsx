@@ -6,16 +6,12 @@ const PLATFORM_LABELS: Record<string, string> = {
   LINKEDIN: "LinkedIn",
   TWITTER: "X / Twitter",
   GOOGLE_BUSINESS: "Google Business",
-  FACEBOOK: "Facebook",
-  INSTAGRAM: "Instagram",
 };
 
 const PLATFORM_COLORS: Record<string, string> = {
   LINKEDIN: "bg-blue-600",
   TWITTER: "bg-gray-900",
   GOOGLE_BUSINESS: "bg-amber-500",
-  FACEBOOK: "bg-blue-500",
-  INSTAGRAM: "bg-pink-500",
 };
 
 interface PlatformCompliance {

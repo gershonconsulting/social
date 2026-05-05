@@ -9,8 +9,6 @@ const PLATFORM_BG: Record<string, string> = {
   LINKEDIN: "bg-[#0A66C2] text-white",
   TWITTER: "bg-black text-white",
   GOOGLE_BUSINESS: "bg-white text-[#4285F4] border border-gray-200",
-  FACEBOOK: "bg-[#1877F2] text-white",
-  INSTAGRAM: "bg-gradient-to-br from-[#F58529] via-[#DD2A7B] to-[#8134AF] text-white",
 };
 
 export function PlatformIcon({

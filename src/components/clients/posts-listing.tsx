@@ -18,8 +18,6 @@ interface Post {
 const PLATFORM_LABELS: Record<string, string> = {
   LINKEDIN: "LinkedIn",
   TWITTER: "X / Twitter",
-  FACEBOOK: "Facebook",
-  INSTAGRAM: "Instagram",
   GOOGLE_BUSINESS: "Google Business",
 };
 

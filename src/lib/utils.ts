@@ -5,8 +5,6 @@ export const PLATFORM_LABELS: Record<string, string> = {
   LINKEDIN: "LinkedIn",
   TWITTER: "X / Twitter",
   GOOGLE_BUSINESS: "Google Business Profile",
-  FACEBOOK: "Facebook",
-  INSTAGRAM: "Instagram",
   TIKTOK: "TikTok",
   THREADS: "Threads",
   PINTEREST: "Pinterest",

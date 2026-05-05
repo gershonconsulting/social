@@ -7,8 +7,6 @@ const PLATFORM_HINTS: Record<string, string> = {
   LINKEDIN: "https://www.linkedin.com/company/<vanity-name>",
   TWITTER: "https://x.com/<handle>",
   GOOGLE_BUSINESS: "Set in /admin (location ID is required)",
-  FACEBOOK: "https://www.facebook.com/<page-name>",
-  INSTAGRAM: "https://www.instagram.com/<handle>",
 };
 
 export function ConnectionUrlEditor({

@@ -29,7 +29,6 @@ const PLATFORM_MATCHERS: { platform: string; test: (url: string) => boolean; cle
     platform: "TWITTER",
     test: (url) => {
       if (!/(?:^|:\/\/|:\/\/www\.)(?:twitter\.com|x\.com)\/[a-zA-Z0-9_]+/i.test(url)) return false;
-      // Exclude share/intent/generic pages
       return !/\/(intent|share|sharer|login|signup|help|i\/|search|hashtag)\b/i.test(url);
     },
     clean: (url) => {
@@ -44,55 +43,6 @@ const PLATFORM_MATCHERS: { platform: string; test: (url: string) => boolean; cle
       /g\.page\//i.test(url) ||
       /business\.google\.com/i.test(url),
     clean: (url) => url.split("?")[0],
-  },
-  {
-    platform: "FACEBOOK",
-    test: (url) => {
-      if (!/(?:facebook\.com|fb\.com)\/[a-zA-Z0-9._-]+/i.test(url)) return false;
-      return !/\/(sharer|share|dialog|plugins|login|help)\b/i.test(url);
-    },
-    clean: (url) => {
-      const m = url.match(/(https?:\/\/(?:www\.)?(?:facebook\.com|fb\.com)\/[a-zA-Z0-9._-]+)\/?/i);
-      return m ? m[1] : url;
-    },
-  },
-  {
-    platform: "INSTAGRAM",
-    test: (url) => {
-      if (!/instagram\.com\/[a-zA-Z0-9._]+/i.test(url)) return false;
-      return !/\/(explore|reels|stories|accounts|developer|legal)\b/i.test(url);
-    },
-    clean: (url) => {
-      const m = url.match(/(https?:\/\/(?:www\.)?instagram\.com\/[a-zA-Z0-9._]+)\/?/i);
-      return m ? m[1] : url;
-    },
-  },
-  {
-    platform: "TIKTOK",
-    test: (url) => /tiktok\.com\/@[a-zA-Z0-9._-]+/i.test(url),
-    clean: (url) => {
-      const m = url.match(/(https?:\/\/(?:www\.)?tiktok\.com\/@[a-zA-Z0-9._-]+)\/?/i);
-      return m ? m[1] : url;
-    },
-  },
-  {
-    platform: "PINTEREST",
-    test: (url) => {
-      if (!/pinterest\.com\/[a-zA-Z0-9_-]+/i.test(url)) return false;
-      return !/\/(pin\/|explore)\b/i.test(url);
-    },
-    clean: (url) => {
-      const m = url.match(/(https?:\/\/(?:www\.)?pinterest\.com\/[a-zA-Z0-9_-]+)\/?/i);
-      return m ? m[1] : url;
-    },
-  },
-  {
-    platform: "THREADS",
-    test: (url) => /threads\.net\/@[a-zA-Z0-9._]+/i.test(url),
-    clean: (url) => {
-      const m = url.match(/(https?:\/\/(?:www\.)?threads\.net\/@[a-zA-Z0-9._]+)\/?/i);
-      return m ? m[1] : url;
-    },
   },
 ];
 

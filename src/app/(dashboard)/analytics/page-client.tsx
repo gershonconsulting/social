@@ -42,16 +42,12 @@ interface Summary {
 const PLATFORM_LABELS: Record<string, string> = {
   LINKEDIN: "LinkedIn",
   TWITTER: "X / Twitter",
-  FACEBOOK: "Facebook",
-  INSTAGRAM: "Instagram",
   GOOGLE_BUSINESS: "Google Business",
 };
 
 const PLATFORM_COLOR: Record<string, string> = {
   LINKEDIN: "bg-blue-500",
   TWITTER: "bg-gray-700",
-  FACEBOOK: "bg-indigo-500",
-  INSTAGRAM: "bg-pink-500",
   GOOGLE_BUSINESS: "bg-green-600",
 };
 

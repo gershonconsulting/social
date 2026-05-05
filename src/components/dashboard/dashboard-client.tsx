@@ -97,8 +97,6 @@ const PLATFORM_LABELS: Record<string, string> = {
   LINKEDIN: "LinkedIn",
   TWITTER: "X / Twitter",
   GOOGLE_BUSINESS: "Google",
-  FACEBOOK: "Facebook",
-  INSTAGRAM: "Instagram",
   TIKTOK: "TikTok",
 };
 
@@ -126,6 +124,7 @@ export function DashboardClient({
   const [lastRefresh, setLastRefresh] = useState("");
   const [windowKey, setWindowKey] = useState<WindowKey>("thisMonth");
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
+  const [platformFilter, setPlatformFilter] = useState<string>("ALL");
 
   const fetchCompliance = useCallback(async () => {
     setLoading(true);
@@ -154,10 +153,15 @@ export function DashboardClient({
     fetchCompliance();
   }, [fetchCompliance]);
 
-  // Filter by category tab
-  const filtered = clients.filter((c) =>
-    categoryFilter === "ALL" ? true : (c.clientType ?? "").toUpperCase() === categoryFilter
-  );
+  // Filter by category AND platform tabs
+  const filtered = clients.filter((c) => {
+    if (categoryFilter !== "ALL" && (c.clientType ?? "").toUpperCase() !== categoryFilter) return false;
+    if (platformFilter !== "ALL") {
+      const has = c.platformConnections.some((p) => p.platform === platformFilter);
+      if (!has) return false;
+    }
+    return true;
+  });
 
   // Aggregate KPIs across the *visible* clients for the *selected window*
   const windowedTotals = filtered.reduce(
@@ -244,6 +248,37 @@ export function DashboardClient({
             >
               {t.label}
               <span className={`ml-1.5 text-xs ${active ? "text-red-100" : "text-gray-400"}`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Platform filter — shown alongside the time-window selector for fast slicing */}
+      <div className="flex flex-wrap gap-1.5 mb-6 -mt-2">
+        {[
+          { key: "ALL", label: "All platforms" },
+          { key: "LINKEDIN", label: "LinkedIn" },
+          { key: "TWITTER", label: "X / Twitter" },
+          { key: "GOOGLE_BUSINESS", label: "Google Business" },
+        ].map((p) => {
+          const count = p.key === "ALL"
+            ? clients.length
+            : clients.filter((c) => c.platformConnections.some((pc) => pc.platform === p.key)).length;
+          const active = platformFilter === p.key;
+          return (
+            <button
+              key={p.key}
+              onClick={() => setPlatformFilter(p.key)}
+              className={`px-3 py-1.5 text-xs rounded-full transition-colors ${
+                active
+                  ? "bg-gray-800 text-white"
+                  : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              {p.label}
+              <span className={`ml-1.5 ${active ? "text-gray-300" : "text-gray-400"}`}>
                 {count}
               </span>
             </button>

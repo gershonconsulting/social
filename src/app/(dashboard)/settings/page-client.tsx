@@ -111,8 +111,6 @@ export function SettingsPageClient() {
 
       <ApplyTokensToPendingButton onDone={() => setAttempt((a) => a + 1)} />
 
-      <RemoveYouTubeDataButton onDone={() => setAttempt((a) => a + 1)} />
-
       <TestAllConnectionsButton
         connectionIds={Object.values(connections).flat().map((c) => c.id)}
         onDone={() => setAttempt((a) => a + 1)}
