@@ -5,50 +5,61 @@ import { Platform } from "@prisma/client";
 
 /**
  * POST /api/admin/cleanup-platform
- * Body: { platform: "YOUTUBE" }
+ * Body: { platform: "X" } | { platforms: ["X","Y","Z"] }
  *
- * One-shot helper to remove every platformConnection (and its child posts,
- * compliance, follower-snapshots, schedules) for a given platform that we no
- * longer support. Used by Olivier to drop YouTube data wholesale after the
- * UI references were removed.
+ * Hard-deletes every platformConnection (and its child posts, compliance,
+ * follower-snapshots, schedules) for the given platform(s). Used to drop
+ * support for platforms we no longer track.
  */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const platform = body?.platform as string | undefined;
-    if (!platform) {
-      return NextResponse.json({ success: false, error: "platform is required" }, { status: 400 });
+    let targets: string[] = [];
+    if (Array.isArray(body?.platforms)) targets = body.platforms.filter((p: unknown) => typeof p === "string");
+    else if (typeof body?.platform === "string") targets = [body.platform];
+    if (targets.length === 0) {
+      return NextResponse.json({ success: false, error: "platform or platforms[] is required" }, { status: 400 });
     }
 
-    // Validate it's a real Platform enum value (avoid arbitrary string deletions)
-    const platformValue = platform as Platform;
-    if (!Object.values(Platform).includes(platformValue)) {
-      return NextResponse.json({ success: false, error: `Unknown platform: ${platform}` }, { status: 400 });
+    const validValues = Object.values(Platform);
+    const valid = targets.filter((t) => (validValues as string[]).includes(t)) as Platform[];
+    if (valid.length === 0) {
+      return NextResponse.json({ success: false, error: "no recognized platforms in request" }, { status: 400 });
     }
 
-    const conns = await prisma.platformConnection.findMany({
-      where: { platform: platformValue },
-      select: { id: true },
-    });
-    const connIds = conns.map((c) => c.id);
+    let totalConns = 0, totalPosts = 0, totalCompliance = 0, totalFollowers = 0, totalSchedules = 0;
 
-    const [posts, compliance, followers, schedules, removed] = await prisma.$transaction([
-      prisma.socialPost.deleteMany({ where: { platform: platformValue } }),
-      prisma.dailyCompliance.deleteMany({ where: { platform: platformValue } }),
-      prisma.followerSnapshot.deleteMany({ where: { platform: platformValue } }),
-      prisma.postingSchedule.deleteMany({ where: { platformConnectionId: { in: connIds } } }),
-      prisma.platformConnection.deleteMany({ where: { platform: platformValue } }),
-    ]);
+    for (const platformValue of valid) {
+      const conns = await prisma.platformConnection.findMany({
+        where: { platform: platformValue },
+        select: { id: true },
+      });
+      const connIds = conns.map((c) => c.id);
+
+      const [posts, compliance, followers, schedules, removed] = await prisma.$transaction([
+        prisma.socialPost.deleteMany({ where: { platform: platformValue } }),
+        prisma.dailyCompliance.deleteMany({ where: { platform: platformValue } }),
+        prisma.followerSnapshot.deleteMany({ where: { platform: platformValue } }),
+        prisma.postingSchedule.deleteMany({ where: { platformConnectionId: { in: connIds } } }),
+        prisma.platformConnection.deleteMany({ where: { platform: platformValue } }),
+      ]);
+
+      totalConns += removed.count;
+      totalPosts += posts.count;
+      totalCompliance += compliance.count;
+      totalFollowers += followers.count;
+      totalSchedules += schedules.count;
+    }
 
     return NextResponse.json({
       success: true,
       data: {
-        platform,
-        connectionsRemoved: removed.count,
-        socialPostsRemoved: posts.count,
-        complianceRowsRemoved: compliance.count,
-        followerSnapshotsRemoved: followers.count,
-        postingSchedulesRemoved: schedules.count,
+        platforms: valid,
+        connectionsRemoved: totalConns,
+        socialPostsRemoved: totalPosts,
+        complianceRowsRemoved: totalCompliance,
+        followerSnapshotsRemoved: totalFollowers,
+        postingSchedulesRemoved: totalSchedules,
       },
     });
   } catch (err) {

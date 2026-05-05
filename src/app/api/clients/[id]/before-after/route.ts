@@ -42,6 +42,8 @@ export async function GET(
 
     const posts = await prisma.socialPost.findMany({
       where: { clientId: id },
+      // Cap to avoid edge-runtime CPU blowups on clients with thousands of posts.
+      take: 1000,
       select: {
         platform: true,
         publishedAtUtc: true,

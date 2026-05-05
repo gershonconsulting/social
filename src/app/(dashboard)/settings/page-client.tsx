@@ -319,23 +319,27 @@ function CleanupUnsupportedPlatformsButton({ onDone }: { onDone: () => void }) {
     setRunning(true);
     setResult("");
     setError("");
-    let totalRemoved = 0;
-    const platforms = ["FACEBOOK", "INSTAGRAM", "TIKTOK", "PINTEREST", "THREADS", "MEDIUM", "REDDIT", "BLOG_RSS", "YOUTUBE"];
     try {
-      for (const p of platforms) {
-        const r = await fetch("/api/admin/cleanup-platform", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ platform: p }),
-        });
-        const ct = r.headers.get("content-type") || "";
-        if (ct.includes("application/json")) {
-          const j = await r.json();
-          if (j.success) totalRemoved += j.data?.connectionsRemoved ?? 0;
+      const r = await fetch("/api/admin/cleanup-platform", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platforms: ["FACEBOOK", "INSTAGRAM", "TIKTOK", "PINTEREST", "THREADS", "MEDIUM", "REDDIT", "BLOG_RSS", "YOUTUBE"],
+        }),
+      });
+      const ct = r.headers.get("content-type") || "";
+      if (!ct.includes("application/json")) {
+        setError(`Non-JSON HTTP ${r.status}`);
+      } else {
+        const j = await r.json();
+        if (j.success) {
+          const n = j.data?.connectionsRemoved ?? 0;
+          setResult(`Removed ${n} unsupported-platform connection${n === 1 ? "" : "s"} and all related posts/compliance/followers/schedules.`);
+          onDone();
+        } else {
+          setError(j.error || "Cleanup failed");
         }
       }
-      setResult(`Removed ${totalRemoved} unsupported-platform connection${totalRemoved === 1 ? "" : "s"} and all related data.`);
-      onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Network error");
     } finally {

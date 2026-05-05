@@ -24,7 +24,13 @@ import { ConnectionStatus } from "@prisma/client";
 export async function GET() {
   try {
     const conns = await prisma.platformConnection.findMany({
-      where: { isEnabled: true },
+      where: {
+        isEnabled: true,
+        // Don't include unsupported platforms in the health summary — they're
+        // legacy rows that will be cleaned up; counting them as 'broken'
+        // pollutes the dashboard banner.
+        platform: { in: ["LINKEDIN", "TWITTER", "GOOGLE_BUSINESS"] },
+      },
       select: {
         id: true,
         platform: true,
