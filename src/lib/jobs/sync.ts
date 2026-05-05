@@ -6,6 +6,7 @@
 import prisma from "@/lib/db";
 import { getAdapter } from "@/lib/adapters/registry";
 import { GoogleBusinessAdapter } from "@/lib/adapters/google-business";
+import { getSupportedPlatforms } from "@/lib/adapters/registry";
 import { recomputeCompliance } from "@/lib/compliance/engine";
 import { AdapterConfig } from "@/types";
 import { Platform, SyncJobType, SyncStatus, ConnectionStatus } from "@prisma/client";
@@ -353,9 +354,16 @@ export async function runBackfill(
 
   try {
     const client = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
-    const connections = await prisma.platformConnection.findMany({
+    const allConnections = await prisma.platformConnection.findMany({
       where: { clientId, isEnabled: true },
     });
+    // Only attempt platforms we have adapters for. Olivier's spec is the
+    // big-three only (LinkedIn, X / Twitter, Google Business). Anything else
+    // (Facebook, Instagram, TikTok, etc.) gets skipped — counting them as
+    // failures was inflating the FAILED ratio in /logs and confusing the user.
+    const supported = new Set(getSupportedPlatforms());
+    const connections = allConnections.filter((c) => supported.has(c.platform));
+    const skipped = allConnections.length - connections.length;
 
     const perPlatform: PlatformSyncResult[] = [];
     let succeeded = 0;
@@ -440,6 +448,9 @@ export async function runBackfill(
         itemsFailed: failed,
         errorLogJson: errors.length > 0 ? JSON.stringify(errors) : null,
         resultsJson: JSON.stringify(perPlatform),
+        notes: skipped > 0
+          ? `Backfill from ${since.toISOString()} to ${until.toISOString()} · ${skipped} unsupported-platform connection(s) skipped`
+          : `Backfill from ${since.toISOString()} to ${until.toISOString()}`,
       },
     });
 

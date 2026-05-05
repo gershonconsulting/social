@@ -11,6 +11,7 @@ import {
   Settings,
   Shield,
   LogOut,
+  ScrollText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,8 +20,9 @@ const navItems = [
   { href: "/clients", icon: Building2, label: "Companies" },
   { href: "/analytics", icon: BarChart3, label: "Analytics" },
   { href: "/reports", icon: FileText, label: "Reports" },
+  { href: "/logs", icon: ScrollText, label: "Logs" },
+  { href: "/settings", icon: Settings, label: "Settings" },
   { href: "/admin", icon: Shield, label: "Admin", adminOnly: true },
-  { href: "/settings", icon: Settings, label: "Settings", adminOnly: true },
 ];
 
 export function Sidebar() {
