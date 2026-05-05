@@ -40,16 +40,15 @@ const PLATFORMS = [
 ];
 
 function TwitterCredentialsForm({ onSaved }: { onSaved: () => void }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [bearer, setBearer] = useState("");
+  const [showBearer, setShowBearer] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   const handleSave = async () => {
-    if (!username.trim() || !password.trim()) {
-      setError("Both username and password are required");
+    if (bearer.trim().length < 20) {
+      setError("Paste the Bearer Token from your Twitter Developer Portal (typically 100+ characters).");
       return;
     }
     setSaving(true);
@@ -58,14 +57,14 @@ function TwitterCredentialsForm({ onSaved }: { onSaved: () => void }) {
       const resp = await fetch("/api/settings/twitter", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: username.trim(), password }),
+        body: JSON.stringify({ bearerToken: bearer.trim() }),
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({ error: "Failed to save" }));
-        throw new Error(data.error || "Failed to save credentials");
+        throw new Error(data.error || "Failed to save token");
       }
       setSuccess(true);
-      setPassword("");
+      setBearer("");
       onSaved();
       setTimeout(() => setSuccess(false), 3000);
     } catch (e) {
@@ -76,45 +75,43 @@ function TwitterCredentialsForm({ onSaved }: { onSaved: () => void }) {
   };
 
   return (
-    <div className="mt-3 space-y-2 max-w-sm">
-      <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Username / Email</label>
-        <input
-          type="text"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          placeholder="@youraccount"
-        />
+    <div className="mt-3 space-y-2 max-w-md">
+      <div className="text-xs text-gray-500 mb-2">
+        X / Twitter requires an app-level <span className="font-mono">Bearer Token</span> for API reads.
+        Get one from{" "}
+        <a href="https://developer.twitter.com/en/portal/projects" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+          your Twitter Developer Portal project
+        </a>{" "}
+        (Keys and tokens → Bearer Token → Generate). One token works for every X account you track.
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Password</label>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Bearer Token</label>
         <div className="relative">
           <input
-            type={showPassword ? "text" : "password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-9"
-            placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+            type={showBearer ? "text" : "password"}
+            value={bearer}
+            onChange={(e) => setBearer(e.target.value)}
+            className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-9 font-mono"
+            placeholder="AAAAAAAAAAAAAAAAAAAAA…"
           />
           <button
             type="button"
-            onClick={() => setShowPassword(!showPassword)}
+            onClick={() => setShowBearer(!showBearer)}
             className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
           >
-            {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+            {showBearer ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
         </div>
       </div>
       {error && <p className="text-xs text-red-600">{error}</p>}
-      {success && <p className="text-xs text-green-600">Credentials saved successfully!</p>}
+      {success && <p className="text-xs text-green-600">Bearer token saved across all X / Twitter connections.</p>}
       <button
         onClick={handleSave}
         disabled={saving}
         className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
       >
         {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-        {saving ? "Saving..." : "Save Credentials"}
+        {saving ? "Saving..." : "Save Bearer Token"}
       </button>
     </div>
   );

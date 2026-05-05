@@ -11,6 +11,7 @@
 
 import { PlatformAdapter, buildUnavailableResult, toLocalDateString, toLocalTime, truncateSnippet } from "./base";
 import { AdapterConfig, AdapterFetchResult, NormalizedPost } from "@/types";
+import prisma from "@/lib/db";
 
 const TWITTER_API_BASE = "https://api.twitter.com/2";
 
@@ -56,12 +57,20 @@ export class TwitterAdapter implements PlatformAdapter {
       );
     }
 
-    if (!config.externalAccountId) {
-      return buildUnavailableResult(
-        "NO_ACCOUNT_ID",
-        "No X/Twitter user ID configured.",
-        false
-      );
+    // Auto-discover user_id from @username if the connection doesn't have one yet.
+    // We try externalAccountId first (legacy), then derive a username from
+    // externalAccountName, then from the externalAccountUrl path.
+    let userId: string | null = config.externalAccountId;
+    if (!userId) {
+      const handle = await this.discoverUserId(config);
+      if (!handle) {
+        return buildUnavailableResult(
+          "NO_ACCOUNT_ID",
+          "Could not determine the X/Twitter user — set the account URL or username on this connection.",
+          false
+        );
+      }
+      userId = handle;
     }
 
     try {
@@ -77,7 +86,7 @@ export class TwitterAdapter implements PlatformAdapter {
       });
 
       const response = await fetch(
-        `${TWITTER_API_BASE}/users/${config.externalAccountId}/tweets?${params}`,
+        `${TWITTER_API_BASE}/users/${userId}/tweets?${params}`,
         { headers: this.authHeaders(config.tokenReference) }
       );
 
@@ -145,12 +154,65 @@ export class TwitterAdapter implements PlatformAdapter {
     }
   }
 
+  /**
+   * Look up an X user_id by @username using the bearer token, then persist
+   * it back to platformConnection.externalAccountId so future syncs skip the
+   * lookup.
+   */
+  private async discoverUserId(config: AdapterConfig): Promise<string | null> {
+    if (!config.tokenReference) return null;
+    // Find a username to look up
+    let username: string | null = null;
+    if (config.externalAccountId) return config.externalAccountId;
+    // Try to extract from connection URL or name via the DB
+    try {
+      const conn = await prisma.platformConnection.findUnique({
+        where: { id: config.connectionId },
+        select: { externalAccountUrl: true, externalAccountName: true },
+      });
+      if (!conn) return null;
+      if (conn.externalAccountUrl) {
+        const m = conn.externalAccountUrl.match(/(?:twitter|x)\.com\/(?:#!\/)?@?([A-Za-z0-9_]{1,15})/i);
+        if (m) username = m[1];
+      }
+      if (!username && conn.externalAccountName) {
+        const cleaned = conn.externalAccountName.replace(/^@/, "").trim();
+        if (/^[A-Za-z0-9_]{1,15}$/.test(cleaned)) username = cleaned;
+      }
+      if (!username) return null;
+
+      const r = await fetch(`${TWITTER_API_BASE}/users/by/username/${encodeURIComponent(username)}`, {
+        headers: this.authHeaders(config.tokenReference),
+      });
+      if (!r.ok) return null;
+      const j = (await r.json()) as { data?: { id?: string; username?: string } };
+      if (!j.data?.id) return null;
+
+      // Persist for next time
+      await prisma.platformConnection.update({
+        where: { id: config.connectionId },
+        data: {
+          externalAccountId: j.data.id,
+          externalAccountName: j.data.username ?? username,
+        },
+      });
+      return j.data.id;
+    } catch {
+      return null;
+    }
+  }
+
   async fetchFollowerCount(config: AdapterConfig): Promise<number | null> {
-    if (!config.tokenReference || !config.externalAccountId) return null;
+    if (!config.tokenReference) return null;
+    let userId: string | null = config.externalAccountId;
+    if (!userId) {
+      userId = await this.discoverUserId(config);
+      if (!userId) return null;
+    }
 
     try {
       const response = await fetch(
-        `${TWITTER_API_BASE}/users/${config.externalAccountId}?user.fields=public_metrics`,
+        `${TWITTER_API_BASE}/users/${userId}?user.fields=public_metrics`,
         { headers: this.authHeaders(config.tokenReference) }
       );
 
