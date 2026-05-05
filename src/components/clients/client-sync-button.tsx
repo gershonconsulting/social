@@ -71,12 +71,22 @@ export function ClientSyncButton({ clientId }: { clientId: string }) {
         setTopLevelError("Could not parse sync response.");
         return;
       }
-      if (data.success && data.data?.perPlatform) {
-        setResults(data.data.perPlatform as PlatformResult[]);
-      } else if (data.error) {
-        setTopLevelError(data.error);
+      // Show the per-platform breakdown whenever it's present, even if the
+      // overall sync failed — that's exactly when the per-platform reasons
+      // are most useful (LinkedIn 403, Twitter no-session, GMB no-location-id, ...).
+      const perPlatform = data?.data?.perPlatform as PlatformResult[] | undefined;
+      if (Array.isArray(perPlatform) && perPlatform.length > 0) {
+        setResults(perPlatform);
+        if (!data.success) {
+          // Add a leading error so the popover header is clear
+          setTopLevelError(
+            data.data?.error || data.error || "Some platforms failed — see breakdown below."
+          );
+        }
+      } else if (data.data?.error || data.error) {
+        setTopLevelError(data.data?.error || data.error);
       } else {
-        setTopLevelError("Sync did not return a per-platform breakdown.");
+        setTopLevelError("Sync did not return any per-platform results — there may be no enabled connections for this client.");
       }
     } catch (e) {
       setLoading(false);
