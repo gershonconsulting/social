@@ -42,6 +42,10 @@ export async function GET(req: NextRequest) {
   if (clientType) {
     where.clientType = clientType;
   }
+  // ?light=1 skips the per-client latestPost enrichment. Used by the /clients
+  // table view, which doesn't need post snippets and was timing out on the
+  // edge runtime when fetching all socialPost rows across every company.
+  const light = searchParams.get("light") === "1" || searchParams.get("light") === "true";
 
   try {
     const clients = await prisma.client.findMany({
@@ -64,26 +68,39 @@ export async function GET(req: NextRequest) {
       orderBy: [{ status: "asc" }, { name: "asc" }],
     });
 
-    // Fetch latest post for each client's platform connections
+    // Fetch latest post for each client's platform connections (only when not in light mode)
     const clientIds = clients.map((c) => c.id);
-    let latestPosts: any[] = [];
-    try {
-      latestPosts = clientIds.length > 0
-        ? await prisma.socialPost.findMany({
-            where: { clientId: { in: clientIds } },
-            orderBy: { publishedAtUtc: "desc" },
-            select: {
-              clientId: true,
-              platform: true,
-              platformConnectionId: true,
-              postTextSnippet: true,
-              postUrl: true,
-              publishedAtUtc: true,
-            },
-          })
-        : [];
-    } catch {
-      console.warn("GET /api/clients: socialPost query failed, continuing without latest posts");
+    let latestPosts: Array<{
+      clientId: string;
+      platform: string;
+      platformConnectionId: string;
+      postTextSnippet: string | null;
+      postUrl: string | null;
+      publishedAtUtc: Date;
+    }> = [];
+    if (!light) {
+      try {
+        latestPosts = clientIds.length > 0
+          ? await prisma.socialPost.findMany({
+              where: { clientId: { in: clientIds } },
+              orderBy: { publishedAtUtc: "desc" },
+              // Cap the result so we don't blow worker CPU/memory when
+              // there are thousands of historical posts. 500 is plenty —
+              // we only keep one per (clientId, platform) key anyway.
+              take: 500,
+              select: {
+                clientId: true,
+                platform: true,
+                platformConnectionId: true,
+                postTextSnippet: true,
+                postUrl: true,
+                publishedAtUtc: true,
+              },
+            })
+          : [];
+      } catch {
+        console.warn("GET /api/clients: socialPost query failed, continuing without latest posts");
+      }
     }
 
     const latestPostMap = new Map();

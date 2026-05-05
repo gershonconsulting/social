@@ -74,8 +74,12 @@ export function ClientsPageClient() {
     (async () => {
       let lastErr = "";
       for (let i = 0; i < 3; i++) {
+        // 12s per-attempt timeout so a hung worker can't freeze the loading state forever
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 12000);
         try {
-          const r = await fetch("/api/clients", { cache: "no-store" });
+          const r = await fetch("/api/clients?light=1", { cache: "no-store", signal: ctrl.signal });
+          clearTimeout(timer);
           if (!r.ok) {
             let body: { error?: string } | null = null;
             try { body = await r.json(); } catch {}
@@ -89,7 +93,10 @@ export function ClientsPageClient() {
             return;
           }
         } catch (e) {
-          lastErr = e instanceof Error ? e.message : "Network error";
+          clearTimeout(timer);
+          lastErr = e instanceof Error
+            ? (e.name === "AbortError" ? "Request timed out (12s)" : e.message)
+            : "Network error";
         }
         await new Promise((res) => setTimeout(res, 250 * (i + 1)));
       }
