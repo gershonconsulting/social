@@ -184,9 +184,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                     </div>
                   )}
                   <div className="flex flex-col items-end gap-1">
-                    <ConnectionBadge status={conn.connectionStatus} />
+                    <ConnectionBadge status={conn.connectionStatus} lastSyncError={conn.lastSyncError} />
                     <TestConnectionButton connectionId={conn.id} />
-                    {(conn.connectionStatus === "EXPIRED" || conn.connectionStatus === "ERROR" || conn.connectionStatus === "PENDING" || conn.connectionStatus === "DISCONNECTED") && (
+                    {(conn.connectionStatus === "EXPIRED" || conn.connectionStatus === "ERROR" || conn.connectionStatus === "PENDING" || conn.connectionStatus === "DISCONNECTED" || (conn.connectionStatus === "CONNECTED" && conn.lastSyncError)) && (
                       <Link
                         href="/settings"
                         className="text-xs text-red-600 hover:text-red-700 hover:underline font-medium"

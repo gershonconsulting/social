@@ -99,6 +99,48 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Verify the newly-issued token actually works before declaring CONNECTED.
+    // LinkedIn issues tokens even for unapproved apps and for users who are not
+    // org admins; the API then rejects every actual call with 401/403. Without
+    // this probe, the user sees a green 'Connected' status next to platforms
+    // that can never read a single post.
+    try {
+      const probe = await fetch("https://api.linkedin.com/v2/me", {
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "LinkedIn-Version": "202401",
+        },
+      });
+      if (!probe.ok) {
+        let detail = "";
+        try {
+          const body = await probe.text();
+          try {
+            const j = JSON.parse(body);
+            const msg = (j as { message?: string }).message;
+            detail = msg ?? body.slice(0, 200);
+          } catch {
+            detail = body.slice(0, 200);
+          }
+        } catch {}
+        const newStatus = probe.status === 401 ? "EXPIRED" : "ERROR";
+        const newErr = `LinkedIn token verification returned ${probe.status}${detail ? `: ${detail}` : ""}`;
+        if (connectionId) {
+          await prisma.platformConnection.update({
+            where: { id: connectionId },
+            data: { connectionStatus: newStatus, lastSyncError: newErr },
+          });
+        } else {
+          await prisma.platformConnection.updateMany({
+            where: { platform: "LINKEDIN" },
+            data: { connectionStatus: newStatus, lastSyncError: newErr },
+          });
+        }
+      }
+    } catch {
+      // Verification network error is non-fatal — leave CONNECTED, the next sync will diagnose
+    }
+
     // Redirect back to settings with success
     const redirectTo = clientId
       ? `${appUrl}/clients/${clientId}?connected=linkedin`

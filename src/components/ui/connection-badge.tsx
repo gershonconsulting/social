@@ -11,11 +11,20 @@ const CONNECTION_CONFIG = {
 
 interface ConnectionBadgeProps {
   status: string;
+  /**
+   * If a connection's stored status is CONNECTED but lastSyncError is non-null,
+   * the stored status is stale — the API rejected our last call. Treat it as
+   * EXPIRED in the badge so the user sees a red warning + reconnect CTA, not
+   * a green 'Connected' lie.
+   */
+  lastSyncError?: string | null;
   className?: string;
 }
 
-export function ConnectionBadge({ status, className }: ConnectionBadgeProps) {
-  const config = CONNECTION_CONFIG[status as keyof typeof CONNECTION_CONFIG] ?? CONNECTION_CONFIG.DISCONNECTED;
+export function ConnectionBadge({ status, lastSyncError, className }: ConnectionBadgeProps) {
+  // Override CONNECTED → EXPIRED when there's a real error on file.
+  const effective = status === "CONNECTED" && lastSyncError ? "EXPIRED" : status;
+  const config = CONNECTION_CONFIG[effective as keyof typeof CONNECTION_CONFIG] ?? CONNECTION_CONFIG.DISCONNECTED;
   const Icon = config.icon;
 
   return (
