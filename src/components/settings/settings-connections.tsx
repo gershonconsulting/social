@@ -215,7 +215,11 @@ export function SettingsConnections({
           );
 
           return (
-            <div key={platform.key} className="px-6 py-5">
+            <div
+              key={platform.key}
+              id={platform.key === "LINKEDIN" ? "linkedin-reconnect-anchor" : undefined}
+              className="px-6 py-5"
+            >
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3">
                   <div className="text-2xl mt-0.5">{platform.icon}</div>

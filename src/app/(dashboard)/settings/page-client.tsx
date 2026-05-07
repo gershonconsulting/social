@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, RefreshCw, Loader2 } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { SettingsConnections } from "@/components/settings/settings-connections";
+import { CookieCaptureHelper } from "@/components/settings/cookie-capture-helper";
 
 interface ConnRow {
   id: string;
@@ -108,6 +109,8 @@ export function SettingsPageClient() {
         title="Settings"
         subtitle="Manage your platform connections and API credentials"
       />
+
+      <CookieCaptureHelper onSaved={() => setAttempt((a) => a + 1)} />
 
       <ApplyTokensToPendingButton onDone={() => setAttempt((a) => a + 1)} />
 
