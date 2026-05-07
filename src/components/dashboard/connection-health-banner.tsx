@@ -137,6 +137,12 @@ export function ConnectionHealthBanner() {
             {running ? "Testing…" : "Re-test"}
           </button>
           <Link
+            href="/errors"
+            className="px-3 py-1.5 text-xs font-medium text-amber-900 bg-white border border-amber-300 rounded-lg hover:bg-amber-100"
+          >
+            See all errors
+          </Link>
+          <Link
             href="/settings"
             className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
           >

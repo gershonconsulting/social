@@ -12,6 +12,7 @@ import {
   Shield,
   LogOut,
   ScrollText,
+  AlertOctagon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ const navItems = [
   { href: "/clients", icon: Building2, label: "Companies" },
   { href: "/analytics", icon: BarChart3, label: "Analytics" },
   { href: "/reports", icon: FileText, label: "Reports" },
+  { href: "/errors", icon: AlertOctagon, label: "Errors" },
   { href: "/logs", icon: ScrollText, label: "Logs" },
   { href: "/settings", icon: Settings, label: "Settings" },
   { href: "/admin", icon: Shield, label: "Admin", adminOnly: true },
