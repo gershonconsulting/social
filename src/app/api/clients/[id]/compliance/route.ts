@@ -13,6 +13,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  try {
   const { id } = await params;
   const url = request.nextUrl;
   const monthParam = url.searchParams.get("month"); // YYYY-MM
@@ -131,4 +132,8 @@ export async function GET(
       calendar,
     },
   });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to compute compliance";
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
+  }
 }
