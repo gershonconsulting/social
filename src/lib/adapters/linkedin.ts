@@ -129,9 +129,21 @@ export class LinkedInAdapter implements PlatformAdapter {
         });
 
         if (response.status === 401 || response.status === 403) {
+          // LinkedIn typically returns a structured JSON error body explaining
+          // exactly what's wrong (missing scope, app not approved for endpoint,
+          // user isn't an org admin, etc.). Surface it so /logs shows the
+          // actual reason instead of the generic 'permissions insufficient.'
+          const body = await response.text().catch(() => "");
+          let detail = body.slice(0, 220);
+          try {
+            const j = JSON.parse(body);
+            const msg = (j as { message?: string }).message;
+            const code = (j as { serviceErrorCode?: number }).serviceErrorCode;
+            if (msg) detail = msg + (code != null ? ` (serviceErrorCode ${code})` : "");
+          } catch {}
           return buildUnavailableResult(
             response.status === 401 ? "TOKEN_EXPIRED" : "PERMISSION_DENIED",
-            `LinkedIn API returned ${response.status}. Token may be expired or permissions insufficient.`,
+            `LinkedIn API returned ${response.status}: ${detail}`,
             false
           );
         }
