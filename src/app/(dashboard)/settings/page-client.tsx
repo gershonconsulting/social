@@ -195,27 +195,53 @@ function TestAllConnectionsButton({
     if (connectionIds.length === 0) return;
     setRunning(true);
     setResults({});
+
     const next: typeof results = {};
-    for (const id of connectionIds) {
+    const queue = [...connectionIds];
+    const concurrency = 4; // 4 parallel probes — fast without hammering Cloudflare
+    const probeOne = async (id: string) => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 10000); // 10s per probe — fail fast on hangs
       try {
-        const r = await fetch(`/api/platforms/${id}/test`, { method: "POST" });
+        const r = await fetch(`/api/platforms/${id}/test`, { method: "POST", signal: ctrl.signal });
+        clearTimeout(timer);
         const ct = r.headers.get("content-type") || "";
         if (!ct.includes("application/json")) {
           next[id] = { ok: false, error: `Non-JSON HTTP ${r.status}` };
-          continue;
+        } else {
+          const j = await r.json();
+          next[id] = {
+            ok: !!j.success,
+            status: j?.data?.status,
+            error: j?.data?.error || j?.error,
+          };
         }
-        const j = await r.json();
-        next[id] = {
-          ok: !!j.success,
-          status: j?.data?.status,
-          error: j?.data?.error || j?.error,
-        };
       } catch (e) {
-        next[id] = { ok: false, error: e instanceof Error ? e.message : "Network error" };
+        clearTimeout(timer);
+        next[id] = {
+          ok: false,
+          error: e instanceof Error
+            ? (e.name === "AbortError" ? "Probe timed out (10s)" : e.message)
+            : "Network error",
+        };
       }
-      // Update incrementally so the user sees progress
+      // Trigger a re-render so the progress count updates
       setResults({ ...next });
+    };
+
+    // Worker pool: each worker pulls from the queue until empty
+    const workers: Promise<void>[] = [];
+    for (let w = 0; w < Math.min(concurrency, queue.length); w++) {
+      workers.push((async () => {
+        while (queue.length > 0) {
+          const id = queue.shift();
+          if (!id) break;
+          await probeOne(id);
+        }
+      })());
     }
+    await Promise.all(workers);
+
     setRunning(false);
     onDone();
   }
