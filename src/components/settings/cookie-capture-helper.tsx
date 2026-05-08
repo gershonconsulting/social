@@ -1,65 +1,58 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Linkedin, ArrowRight, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Loader2, Linkedin } from "lucide-react";
 
-/**
- * Cookie-capture helper.
- *
- * Olivier's request: 'I always have LinkedIn and Twitter opened in the same
- * browser. Looking for the cookies is a pain for me. We should have a section
- * in the settings to collect the cookies for both.'
- *
- * Approach:
- *  1. Show a bookmarklet that, when clicked while on x.com / twitter.com,
- *     reads document.cookie, extracts auth_token + ct0, and opens our
- *     /settings page with the cookies in the URL #fragment.
- *  2. This component listens for that fragment on mount and POSTs the
- *     captured cookies to /api/settings/twitter automatically.
- *  3. Fragment is cleared from the URL right after — never lands in server
- *     logs (fragments don't get sent to servers) but we strip it anyway
- *     so it doesn't sit in browser history.
- *
- * LinkedIn note: LinkedIn's official API is OAuth-only (cookies don't grant
- * access to api.linkedin.com), so for LinkedIn the right action is the
- * Reconnect button rather than cookie capture. Calling that out in the UI.
- */
-
-const BOOKMARKLET = `javascript:(()=>{const c=document.cookie.split(';').reduce((m,p)=>{const[k,...v]=p.trim().split('=');m[k]=v.join('=');return m;},{});const isX=location.hostname.includes('x.com')||location.hostname.includes('twitter.com');if(!isX){alert('Run this from x.com (or twitter.com) while signed in.');return;}if(!c.auth_token||!c.ct0){alert('Could not find auth_token or ct0 cookies. Make sure you are signed in.');return;}const payload={authToken:c.auth_token,ct0:c.ct0};const url='https://social.gershoncrm.com/settings#twitter-cookies='+encodeURIComponent(JSON.stringify(payload));window.open(url,'_blank');})();`;
+const BOOKMARKLET = `javascript:(()=>{const c=document.cookie.split(';').reduce((m,p)=>{const[k,...v]=p.trim().split('=');m[k]=v.join('=');return m;},{});const host=location.hostname;let payload=null,kind='';if(host.includes('x.com')||host.includes('twitter.com')){if(c.auth_token&&c.ct0){payload={authToken:c.auth_token,ct0:c.ct0};kind='twitter-cookies';}else{alert('Could not find auth_token + ct0 cookies. Make sure you are signed in to x.com.');return;}}else if(host.includes('linkedin.com')){if(c.li_at&&c.JSESSIONID){payload={li_at:c.li_at,JSESSIONID:c.JSESSIONID};kind='linkedin-cookies';}else{alert('Could not find li_at + JSESSIONID cookies. Make sure you are signed in to linkedin.com.');return;}}else{alert('Run this bookmarklet from x.com or linkedin.com while signed in.');return;}const url='https://social.gershoncrm.com/settings#'+kind+'='+encodeURIComponent(JSON.stringify(payload));window.open(url,'_blank');})();`;
 
 export function CookieCaptureHelper({ onSaved }: { onSaved: () => void }) {
   const [autoSave, setAutoSave] = useState<{ status: "idle" | "saving" | "ok" | "fail"; message: string }>({ status: "idle", message: "" });
   const [showCopied, setShowCopied] = useState(false);
 
-  // On mount: detect a #twitter-cookies=... fragment and auto-save
   useEffect(() => {
     if (typeof window === "undefined") return;
     const hash = window.location.hash;
-    const m = hash.match(/^#twitter-cookies=(.+)$/);
-    if (!m) return;
-    let payload: { authToken?: string; ct0?: string } | null = null;
-    try {
-      payload = JSON.parse(decodeURIComponent(m[1]));
-    } catch {
-      setAutoSave({ status: "fail", message: "Could not parse the captured cookies. Re-run the bookmarklet." });
-      return;
+
+    let endpoint: string | null = null;
+    let payload: Record<string, string> | null = null;
+    let label = "";
+
+    let m = hash.match(/^#twitter-cookies=(.+)$/);
+    if (m) {
+      endpoint = "/api/settings/twitter";
+      label = "X / Twitter";
+      try {
+        const p = JSON.parse(decodeURIComponent(m[1])) as { authToken?: string; ct0?: string };
+        if (p?.authToken && p?.ct0) payload = { authToken: p.authToken, ct0: p.ct0 };
+      } catch {}
     }
-    if (!payload?.authToken || !payload?.ct0) {
-      setAutoSave({ status: "fail", message: "auth_token or ct0 was missing. Make sure you're signed into x.com." });
-      return;
+
+    if (!payload) {
+      m = hash.match(/^#linkedin-cookies=(.+)$/);
+      if (m) {
+        endpoint = "/api/settings/linkedin";
+        label = "LinkedIn";
+        try {
+          const p = JSON.parse(decodeURIComponent(m[1])) as { li_at?: string; JSESSIONID?: string };
+          if (p?.li_at && p?.JSESSIONID) payload = { li_at: p.li_at, JSESSIONID: p.JSESSIONID };
+        } catch {}
+      }
     }
-    // Strip the fragment from the URL immediately — don't keep it sitting in browser history
+
+    if (!endpoint || !payload) return;
+
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    setAutoSave({ status: "saving", message: "Saving X / Twitter cookies…" });
-    fetch("/api/settings/twitter", {
+    setAutoSave({ status: "saving", message: `Saving ${label} cookies…` });
+
+    fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ authToken: payload.authToken, ct0: payload.ct0 }),
+      body: JSON.stringify(payload),
     })
       .then(async (r) => {
         const j = await r.json().catch(() => ({}));
         if (r.ok && j.success) {
-          setAutoSave({ status: "ok", message: j.message || "X / Twitter cookies saved across all connections." });
+          setAutoSave({ status: "ok", message: j.message || `${label} cookies saved across all connections.` });
           onSaved();
         } else {
           setAutoSave({ status: "fail", message: j.error || `HTTP ${r.status}` });
@@ -75,9 +68,7 @@ export function CookieCaptureHelper({ onSaved }: { onSaved: () => void }) {
       await navigator.clipboard.writeText(BOOKMARKLET);
       setShowCopied(true);
       setTimeout(() => setShowCopied(false), 2200);
-    } catch {
-      // ignore — the drag link is still the primary path
-    }
+    } catch {}
   }
 
   return (
@@ -85,8 +76,9 @@ export function CookieCaptureHelper({ onSaved }: { onSaved: () => void }) {
       <div className="px-6 py-4 border-b border-gray-100">
         <h2 className="text-sm font-semibold text-gray-900">One-click cookie capture</h2>
         <p className="text-xs text-gray-500 mt-0.5">
-          Drag the bookmarklet to your bookmarks bar, then click it once while you're signed
-          into x.com. It captures auth_token + ct0 and opens this page with them — no DevTools spelunking.
+          Drag the same bookmarklet to your bookmarks bar — it works on both
+          x.com and linkedin.com. Click it from either tab while signed in,
+          and we capture the right cookies and save them automatically.
         </p>
       </div>
 
@@ -107,25 +99,30 @@ export function CookieCaptureHelper({ onSaved }: { onSaved: () => void }) {
         </div>
       )}
 
-      <div className="px-6 py-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* X / Twitter */}
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col gap-3">
+      <div className="px-6 py-4">
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col gap-3 max-w-md">
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center justify-center w-6 h-6 bg-black text-white rounded text-xs font-bold">𝕏</span>
-            <span className="text-sm font-semibold text-gray-900">X / Twitter</span>
+            <span className="text-gray-400">+</span>
+            <span className="inline-flex items-center justify-center w-6 h-6 bg-[#0A66C2] text-white rounded">
+              <Linkedin size={14} fill="currentColor" />
+            </span>
+            <span className="text-sm font-semibold text-gray-900">X / Twitter & LinkedIn</span>
           </div>
           <p className="text-xs text-gray-600">
-            Drag this link to your bookmarks bar, then click it from any x.com tab while logged in.
+            Drag this link to your bookmarks bar. Click it from any signed-in
+            x.com or linkedin.com tab — we capture the right cookies based on
+            the page domain and save them to the matching connections.
           </p>
           <a
             href={BOOKMARKLET}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             onClick={(e: any) => e.preventDefault()}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-black rounded-lg hover:bg-gray-800 cursor-grab active:cursor-grabbing select-none"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-700 cursor-grab active:cursor-grabbing select-none"
             draggable
-            title="Drag this to your bookmarks bar — don't click here, your browser will refuse to run it from this page"
+            title="Drag this to your bookmarks bar — your browser refuses javascript: links from a click"
           >
-            ⤴ Capture X cookies
+            ⤴ Capture cookies (X &amp; LinkedIn)
           </a>
           <button
             onClick={copyBookmarklet}
@@ -134,40 +131,18 @@ export function CookieCaptureHelper({ onSaved }: { onSaved: () => void }) {
             {showCopied ? "Copied!" : "Or copy the JavaScript and paste into a manual bookmark"}
           </button>
         </div>
-
-        {/* LinkedIn */}
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center justify-center w-6 h-6 bg-[#0A66C2] text-white rounded">
-              <Linkedin size={14} fill="currentColor" />
-            </span>
-            <span className="text-sm font-semibold text-gray-900">LinkedIn</span>
-          </div>
-          <p className="text-xs text-gray-600">
-            LinkedIn's API only accepts OAuth tokens — cookies don't grant API access. Use the
-            Reconnect button on the LinkedIn card below for a one-click OAuth refresh that
-            re-distributes the new token across every LinkedIn connection.
-          </p>
-          <a
-            href="#linkedin-reconnect"
-            onClick={(e) => {
-              e.preventDefault();
-              const el = document.getElementById("linkedin-reconnect-anchor");
-              if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-            }}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-[#0A66C2] rounded-lg hover:bg-[#0852a0]"
-          >
-            Jump to Reconnect button <ArrowRight size={14} />
-          </a>
-        </div>
       </div>
 
       <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 text-[11px] text-gray-500 leading-relaxed">
-        <strong className="text-gray-700">How the bookmarklet works:</strong> when clicked from
-        an x.com tab, it reads your local <span className="font-mono">auth_token</span> + <span className="font-mono">ct0</span> cookies (same ones your browser
-        sends to twitter.com), then opens this Settings page with the values in a URL fragment
-        (which is never sent to any server). This page then auto-saves them. Cookies stay on
-        your machine until they're saved to our DB; we never see your password.
+        <strong className="text-gray-700">How it works:</strong> the bookmarklet
+        reads <span className="font-mono">document.cookie</span> on the page
+        you're viewing — that's how your browser already authenticates to
+        x.com and linkedin.com. It picks out the right cookies (auth_token + ct0
+        for X; li_at + JSESSIONID for LinkedIn) and opens this Settings page
+        with the values in a URL fragment (which is never sent to any server).
+        This page reads the fragment via JavaScript and immediately POSTs over
+        HTTPS to save them. Cookies stay on your machine until they're saved
+        to our DB; we never see your password.
       </div>
     </div>
   );
