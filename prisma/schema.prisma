@@ -330,6 +330,16 @@ model SyncJob {
 
 // ─── AuditLog ─────────────────────────────────────────────────────────────────
 
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@map("settings")
+}
+
 model AuditLog {
   id           String      @id @default(cuid())
   actorUserId  String?
