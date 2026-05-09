@@ -26,8 +26,8 @@ export async function GET(req: NextRequest) {
       const body = await r.text().catch(() => "");
       return NextResponse.json({ success: false, error: `PB fetch returned ${r.status}: ${body.slice(0, 200)}` }, { status: 502 });
     }
-    const j = (await r.json()) as { data?: { lastEndType?: string; orgS3Folder?: string; s3Folder?: string } };
-    const data = j.data ?? {};
+    const j = (await r.json()) as { lastEndType?: string; orgS3Folder?: string; s3Folder?: string; data?: { lastEndType?: string; orgS3Folder?: string; s3Folder?: string } };
+    const data = (j.data ?? j) as { lastEndType?: string; orgS3Folder?: string; s3Folder?: string };
     const status = data.lastEndType ?? null;
     const resultUrl =
       data.orgS3Folder && data.s3Folder

@@ -95,13 +95,17 @@ export async function waitForPhantomFinish(
         headers: { "x-phantombuster-key": apiKey },
       });
       if (r.ok) {
-        const j = (await r.json()) as { data?: { lastEndType?: string; s3Folder?: string; orgS3Folder?: string } };
-        last = j.data ?? j;
-        const status = (j.data?.lastEndType ?? null) as string | null;
+        // PB /agents/fetch returns the agent fields at the ROOT of the JSON
+        // (not nested in `data`). Some endpoints do wrap in `data`, so we
+        // accept both shapes for safety.
+        const j = (await r.json()) as { lastEndType?: string; s3Folder?: string; orgS3Folder?: string; data?: { lastEndType?: string; s3Folder?: string; orgS3Folder?: string } };
+        const flat = (j.data ?? j) as { lastEndType?: string; s3Folder?: string; orgS3Folder?: string };
+        last = flat;
+        const status = (flat.lastEndType ?? null) as string | null;
         if (status && status !== "running") {
           // Build the canonical result-object URL for this agent run
-          const orgFolder = j.data?.orgS3Folder;
-          const s3Folder = j.data?.s3Folder;
+          const orgFolder = flat.orgS3Folder;
+          const s3Folder = flat.s3Folder;
           const resultObjectUrl = orgFolder && s3Folder
             ? `https://phantombuster.s3.amazonaws.com/${orgFolder}/${s3Folder}/result.csv`
             : null;
