@@ -9,6 +9,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import Link from "next/link";
 import { ExternalLink, Calendar, Plug } from "lucide-react";
 import { ClientSyncButton } from "@/components/clients/client-sync-button";
+import { PhantombusterSyncButton } from "@/components/clients/phantombuster-sync-button";
 import { ClientNameEditor } from "@/components/clients/client-name-editor";
 import { ClientCategoryEditor } from "@/components/clients/client-category-editor";
 import { ComplianceDashboard } from "@/components/clients/compliance-dashboard";
@@ -98,6 +99,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 {lastSync && <span> · Last sync {formatRelative(lastSync.toISOString())}</span>}
               </div>
             )}
+            <PhantombusterSyncButton clientId={client.id} />
             <ClientSyncButton clientId={client.id} />
           </div>
         </div>
