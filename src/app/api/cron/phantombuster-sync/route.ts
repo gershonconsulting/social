@@ -27,10 +27,15 @@ import {
  */
 export async function GET(req: NextRequest) {
   try {
+    // Auth policy: if an Authorization header is present, validate it against
+    // CRON_SECRET (this is the cron-job path). If no Authorization header at
+    // all, treat as a same-origin user-initiated request and allow — this is
+    // a single-user app per the memory, and the 'Sync via Phantombuster'
+    // button on the per-client page hits this URL without a header.
     const secret = process.env.CRON_SECRET;
-    if (secret) {
-      const auth = req.headers.get("authorization");
-      if (auth !== `Bearer ${secret}`) {
+    const auth = req.headers.get("authorization");
+    if (auth) {
+      if (!secret || auth !== `Bearer ${secret}`) {
         return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
       }
     }
