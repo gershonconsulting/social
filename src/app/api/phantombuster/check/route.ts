@@ -26,12 +26,12 @@ export async function GET(req: NextRequest) {
       const body = await r.text().catch(() => "");
       return NextResponse.json({ success: false, error: `PB fetch returned ${r.status}: ${body.slice(0, 200)}` }, { status: 502 });
     }
-    const j = (await r.json()) as { data?: { lastEndStatus?: string; userAwsFolder?: string; s3Folder?: string } };
+    const j = (await r.json()) as { data?: { lastEndType?: string; orgS3Folder?: string; s3Folder?: string } };
     const data = j.data ?? {};
-    const status = data.lastEndStatus ?? null;
+    const status = data.lastEndType ?? null;
     const resultUrl =
-      data.userAwsFolder && data.s3Folder
-        ? `https://phantombuster.s3.amazonaws.com/${data.userAwsFolder}/${data.s3Folder}/result.csv`
+      data.orgS3Folder && data.s3Folder
+        ? `https://phantombuster.s3.amazonaws.com/${data.orgS3Folder}/${data.s3Folder}/result.csv`
         : null;
     return NextResponse.json({ success: true, data: { phantomId, status, resultUrl } });
   } catch (err) {

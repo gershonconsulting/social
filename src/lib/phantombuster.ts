@@ -95,15 +95,15 @@ export async function waitForPhantomFinish(
         headers: { "x-phantombuster-key": apiKey },
       });
       if (r.ok) {
-        const j = (await r.json()) as { data?: { lastEndStatus?: string; s3Folder?: string; userAwsFolder?: string } };
+        const j = (await r.json()) as { data?: { lastEndType?: string; s3Folder?: string; orgS3Folder?: string } };
         last = j.data ?? j;
-        const status = (j.data?.lastEndStatus ?? null) as string | null;
+        const status = (j.data?.lastEndType ?? null) as string | null;
         if (status && status !== "running") {
           // Build the canonical result-object URL for this agent run
-          const userFolder = j.data?.userAwsFolder;
+          const orgFolder = j.data?.orgS3Folder;
           const s3Folder = j.data?.s3Folder;
-          const resultObjectUrl = userFolder && s3Folder
-            ? `https://phantombuster.s3.amazonaws.com/${userFolder}/${s3Folder}/result.csv`
+          const resultObjectUrl = orgFolder && s3Folder
+            ? `https://phantombuster.s3.amazonaws.com/${orgFolder}/${s3Folder}/result.csv`
             : null;
           return { lastEndStatus: status, resultObjectUrl, rawAgent: last };
         }

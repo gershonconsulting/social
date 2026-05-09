@@ -38,7 +38,7 @@ export function PhantombusterSyncButton({ clientId }: { clientId?: string }) {
           if (j.success) {
             const status = j.data?.status as string | null;
             setPhase(p.platform, { status });
-            if (status && status !== "running") {
+            if (status) {
               return { status, resultUrl: j.data?.resultUrl as string | null };
             }
           }
@@ -94,7 +94,7 @@ export function PhantombusterSyncButton({ clientId }: { clientId?: string }) {
             containerId: l.containerId,
             phase: "running",
           });
-          if (status !== "success") {
+          if (status !== "finished") {
             setPhase(l.platform, { phase: "fail", status, message: `Phantom finished with status: ${status}` });
             return;
           }
