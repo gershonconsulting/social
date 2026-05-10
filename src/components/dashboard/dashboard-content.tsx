@@ -80,6 +80,22 @@ async function getDashboardData() {
       if (ds.startsWith(lastMonth)) bump(buckets.lastMonth);
       if (d >= lastWeekStart && d <= today) bump(buckets.lastWeek);
     }
+    // Posting cadence — for the "is this company posting regularly?" view
+    // 1. lastPostDateLocal: most recent post across all platforms (or null if never)
+    // 2. posts30d: number of posts in the last 30 days
+    let lastPostDateLocal: string | null = null;
+    const today30 = new Date(now);
+    today30.setHours(0, 0, 0, 0);
+    const window30Start = new Date(today30);
+    window30Start.setDate(today30.getDate() - 30);
+    let posts30d = 0;
+    for (const post of client.socialPosts) {
+      if (!lastPostDateLocal || post.publishedDateLocal > lastPostDateLocal) {
+        lastPostDateLocal = post.publishedDateLocal;
+      }
+      const d = new Date(post.publishedDateLocal + "T00:00:00Z");
+      if (d >= window30Start && d <= today30) posts30d++;
+    }
     const totalPosts = buckets.allTime.posts;
     const postsThisMonth = buckets.thisMonth.posts;
     const postsLastMonth = buckets.lastMonth.posts;
@@ -136,6 +152,8 @@ async function getDashboardData() {
       totalShares,
       totalViews,
       buckets,
+      lastPostDateLocal,
+      posts30d,
     };
   });
 }

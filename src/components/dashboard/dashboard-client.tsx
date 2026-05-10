@@ -49,7 +49,9 @@ interface DashboardClientData {
     platform: string;
     connectionStatus: string;
     lastSyncAt: string | null;
-  }>;
+    lastPostDateLocal: string | null;
+  posts30d: number;
+}>;
   postCounts: Record<string, number>;
   totalPosts: number;
   postsThisMonth: number;
@@ -317,6 +319,107 @@ export function DashboardClient({
           <div className="text-xs text-gray-400 mt-1">likes + comments + shares</div>
         </div>
       </div>
+
+      {/* Posting Cadence — "is this company posting regularly?" view.
+          Sorted by silence (longest first), color-coded:
+          red = 30+ days quiet (or never), amber = 15-30 days, green = ≤14 days. */}
+      {filtered.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-8">
+          <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+            <div>
+              <div className="text-sm font-semibold text-gray-900">Posting Cadence</div>
+              <div className="text-xs text-gray-500">Sorted by who&apos;s gone silent the longest. Red = 30+ days, amber = 15&ndash;30 days, green = active.</div>
+            </div>
+            {(() => {
+              const today0 = new Date(); today0.setHours(0,0,0,0);
+              const days = (d: string | null) => {
+                if (!d) return Number.POSITIVE_INFINITY;
+                return Math.floor((today0.getTime() - new Date(d + "T00:00:00Z").getTime()) / 86400000);
+              };
+              const silent = filtered.filter((c) => days(c.lastPostDateLocal) > 30).length;
+              const quiet = filtered.filter((c) => { const d = days(c.lastPostDateLocal); return d > 14 && d <= 30; }).length;
+              const active = filtered.filter((c) => days(c.lastPostDateLocal) <= 14).length;
+              return (
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500"></span><span className="font-medium text-gray-700">{silent}</span> silent</span>
+                  <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500"></span><span className="font-medium text-gray-700">{quiet}</span> quiet</span>
+                  <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500"></span><span className="font-medium text-gray-700">{active}</span> active</span>
+                </div>
+              );
+            })()}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="text-left px-5 py-2 font-medium text-gray-500 text-xs">Company</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-500 text-xs">Status</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-500 text-xs">Last post</th>
+                  <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs">Days silent</th>
+                  <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs">Posts (30d)</th>
+                  <th className="text-right px-3 py-2 font-medium text-gray-500 text-xs">Posts/wk</th>
+                  <th className="text-right px-5 py-2 font-medium text-gray-500 text-xs"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {[...filtered]
+                  .map((c) => {
+                    const today0 = new Date(); today0.setHours(0,0,0,0);
+                    const daysSince = c.lastPostDateLocal
+                      ? Math.floor((today0.getTime() - new Date(c.lastPostDateLocal + "T00:00:00Z").getTime()) / 86400000)
+                      : null;
+                    return { c, daysSince };
+                  })
+                  .sort((a, b) => (b.daysSince ?? 1e9) - (a.daysSince ?? 1e9))
+                  .map(({ c, daysSince }) => {
+                    let color = "bg-gray-100 text-gray-500";
+                    let label = "No posts ever";
+                    if (daysSince !== null) {
+                      if (daysSince > 30) {
+                        color = "bg-red-50 text-red-700";
+                        label = `${daysSince} days silent`;
+                      } else if (daysSince > 14) {
+                        color = "bg-amber-50 text-amber-700";
+                        label = `${daysSince} days quiet`;
+                      } else {
+                        color = "bg-green-50 text-green-700";
+                        label = daysSince === 0 ? "Today" : daysSince === 1 ? "Yesterday" : `${daysSince} days ago`;
+                      }
+                    } else {
+                      color = "bg-red-50 text-red-700";
+                    }
+                    const postsPerWeek = (c.posts30d / 30 * 7).toFixed(1);
+                    return (
+                      <tr key={c.id} className="hover:bg-gray-50">
+                        <td className="px-5 py-2.5">
+                          <Link href={`/clients/${c.id}`} className="font-medium text-gray-900 hover:text-red-600">
+                            {c.name}
+                          </Link>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${color}`}>{label}</span>
+                        </td>
+                        <td className="px-3 py-2.5 text-xs font-mono text-gray-600 whitespace-nowrap">
+                          {c.lastPostDateLocal ?? <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-xs font-medium text-gray-700 tabular-nums">
+                          {daysSince !== null ? daysSince : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-xs font-medium text-gray-700 tabular-nums">{c.posts30d}</td>
+                        <td className="px-3 py-2.5 text-right text-xs text-gray-500 tabular-nums">{postsPerWeek}</td>
+                        <td className="px-5 py-2.5 text-right">
+                          <Link href={`/clients/${c.id}`} className="text-xs text-blue-600 hover:underline">
+                            Open <ArrowRight size={11} className="inline" />
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Company Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
