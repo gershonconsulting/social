@@ -49,9 +49,7 @@ interface DashboardClientData {
     platform: string;
     connectionStatus: string;
     lastSyncAt: string | null;
-    lastPostDateLocal: string | null;
-  posts30d: number;
-}>;
+  }>;
   postCounts: Record<string, number>;
   totalPosts: number;
   postsThisMonth: number;
@@ -64,6 +62,8 @@ interface DashboardClientData {
   totalShares: number;
   totalViews: number;
   buckets: Record<WindowKey, Bucket>;
+  lastPostDateLocal: string | null;
+  posts30d: number;
 }
 
 interface ComplianceData {
