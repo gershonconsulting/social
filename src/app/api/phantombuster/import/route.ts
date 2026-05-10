@@ -67,7 +67,12 @@ export async function POST(req: NextRequest) {
       return null;
     };
 
-    let postsUpserted = 0;
+    // Build the list of upsert ops first, then run them in a single $transaction.
+    // De-dupe per-connection updates so we hit each connection at most once
+    // (saves DB round-trips — important for Cloudflare Workers' time budget).
+    type Upsert = Parameters<typeof prisma.socialPost.upsert>[0];
+    const ops: Upsert[] = [];
+    const touchedConnIds = new Set<string>();
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       if (cText < 0 || row.length <= cText) continue;
@@ -84,7 +89,7 @@ export async function POST(req: NextRequest) {
       const publishedAtUtc = dateStr ? new Date(dateStr) : new Date();
       if (Number.isNaN(publishedAtUtc.getTime())) continue;
       const publishedDateLocal = publishedAtUtc.toISOString().slice(0, 10);
-      await prisma.socialPost.upsert({
+      ops.push({
         where: {
           clientId_platform_externalPostId: {
             clientId: conn.clientId,
@@ -116,10 +121,17 @@ export async function POST(req: NextRequest) {
           shareCount: parseInt(row[cShares] || "0", 10) || 0,
         },
       });
-      postsUpserted++;
+      touchedConnIds.add(conn.id);
+    }
+    let postsUpserted = 0;
+    if (ops.length > 0) {
+      await prisma.$transaction(ops.map((o) => prisma.socialPost.upsert(o)));
+      postsUpserted = ops.length;
+    }
+    if (touchedConnIds.size > 0) {
       try {
-        await prisma.platformConnection.update({
-          where: { id: conn.id },
+        await prisma.platformConnection.updateMany({
+          where: { id: { in: Array.from(touchedConnIds) } },
           data: { connectionStatus: "CONNECTED", lastSyncError: null, lastSyncAt: new Date() },
         });
       } catch {}

@@ -103,14 +103,25 @@ export function PhantombusterSyncButton({ clientId }: { clientId?: string }) {
             return;
           }
           setPhase(l.platform, { phase: "importing", message: "Downloading + importing CSV…" });
-          const ir = await fetch("/api/phantombuster/import", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ platform: l.platform, phantomId: l.phantomId, resultUrl }),
-          });
-          const ict = ir.headers.get("content-type") || "";
-          if (!ict.includes("application/json")) {
-            setPhase(l.platform, { phase: "fail", message: `Import returned non-JSON (HTTP ${ir.status})` });
+          // Cloudflare workers occasionally cold-fail with 1101 (HTML body);
+          // retry up to 2× with a 3s backoff before giving up.
+          let ir: Response | null = null;
+          let ict = "";
+          for (let attempt = 0; attempt < 3; attempt++) {
+            ir = await fetch("/api/phantombuster/import", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ platform: l.platform, phantomId: l.phantomId, resultUrl }),
+            });
+            ict = ir.headers.get("content-type") || "";
+            if (ict.includes("application/json")) break;
+            if (attempt < 2) {
+              setPhase(l.platform, { phase: "importing", message: `Worker cold-fail, retrying (${attempt + 2}/3)…` });
+              await new Promise((r) => setTimeout(r, 3000));
+            }
+          }
+          if (!ir || !ict.includes("application/json")) {
+            setPhase(l.platform, { phase: "fail", message: `Import returned non-JSON (HTTP ${ir?.status ?? "?"}) after 3 attempts` });
             return;
           }
           const ij = await ir.json();
