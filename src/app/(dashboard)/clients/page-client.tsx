@@ -244,8 +244,13 @@ export function ClientsPageClient() {
                           const tw = linkFor("TWITTER");
                           const gb = linkFor("GOOGLE_BUSINESS");
                           if (!li && !tw && !gb) return null;
+                          // Show the full URL text alongside each icon — Olivier wants the
+                          // actual URL visible without hovering, so each platform gets its
+                          // own line with the icon + clickable URL.
+                          const stripScheme = (u: string) =>
+                            u.replace(/^https?:\/\/(?:www\.)?/, "").replace(/\/$/, "");
                           return (
-                            <div className="mt-1.5 flex items-center gap-1.5">
+                            <div className="mt-1.5 flex flex-col gap-0.5 text-[11px]">
                               {li && (
                                 <a
                                   href={li}
@@ -253,9 +258,10 @@ export function ClientsPageClient() {
                                   rel="noopener noreferrer"
                                   onClick={(e) => e.stopPropagation()}
                                   title={li}
-                                  className="inline-flex items-center justify-center w-6 h-6 rounded text-[#0A66C2] hover:bg-[#0A66C2]/10"
+                                  className="inline-flex items-center gap-1.5 text-[#0A66C2] hover:underline truncate max-w-[280px]"
                                 >
-                                  <Linkedin size={14} />
+                                  <Linkedin size={12} className="shrink-0" />
+                                  <span className="truncate">{stripScheme(li)}</span>
                                 </a>
                               )}
                               {tw && (
@@ -265,9 +271,10 @@ export function ClientsPageClient() {
                                   rel="noopener noreferrer"
                                   onClick={(e) => e.stopPropagation()}
                                   title={tw}
-                                  className="inline-flex items-center justify-center w-6 h-6 rounded text-black hover:bg-gray-100"
+                                  className="inline-flex items-center gap-1.5 text-gray-800 hover:underline truncate max-w-[280px]"
                                 >
-                                  <Twitter size={14} />
+                                  <Twitter size={12} className="shrink-0" />
+                                  <span className="truncate">{stripScheme(tw)}</span>
                                 </a>
                               )}
                               {gb && (
@@ -277,9 +284,10 @@ export function ClientsPageClient() {
                                   rel="noopener noreferrer"
                                   onClick={(e) => e.stopPropagation()}
                                   title={gb}
-                                  className="inline-flex items-center justify-center w-6 h-6 rounded text-[#34A853] hover:bg-[#34A853]/10"
+                                  className="inline-flex items-center gap-1.5 text-[#34A853] hover:underline truncate max-w-[280px]"
                                 >
-                                  <MapPin size={14} />
+                                  <MapPin size={12} className="shrink-0" />
+                                  <span className="truncate">{stripScheme(gb)}</span>
                                 </a>
                               )}
                             </div>
