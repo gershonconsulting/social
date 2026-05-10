@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { Plus, AlertTriangle, RefreshCw, Loader2 } from "lucide-react";
+import { Plus, AlertTriangle, RefreshCw, Loader2, Linkedin, Twitter, MapPin } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { ConnectionBadge } from "@/components/ui/connection-badge";
 import { formatDate, formatRelative } from "@/lib/utils";
@@ -13,6 +13,7 @@ interface PlatformConn {
   connectionStatus: string;
   lastSyncAt: string | null;
   isMandatory?: boolean;
+  externalAccountUrl?: string | null;
 }
 
 interface Client {
@@ -233,6 +234,57 @@ export function ClientsPageClient() {
                           {client.name}
                         </Link>
                         <div className="text-xs text-gray-400 mt-0.5">{client.slug}</div>
+                        {(() => {
+                          // Show clickable platform links (LinkedIn / X / Google Business) under the name
+                          const linkFor = (platform: string) =>
+                            client.platformConnections.find(
+                              (c) => c.platform === platform && c.externalAccountUrl,
+                            )?.externalAccountUrl ?? null;
+                          const li = linkFor("LINKEDIN");
+                          const tw = linkFor("TWITTER");
+                          const gb = linkFor("GOOGLE_BUSINESS");
+                          if (!li && !tw && !gb) return null;
+                          return (
+                            <div className="mt-1.5 flex items-center gap-1.5">
+                              {li && (
+                                <a
+                                  href={li}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  title={li}
+                                  className="inline-flex items-center justify-center w-6 h-6 rounded text-[#0A66C2] hover:bg-[#0A66C2]/10"
+                                >
+                                  <Linkedin size={14} />
+                                </a>
+                              )}
+                              {tw && (
+                                <a
+                                  href={tw}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  title={tw}
+                                  className="inline-flex items-center justify-center w-6 h-6 rounded text-black hover:bg-gray-100"
+                                >
+                                  <Twitter size={14} />
+                                </a>
+                              )}
+                              {gb && (
+                                <a
+                                  href={gb}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  title={gb}
+                                  className="inline-flex items-center justify-center w-6 h-6 rounded text-[#34A853] hover:bg-[#34A853]/10"
+                                >
+                                  <MapPin size={14} />
+                                </a>
+                              )}
+                            </div>
+                          );
+                        })()}
                         {(() => {
                           const suggested = inferCleanName(client.name);
                           if (suggested && suggested !== client.name && suggested.length >= 2) {
