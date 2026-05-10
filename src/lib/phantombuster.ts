@@ -220,3 +220,49 @@ export async function fetchAgentSavedArgument(
   }
 }
 
+/**
+ * Fetch a specific run's container metadata (status + exitCode + endType).
+ */
+export async function fetchContainer(
+  apiKey: string,
+  containerId: string
+): Promise<{ status: string | null; exitCode: number | null; endType: string | null }> {
+  try {
+    const r = await fetch(`${PB_BASE}/containers/fetch?id=${encodeURIComponent(containerId)}`, {
+      headers: { "x-phantombuster-key": apiKey },
+    });
+    if (!r.ok) return { status: null, exitCode: null, endType: null };
+    const j = (await r.json()) as { status?: string; exitCode?: number; endType?: string; data?: { status?: string; exitCode?: number; endType?: string } };
+    const flat = (j.data ?? j) as { status?: string; exitCode?: number; endType?: string };
+    return { status: flat.status ?? null, exitCode: flat.exitCode ?? null, endType: flat.endType ?? null };
+  } catch {
+    return { status: null, exitCode: null, endType: null };
+  }
+}
+
+/**
+ * Fetch the freshly-scraped resultObject for a specific phantom run.
+ * Returns the parsed JSON array (the actual scraped records), or null on
+ * failure / empty / cookie-expired runs.
+ */
+export async function fetchContainerResultObject(
+  apiKey: string,
+  containerId: string
+): Promise<unknown[] | null> {
+  try {
+    const r = await fetch(`${PB_BASE}/containers/fetch-result-object?id=${encodeURIComponent(containerId)}`, {
+      headers: { "x-phantombuster-key": apiKey },
+    });
+    if (!r.ok) return null;
+    const j = (await r.json()) as { resultObject?: string | unknown[] | null; data?: { resultObject?: string | unknown[] | null } };
+    const flat = (j.data ?? j) as { resultObject?: string | unknown[] | null };
+    if (flat.resultObject == null) return null;
+    if (typeof flat.resultObject === "string") {
+      try { return JSON.parse(flat.resultObject) as unknown[]; } catch { return null; }
+    }
+    return flat.resultObject as unknown[];
+  } catch {
+    return null;
+  }
+}
+

@@ -28,18 +28,21 @@ export function PhantombusterSyncButton({ clientId }: { clientId?: string }) {
   }
 
   async function pollOne(p: PlatformPhase) {
+    // Poll the SPECIFIC container we just launched (not the agent-level
+    // lastEndType, which reflects whatever last ran — possibly someone else's).
     const deadline = Date.now() + POLL_DEADLINE_MS;
     while (Date.now() < deadline) {
       try {
-        const r = await fetch(`/api/phantombuster/check?phantomId=${encodeURIComponent(p.phantomId!)}`, { cache: "no-store" });
+        const r = await fetch(`/api/phantombuster/check?containerId=${encodeURIComponent(p.containerId!)}`, { cache: "no-store" });
         const ct = r.headers.get("content-type") || "";
         if (ct.includes("application/json")) {
           const j = await r.json();
           if (j.success) {
             const status = j.data?.status as string | null;
+            const exitCode = j.data?.exitCode as number | null;
             setPhase(p.platform, { status });
-            if (status) {
-              return { status, resultUrl: j.data?.resultUrl as string | null };
+            if (status === "finished") {
+              return { status, exitCode };
             }
           }
         }
@@ -48,7 +51,7 @@ export function PhantombusterSyncButton({ clientId }: { clientId?: string }) {
       }
       await new Promise((r) => setTimeout(r, POLL_MS));
     }
-    return { status: "timeout", resultUrl: null };
+    return { status: "timeout", exitCode: null };
   }
 
   async function run() {
@@ -92,21 +95,28 @@ export function PhantombusterSyncButton({ clientId }: { clientId?: string }) {
       await Promise.all(
         launches.map(async (l) => {
           if (!l.containerId || !l.phantomId) return;
-          const { status, resultUrl } = await pollOne({
+          const { status, exitCode } = await pollOne({
             platform: l.platform,
             phantomId: l.phantomId,
             containerId: l.containerId,
             phase: "running",
           });
           if (status !== "finished") {
-            setPhase(l.platform, { phase: "fail", status, message: `Phantom finished with status: ${status}` });
+            setPhase(l.platform, { phase: "fail", status, message: `Phantom did not finish (status=${status}).` });
             return;
           }
-          if (!resultUrl) {
-            setPhase(l.platform, { phase: "fail", status, message: "Phantom finished but no result CSV URL." });
+          if (exitCode !== 0) {
+            // exitCode 1 typically means the phantom's saved sessionCookie
+            // expired. The user needs to refresh it in the Phantombuster UI.
+            const hint = l.platform === "LINKEDIN"
+              ? "LinkedIn session cookie may have expired. Update it in Phantombuster → Settings → Phantom config."
+              : l.platform === "TWITTER"
+              ? "X / Twitter session cookie may have expired. Update it in Phantombuster → Settings → Phantom config."
+              : `exitCode=${exitCode}`;
+            setPhase(l.platform, { phase: "fail", status, message: `Phantom finished with error (${hint})` });
             return;
           }
-          setPhase(l.platform, { phase: "importing", message: "Downloading + importing CSV…" });
+          setPhase(l.platform, { phase: "importing", message: "Importing scraped posts…" });
           // Cloudflare workers occasionally cold-fail with 1101 (HTML body);
           // retry up to 2× with a 3s backoff before giving up.
           let ir: Response | null = null;
@@ -115,7 +125,7 @@ export function PhantombusterSyncButton({ clientId }: { clientId?: string }) {
             ir = await fetch("/api/phantombuster/import", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ platform: l.platform, phantomId: l.phantomId, resultUrl }),
+              body: JSON.stringify({ platform: l.platform, containerId: l.containerId, clientId: clientId ?? null }),
             });
             ict = ir.headers.get("content-type") || "";
             if (ict.includes("application/json")) break;
@@ -135,9 +145,9 @@ export function PhantombusterSyncButton({ clientId }: { clientId?: string }) {
           }
           setPhase(l.platform, {
             phase: "done",
-            rowsParsed: ij.data?.rowsParsed ?? 0,
+            rowsParsed: ij.data?.recordsParsed ?? 0,
             postsUpserted: ij.data?.postsUpserted ?? 0,
-            message: `${ij.data?.postsUpserted ?? 0} posts upserted (parsed ${ij.data?.rowsParsed ?? 0} rows)`,
+            message: `${ij.data?.postsUpserted ?? 0} posts upserted (parsed ${ij.data?.recordsParsed ?? 0} records)`,
           });
         })
       );
