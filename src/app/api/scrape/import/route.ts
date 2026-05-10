@@ -101,6 +101,10 @@ export async function POST(req: NextRequest) {
         update: {
           postUrl: p.postUrl,
           postTextSnippet: (p.text || "").slice(0, 280),
+          publishedAtUtc,
+          publishedAtLocal: publishedAtUtc,
+          publishedDateLocal,
+          hasMedia: !!p.hasMedia,
           likeCount,
           commentCount,
           shareCount,
