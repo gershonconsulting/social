@@ -94,10 +94,16 @@ export function connectionStatusColor(status: string): string {
   }
 }
 
-export function freshnessFromLastSync(lastSyncAt: string | null): {
+export function freshnessFromLastSync(
+  lastSyncAt: string | null,
+  lastSyncError?: string | null,
+): {
   label: string;
   color: string;
 } {
+  // If the last sync recorded an error, it doesn't matter how recent we ran —
+  // we are NOT live. Show the error state so the badge stops lying green.
+  if (lastSyncError) return { label: "Sync Error", color: "text-red-600" };
   if (!lastSyncAt) return { label: "Never synced", color: "text-gray-400" };
   const diff = Date.now() - new Date(lastSyncAt).getTime();
   const hours = diff / 3600000;

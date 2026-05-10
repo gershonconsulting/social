@@ -14,6 +14,7 @@ interface PlatformConn {
   lastSyncAt: string | null;
   isMandatory?: boolean;
   externalAccountUrl?: string | null;
+  lastSyncError?: string | null;
 }
 
 interface Client {
@@ -332,7 +333,7 @@ export function ClientsPageClient() {
                       <td className="px-4 py-4">
                         <div className="flex flex-wrap gap-1">
                           {client.platformConnections.map((conn) => (
-                            <ConnectionBadge key={conn.platform} status={conn.connectionStatus} />
+                            <ConnectionBadge key={conn.platform} status={conn.connectionStatus} lastSyncError={conn.lastSyncError} />
                           ))}
                           {client.platformConnections.length === 0 && (
                             <span className="text-xs text-gray-400">No platforms</span>

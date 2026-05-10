@@ -23,17 +23,35 @@ const PLATFORM_LABELS: Record<string, string> = {
 
 type LoadState = "loading" | "ok" | "error";
 
+type WindowKey = "WEEK" | "LAST_MONTH" | "THIS_MONTH" | "YEAR" | "ALL_TIME";
+const WINDOW_LABELS: Record<WindowKey, string> = {
+  WEEK: "Last week",
+  LAST_MONTH: "Last month",
+  THIS_MONTH: "This month",
+  YEAR: "This year",
+  ALL_TIME: "All time",
+};
+const WINDOW_MONTHS: Record<WindowKey, string> = {
+  WEEK: "1",
+  LAST_MONTH: "2",
+  THIS_MONTH: "2",
+  YEAR: "12",
+  ALL_TIME: "12",
+};
+
 export function PostsListing({ clientId, platform }: { clientId: string; platform?: string }) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [attempt, setAttempt] = useState(0);
+  // Default to "This month" — matches the memory directive on dashboard windows
+  const [windowKey, setWindowKey] = useState<WindowKey>("THIS_MONTH");
 
   const loadPosts = useCallback(async () => {
     setState("loading");
     setErrorMsg("");
 
-    const params = new URLSearchParams({ months: "2", calendar: "0" });
+    const params = new URLSearchParams({ months: WINDOW_MONTHS[windowKey], calendar: "0" });
     if (platform) params.set("platform", platform);
 
     // Tiny retry: edge runtime / Neon cold-starts intermittently 500.
@@ -69,7 +87,7 @@ export function PostsListing({ clientId, platform }: { clientId: string; platfor
     }
     setErrorMsg(lastErr || "Could not load posts.");
     setState("error");
-  }, [clientId, platform]);
+  }, [clientId, platform, windowKey]);
 
   useEffect(() => {
     loadPosts();
@@ -106,15 +124,66 @@ export function PostsListing({ clientId, platform }: { clientId: string; platfor
     );
   }
 
-  if (posts.length === 0) {
+  // Apply window-specific filtering. The API gives us the broader chunk;
+  // we narrow to the user's selected window so KPIs match the label.
+  const now = new Date();
+  let windowStart: Date | null = null;
+  let windowEnd: Date | null = null;
+  if (windowKey === "WEEK") {
+    windowStart = new Date(now);
+    windowStart.setDate(now.getDate() - 7);
+  } else if (windowKey === "LAST_MONTH") {
+    const firstOfThis = new Date(now.getFullYear(), now.getMonth(), 1);
+    windowStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    windowEnd = firstOfThis;
+  } else if (windowKey === "THIS_MONTH") {
+    windowStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  } else if (windowKey === "YEAR") {
+    windowStart = new Date(now.getFullYear(), 0, 1);
+  }
+  const visiblePosts = posts.filter((p) => {
+    const t = new Date(p.publishedAtUtc).getTime();
+    if (windowStart && t < windowStart.getTime()) return false;
+    if (windowEnd && t >= windowEnd.getTime()) return false;
+    return true;
+  });
+
+  const Selector = () => (
+    <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex flex-wrap items-center gap-1.5">
+      {(Object.keys(WINDOW_LABELS) as WindowKey[]).map((k) => (
+        <button
+          key={k}
+          onClick={() => setWindowKey(k)}
+          className={
+            "px-2.5 py-1 text-xs rounded-full transition-colors " +
+            (windowKey === k
+              ? "bg-red-600 text-white"
+              : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-100")
+          }
+        >
+          {WINDOW_LABELS[k]}
+        </button>
+      ))}
+      <span className="ml-auto text-xs text-gray-500">
+        {visiblePosts.length} post{visiblePosts.length === 1 ? "" : "s"}
+      </span>
+    </div>
+  );
+
+  if (visiblePosts.length === 0) {
     return (
-      <div className="px-6 py-12 text-center text-sm text-gray-400">
-        No posts found in the last 2 months. Run a sync to fetch posts.
-      </div>
+      <>
+        <Selector />
+        <div className="px-6 py-12 text-center text-sm text-gray-400">
+          No posts in this window. Try another range or run a sync.
+        </div>
+      </>
     );
   }
 
   return (
+    <>
+    <Selector />
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="bg-gray-50 border-b border-gray-100">
@@ -135,7 +204,7 @@ export function PostsListing({ clientId, platform }: { clientId: string; platfor
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
-          {posts.map((post) => (
+          {visiblePosts.map((post) => (
             <tr key={post.id} className="hover:bg-gray-50">
               <td className="px-6 py-3 text-xs font-mono text-gray-600 whitespace-nowrap">
                 {post.publishedDateLocal}
@@ -180,5 +249,6 @@ export function PostsListing({ clientId, platform }: { clientId: string; platfor
         </tbody>
       </table>
     </div>
+    </>
   );
 }

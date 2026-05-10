@@ -74,7 +74,18 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     .sort()
     .reverse()[0];
 
-  const freshness = lastSync ? freshnessFromLastSync(lastSync.toISOString()) : null;
+  // Aggregate sync error: if ANY platform connection on this client errored on
+  // its last sync, the client-level "Live" label is a lie. Pick the first
+  // non-null lastSyncError so freshness can flip to red.
+  const aggregateSyncError = client.platformConnections
+    .map((c) => c.lastSyncError)
+    .find((e): e is string => !!e) ?? null;
+
+  const freshness = lastSync
+    ? freshnessFromLastSync(lastSync.toISOString(), aggregateSyncError)
+    : aggregateSyncError
+    ? freshnessFromLastSync(null, aggregateSyncError)
+    : null;
 
   return (
     <div className="space-y-8">
