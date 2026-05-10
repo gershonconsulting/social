@@ -62,7 +62,11 @@ export function PhantombusterSyncButton({ clientId }: { clientId?: string }) {
 
     try {
       // Step 1: launch both phantoms
-      const lr = await fetch("/api/phantombuster/launch", { method: "POST" });
+      const lr = await fetch("/api/phantombuster/launch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId: clientId ?? null }),
+      });
       const lct = lr.headers.get("content-type") || "";
       if (!lct.includes("application/json")) {
         setTopError(`Launch returned non-JSON (HTTP ${lr.status}).`);

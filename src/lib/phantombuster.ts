@@ -187,3 +187,36 @@ export async function deletePhantom(apiKey: string, phantomId: string): Promise<
     return false;
   }
 }
+
+
+/**
+ * Fetch the saved argument object for a Phantom (the args the user
+ * configured in the PB UI). Returns the parsed object, or {} on failure.
+ * Used to merge per-launch overrides on top of saved fields like
+ * sessionCookie / userAgent / activitiesToScrape.
+ */
+export async function fetchAgentSavedArgument(
+  apiKey: string,
+  phantomId: string
+): Promise<Record<string, unknown>> {
+  try {
+    const r = await fetch(`${PB_BASE}/agents/fetch?id=${encodeURIComponent(phantomId)}`, {
+      headers: { "x-phantombuster-key": apiKey },
+    });
+    if (!r.ok) return {};
+    const j = (await r.json()) as { argument?: string; data?: { argument?: string } };
+    const flat = (j.data ?? j) as { argument?: string };
+    if (!flat.argument) return {};
+    if (typeof flat.argument === "string") {
+      try {
+        return JSON.parse(flat.argument) as Record<string, unknown>;
+      } catch {
+        return {};
+      }
+    }
+    return flat.argument as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
