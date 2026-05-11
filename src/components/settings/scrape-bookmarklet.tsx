@@ -26,7 +26,8 @@ const BOOKMARKLET_BODY = `
   let platform = null;
   if (host.includes('linkedin.com')) platform = 'LINKEDIN';
   else if (host.includes('twitter.com') || host.includes('x.com')) platform = 'TWITTER';
-  if (!platform) { alert('Watchman: this only works on a LinkedIn /posts/ or X profile page.'); return; }
+  else if (host.includes('google.com') && location.pathname.includes('/maps/')) platform = 'GOOGLE_BUSINESS';
+  if (!platform) { alert('Watchman: open a LinkedIn /posts/ page, X profile page, or Google Maps place page first.'); return; }
 
   // Tiny toast
   const toast = (msg, ok) => {
@@ -141,10 +142,51 @@ const BOOKMARKLET_BODY = `
         });
       } catch (e) {}
     }
+  } else if (platform === 'GOOGLE_BUSINESS') {
+    // Google Maps Updates tab. Google obfuscates classes, so we look for
+    // any element that has BOTH a relative-time substring AND visible text
+    // inside the main Maps panel. This catches the "X said: ..." style
+    // update cards as well as plainer post tiles.
+    const root = document.querySelector('[role="main"]') || document.body;
+    const cards = Array.from(root.querySelectorAll('[role="article"], [jsaction*="updates"], .section-editorial, .section-listing, .fontTitleSmall, .fontHeadlineSmall'));
+    const candidates = cards.length ? cards : Array.from(root.querySelectorAll('div'));
+    const seen = new Set();
+    for (const c of candidates) {
+      try {
+        const full = (c.innerText || '').trim();
+        if (!full || full.length < 40 || full.length > 2000) continue;
+        // Must contain a relative time like "5 days ago", "1 week ago", "2 months ago"
+        const rel = full.match(/(\\d+\\s*(?:second|minute|min|hour|hr|day|week|month|year)s?\\s+ago)/i);
+        if (!rel) continue;
+        const publishedAtUtc = parseRel(rel[1].replace(/\\s+ago/i, ''));
+        if (!publishedAtUtc) continue;
+        // Use a hash of the cleaned text as the externalPostId — GMB updates
+        // rarely have stable IDs in the DOM, so content-hash is the next-best key.
+        const cleaned = full.replace(/\\s+/g, ' ').slice(0, 300);
+        let h = 0;
+        for (let i = 0; i < cleaned.length; i++) {
+          h = ((h << 5) - h) + cleaned.charCodeAt(i);
+          h |= 0;
+        }
+        const id = 'gbp-' + (h >>> 0).toString(16);
+        if (seen.has(id)) continue;
+        seen.add(id);
+        posts.push({
+          externalPostId: id,
+          postUrl: location.href.split('?')[0],
+          text: cleaned,
+          publishedAtUtc,
+          likeCount: 0,
+          commentCount: 0,
+          shareCount: 0,
+          hasMedia: !!c.querySelector('img'),
+        });
+      } catch (e) {}
+    }
   }
 
   if (posts.length === 0) {
-    toast('found 0 posts on the page — is it the /posts/ tab or a profile feed?', false);
+    toast('found 0 posts — open a LinkedIn /posts/ tab, an X profile, or the Updates tab on a Google Maps place page.', false);
     return;
   }
 
@@ -187,7 +229,7 @@ export function ScrapeBookmarklet() {
       </div>
       <p className="text-xs text-gray-600 leading-relaxed">
         Drag the button below onto your Chrome bookmarks bar. Then visit any company&apos;s LinkedIn{" "}
-        <code className="bg-gray-100 px-1 rounded">/posts/</code> tab or their X profile and click the
+        <code className="bg-gray-100 px-1 rounded">/posts/</code> tab, their X profile, or their Google Maps place page and click the
         bookmark — it scrapes the visible posts (gentle 10s scroll), looks up which client the page
         belongs to by URL, and writes the posts directly into your dashboard.
       </p>
