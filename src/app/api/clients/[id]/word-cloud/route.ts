@@ -25,22 +25,26 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  try {
   const { id } = await params;
 
-  // Get all post text for this client
+  // Cap at the last 500 posts ordered by recency. Unbounded pulls of
+  // `postTextFull` were tripping the Worker CPU + memory limit (1101/1102)
+  // and the long tail doesn't materially change the cloud anyway.
   const posts = await prisma.socialPost.findMany({
     where: { clientId: id },
     select: {
-      postTextFull: true,
       postTextSnippet: true,
     },
+    orderBy: { publishedDateLocal: "desc" },
+    take: 500,
   });
 
   // Count word frequencies
   const wordMap = new Map<string, number>();
 
   for (const post of posts) {
-    const text = post.postTextFull || post.postTextSnippet || "";
+    const text = post.postTextSnippet || "";
 
     // Tokenize: split on non-alpha chars, lowercase, filter
     const words = text
@@ -62,4 +66,9 @@ export async function GET(
     .slice(0, 60);
 
   return NextResponse.json({ words });
+
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to load word cloud";
+    return NextResponse.json({ success: false, error: message, words: [] }, { status: 500 });
+  }
 }

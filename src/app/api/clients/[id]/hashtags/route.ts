@@ -23,8 +23,12 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  try {
   const { id } = await params;
 
+  // Cap at the last 500 posts. Past that we're paying CPU for a long tail
+  // of duplicates that don't change the cloud — and on Cloudflare Workers
+  // the unbounded findMany has been blowing through the CPU budget.
   const posts = await prisma.socialPost.findMany({
     where: { clientId: id },
     select: {
@@ -32,6 +36,7 @@ export async function GET(
       publishedDateLocal: true,
     },
     orderBy: { publishedDateLocal: "desc" },
+    take: 500,
   });
 
   const tagMap = new Map<string, { count: number; lastUsed: string }>();
@@ -82,4 +87,9 @@ export async function GET(
     .slice(0, 10);
 
   return NextResponse.json({ hashtags, suggestions });
+
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to load hashtags";
+    return NextResponse.json({ success: false, error: message, hashtags: [], suggestions: [] }, { status: 500 });
+  }
 }

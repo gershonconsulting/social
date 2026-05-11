@@ -57,8 +57,20 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Pull only the connections that could plausibly match. Looking up all
+    // platform connections every request was burning Worker CPU and causing
+    // intermittent 1101/1102s on Cloudflare. We pull the last URL segment
+    // (handle / slug) and filter server-side via `contains`.
+    const tail = stripped.split("/").filter(Boolean).pop() || "";
+    const containsClause = tail
+      ? { not: null, contains: tail, mode: "insensitive" as const }
+      : { not: null };
     const all = await prisma.platformConnection.findMany({
-      where: { platform: platform as "LINKEDIN" | "TWITTER" | "GOOGLE_BUSINESS", isEnabled: true, externalAccountUrl: { not: null } },
+      where: {
+        platform: platform as "LINKEDIN" | "TWITTER" | "GOOGLE_BUSINESS",
+        isEnabled: true,
+        externalAccountUrl: containsClause,
+      },
       select: {
         clientId: true,
         externalAccountUrl: true,

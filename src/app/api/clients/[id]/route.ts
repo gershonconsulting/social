@@ -31,10 +31,9 @@ export async function GET(
       include: {
         platformConnections: {
           include: {
-            postingSchedules: true,
             followerSnapshots: {
               orderBy: { snapshotDateLocal: "desc" },
-              take: 31,
+              take: 2,
             },
           },
           orderBy: { platform: "asc" },
