@@ -126,7 +126,10 @@ export default function AdminPage() {
     setLoading(true);
     setLoadError("");
     try {
-      const res = await fetch(`/api/clients?includeArchived=${showArchived}`);
+      // Use light=1 so the worker doesn't do the heavy latest-post enrichment
+      // on the admin path — admin only needs the client + connection rows.
+      // Without it, 44 clients trigger Cloudflare CPU budget (1101) on cold start.
+      const res = await fetch(`/api/clients?light=1&includeArchived=${showArchived}`);
       if (!res.ok) {
         if (res.status === 401 || res.status === 403 || res.redirected) {
           window.location.href = "/login";
