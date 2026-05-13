@@ -20,7 +20,7 @@ import {
   Share2,
   Eye,
 } from "lucide-react";
-import { ConnectionHealthBanner } from "./connection-health-banner";
+import { ExtensionHealthBanner } from "./extension-health-banner";
 
 interface PlatformFollower {
   platform: string;
@@ -193,7 +193,7 @@ export function DashboardClient({
 
   return (
     <div>
-      <ConnectionHealthBanner />
+      <ExtensionHealthBanner />
       {/* Header */}
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div>
