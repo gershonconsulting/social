@@ -17,13 +17,15 @@ import {
 import { cn } from "@/lib/utils";
 
 const navItems = [
+  // Community-manager view: only the routes a content verifier needs daily.
+  // Analytics / Errors / Logs moved to adminOnly so they don't clutter the CM nav.
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/clients", icon: Building2, label: "Companies" },
-  { href: "/analytics", icon: BarChart3, label: "Analytics" },
   { href: "/reports", icon: FileText, label: "Reports" },
-  { href: "/errors", icon: AlertOctagon, label: "Errors" },
-  { href: "/logs", icon: ScrollText, label: "Logs" },
   { href: "/settings", icon: Settings, label: "Settings" },
+  { href: "/analytics", icon: BarChart3, label: "Analytics", adminOnly: true },
+  { href: "/errors", icon: AlertOctagon, label: "Errors", adminOnly: true },
+  { href: "/logs", icon: ScrollText, label: "Logs", adminOnly: true },
   { href: "/admin", icon: Shield, label: "Admin", adminOnly: true },
 ];
 
