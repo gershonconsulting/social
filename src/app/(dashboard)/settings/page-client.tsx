@@ -5,8 +5,6 @@ import { AlertTriangle, RefreshCw, Loader2 } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { SettingsConnections } from "@/components/settings/settings-connections";
 import { CookieCaptureHelper } from "@/components/settings/cookie-capture-helper";
-import { PhantombusterSettings } from "@/components/settings/phantombuster-settings";
-import { ScrapeBookmarklet } from "@/components/settings/scrape-bookmarklet";
 
 interface ConnRow {
   id: string;
@@ -112,9 +110,7 @@ export function SettingsPageClient() {
         subtitle="Manage your platform connections and API credentials"
       />
 
-      <ScrapeBookmarklet />
-      <PhantombusterSettings />
-
+            
       <CookieCaptureHelper onSaved={() => setAttempt((a) => a + 1)} />
 
       <ApplyTokensToPendingButton onDone={() => setAttempt((a) => a + 1)} />
