@@ -13,9 +13,11 @@ import { NextResponse } from "next/server";
  * to the workspace folder. Keep semver — popup does a string-compare-aware
  * version diff (treating each dot-separated segment as a number).
  */
-const LATEST = "0.3.0";
+const LATEST = "0.4.0";
 
 const RELEASE_NOTES: Record<string, string> = {
+  "0.4.0": "Single 'Sync Now' button — opens LinkedIn + X in sequence, captures both cookie sets in one click.",
+  "0.3.0": "Visible version + auto update banner.",
   "0.2.0": "Cookie capture: two buttons to refresh LinkedIn + X sessions.",
   "0.1.0": "Initial release (deprecated): auto-scrape on browse.",
 };
