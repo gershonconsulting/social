@@ -38,9 +38,12 @@ export async function GET(
       where.platform = platform;
     }
 
+    // Hard take limit so a client with hundreds of posts can't 1102 the worker.
+    // 200 is generous — the UI windows narrow further client-side.
     const posts = await prisma.socialPost.findMany({
       where,
       orderBy: { publishedAtUtc: "desc" },
+      take: 200,
       select: {
         id: true,
         platform: true,

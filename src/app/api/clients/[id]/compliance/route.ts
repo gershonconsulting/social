@@ -47,6 +47,8 @@ export async function GET(
       commentCount: true,
       shareCount: true,
     },
+    take: 500,           // one month, even a daily-posting client won't exceed
+    orderBy: { publishedDateLocal: "asc" },
   });
 
   // Get client's platform connections
