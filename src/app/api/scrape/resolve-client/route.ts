@@ -70,6 +70,9 @@ export async function GET(req: NextRequest) {
         platform: platform as "LINKEDIN" | "TWITTER" | "GOOGLE_BUSINESS",
         isEnabled: true,
         externalAccountUrl: containsClause,
+        // Skip archived clients — earlier dedupe left some archived rows
+        // whose connections were still isEnabled and were stealing matches.
+        client: { is: { status: "ACTIVE" } },
       },
       select: {
         clientId: true,
