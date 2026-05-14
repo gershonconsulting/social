@@ -13,6 +13,8 @@ import { ComplianceDashboard } from "@/components/clients/compliance-dashboard";
 import { PostsListing } from "@/components/clients/posts-listing";
 import { CampaignDateEditor } from "@/components/clients/campaign-date-editor";
 import { CompanyLogo } from "@/components/clients/company-logo";
+import { ConnectionUrlEditor } from "@/components/clients/connection-url-editor";
+import { PlatformIcon } from "@/components/ui/platform-icon";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +92,38 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
       {/* Recent Posts */}
                   <PostsListing clientId={client.id} />
+
+      {/* Platforms — URL editor only. No OAuth, no test buttons, no follower
+          counts. Just the social URLs Olivier wants to change on demand. */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
+          <div className="text-sm font-semibold text-gray-900">Platforms</div>
+          <div className="text-xs text-gray-500 mt-0.5">Click any URL to edit. Updates take effect on the next sync.</div>
+        </div>
+        <div className="divide-y divide-gray-50">
+          {client.platformConnections.length === 0 && (
+            <div className="px-5 py-6 text-sm text-gray-400 text-center">No platforms attached to this company.</div>
+          )}
+          {client.platformConnections.map((conn) => (
+            <div key={conn.id} className="px-5 py-3 flex items-center gap-3">
+              <PlatformIcon platform={conn.platform} size={28} />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-gray-900">
+                  {PLATFORM_LABELS_MAP[conn.platform] ?? conn.platform}
+                </div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  <ConnectionUrlEditor
+                    connectionId={conn.id}
+                    platform={conn.platform}
+                    initialUrl={conn.externalAccountUrl}
+                    initialName={conn.externalAccountName}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Monthly report link */}
       <div className="flex items-center justify-between bg-blue-50 rounded-xl border border-blue-200 px-6 py-4">
