@@ -128,6 +128,8 @@ export function SettingsPageClient() {
         {row("X / Twitter", "#000", tw)}
       </div>
 
+      <ChangePasswordCard />
+
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
         <div className="flex items-start gap-3 mb-3">
           <Download size={18} className="text-red-600 mt-0.5 shrink-0" />
