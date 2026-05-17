@@ -67,9 +67,13 @@ async function scrapeLinkedInOne(
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
     "x-restli-protocol-version": "2.0.0",
   };
+  // CRITICAL: redirect:'manual' so we don't follow the 302 → /login chain
+  // when Voyager rejects auth. Without this, Cloudflare worker burns through
+  // redirects until it bails with "Too many redirects".
+  const fetchOpts: RequestInit = { headers, redirect: "manual" as const };
   let orgUrn: string | null = null;
   try {
-    const r = await fetch(`https://www.linkedin.com/voyager/api/organization/companies?q=universalName&universalName=${encodeURIComponent(vanity)}`, { headers });
+    const r = await fetch(`https://www.linkedin.com/voyager/api/organization/companies?q=universalName&universalName=${encodeURIComponent(vanity)}`, fetchOpts);
     res.status = r.status;
     if (r.ok) {
       const j = await r.json() as { elements?: Array<{ entityUrn?: string }> };
@@ -85,7 +89,7 @@ async function scrapeLinkedInOne(
   // Step 2: pull posts for that org
   try {
     const feedUrl = `https://www.linkedin.com/voyager/api/feed/updates?count=25&moduleKey=organization-shares&q=organizationShareFeed&organizationalPage=urn:li:fs_organization:${orgUrn}`;
-    const r = await fetch(feedUrl, { headers });
+    const r = await fetch(feedUrl, fetchOpts);
     res.status = r.status;
     if (!r.ok) { res.error = `Voyager feed HTTP ${r.status}`; return res; }
     const j = await r.json() as { elements?: Array<unknown> };
@@ -225,18 +229,23 @@ async function scrapeTwitterOne(
 
 export async function GET(req: NextRequest) {
   try {
-    // Optional auth — when called from GitHub Actions we require the Bearer
-    // secret. From the extension/dashboard popup (no auth header), allow.
     const secret = process.env.CRON_SECRET;
     const auth = req.headers.get("authorization");
     if (auth && secret && auth !== `Bearer ${secret}`) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
+    // Cloudflare Workers cap us at ~50 subrequests per invocation. Each
+    // client × platform uses up to 2 fetches (URN lookup + feed), so we
+    // limit to a small batch and chunk via offset/limit. The daily cron
+    // calls this endpoint multiple times (offset=0,5,10,...).
+    const sp = req.nextUrl.searchParams;
+    const offset = Math.max(0, parseInt(sp.get("offset") || "0", 10));
+    const limit = Math.min(10, Math.max(1, parseInt(sp.get("limit") || "5", 10)));
+
     const liData = await loadCookies("LINKEDIN");
     const twData = await loadCookies("TWITTER");
 
-    // Get all active clients with their LinkedIn + Twitter connections.
     const clients = await prisma.client.findMany({
       where: { status: "ACTIVE" },
       include: {
@@ -245,7 +254,11 @@ export async function GET(req: NextRequest) {
           select: { id: true, platform: true, externalAccountUrl: true },
         },
       },
+      orderBy: { name: "asc" },
+      skip: offset,
+      take: limit,
     });
+    const totalClients = await prisma.client.count({ where: { status: "ACTIVE" } });
 
     const results: ScrapeResult[] = [];
 
@@ -271,7 +284,17 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { totalUpserted, totalAttempts: results.length, failed, results },
+      data: {
+        totalUpserted,
+        totalAttempts: results.length,
+        failed,
+        results,
+        offset,
+        limit,
+        totalClients,
+        hasMore: offset + clients.length < totalClients,
+        nextOffset: offset + clients.length < totalClients ? offset + clients.length : null,
+      },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "scrape failed";
