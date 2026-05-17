@@ -31,7 +31,7 @@ export async function GET() {
       latest: LATEST,
       releaseNotes: RELEASE_NOTES[LATEST] ?? "",
       // How to install/update (rendered in the popup banner if installed < latest)
-      updateInstructions: "Open chrome://extensions/ and click the reload icon on the Watchman card.",
+      updateInstructions: "Open chrome://extensions/ and click the reload icon on the GershonAI card.",
     },
   });
 }
