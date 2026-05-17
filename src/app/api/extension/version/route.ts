@@ -13,9 +13,10 @@ import { NextResponse } from "next/server";
  * to the workspace folder. Keep semver — popup does a string-compare-aware
  * version diff (treating each dot-separated segment as a number).
  */
-const LATEST = "0.5.0";
+const LATEST = "0.6.0";
 
 const RELEASE_NOTES: Record<string, string> = {
+  "0.6.0": "Renamed to GershonAI.",
   "0.5.0": "After Sync Now, also triggers server-side scrape so fresh posts arrive in the dashboard immediately.",
   "0.4.0": "Single 'Sync Now' button — opens LinkedIn + X in sequence, captures both cookie sets in one click.",
   "0.3.0": "Visible version + auto update banner.",

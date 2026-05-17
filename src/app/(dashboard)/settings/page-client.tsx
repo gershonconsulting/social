@@ -62,7 +62,7 @@ export function SettingsPageClient() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-medium text-gray-900">{label}</div>
-              <div className="text-xs text-amber-700 mt-0.5">No session captured yet — open Watchman → Sync Now.</div>
+              <div className="text-xs text-amber-700 mt-0.5">No session captured yet — open GershonAI → Sync Now.</div>
             </div>
             <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full">
               <AlertCircle size={12} /> Needed
@@ -107,7 +107,7 @@ export function SettingsPageClient() {
     <div>
       <Header
         title="Settings"
-        subtitle="Watchman Chrome extension status — sessions are captured locally and sent here for server-side scraping."
+        subtitle="GershonAI Chrome extension status — sessions are captured locally and sent here for server-side scraping."
         actions={
           <button onClick={refresh} disabled={loading} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
@@ -132,7 +132,7 @@ export function SettingsPageClient() {
         <div className="flex items-start gap-3 mb-3">
           <Download size={18} className="text-red-600 mt-0.5 shrink-0" />
           <div>
-            <div className="text-sm font-semibold text-gray-900">Watchman Chrome extension</div>
+            <div className="text-sm font-semibold text-gray-900">GershonAI Chrome extension</div>
             <div className="text-xs text-gray-500 mt-0.5">
               Latest published: <strong>v{extLatest || "…"}</strong>
             </div>
@@ -147,7 +147,7 @@ export function SettingsPageClient() {
           </p>
           <p>
             <code className="bg-gray-100 px-1 rounded">chrome://extensions/</code> → Developer mode →
-            <strong> Load unpacked</strong> (first time) or click <strong>reload</strong> on the Watchman card (subsequent updates).
+            <strong> Load unpacked</strong> (first time) or click <strong>reload</strong> on the GershonAI card (subsequent updates).
           </p>
         </div>
       </div>

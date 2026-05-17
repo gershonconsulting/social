@@ -6,7 +6,7 @@ import { AlertOctagon } from "lucide-react";
 
 /**
  * ExtensionHealthBanner — single red warning shown at the top of /dashboard
- * when the Watchman Chrome extension hasn't captured cookies, or captured
+ * when the GershonAI Chrome extension hasn't captured cookies, or captured
  * them too long ago to be useful.
  *
  * Rules:
@@ -68,14 +68,14 @@ export function ExtensionHealthBanner() {
       <AlertOctagon size={18} className="text-red-600 mt-0.5 shrink-0" />
       <div className="flex-1">
         <div className="text-sm font-semibold text-red-900">
-          Watchman Chrome extension session(s) missing or stale
+          GershonAI Chrome extension session(s) missing or stale
         </div>
         <div className="text-xs text-red-800 mt-1 leading-relaxed">
           {missingLabels.join(" · ")}
           .
           <br />
           The platform can&apos;t scrape new posts without fresh cookies.
-          Open the Watchman Chrome extension and click <strong>Sync Now</strong> to refresh both sessions.
+          Open the GershonAI Chrome extension and click <strong>Sync Now</strong> to refresh both sessions.
           {" "}<Link href="/settings" className="underline font-medium text-red-700 hover:text-red-900">View status</Link>
         </div>
       </div>
