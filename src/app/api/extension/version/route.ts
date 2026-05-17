@@ -13,9 +13,10 @@ import { NextResponse } from "next/server";
  * to the workspace folder. Keep semver — popup does a string-compare-aware
  * version diff (treating each dot-separated segment as a number).
  */
-const LATEST = "0.8.0";
+const LATEST = "0.8.1";
 
 const RELEASE_NOTES: Record<string, string> = {
+  "0.8.1": "Fix: TypeError when re-enabling the Sync Now button (e.currentTarget null after await).",
   "0.8.0": "Sync Now now scrapes ALL clients (loops chunks until done) and shows running totals.",
   "0.7.0": "Branded icon (G + Golden Gate Bridge) now shown in the Chrome toolbar.",
   "0.6.0": "Renamed to GershonAI.",
