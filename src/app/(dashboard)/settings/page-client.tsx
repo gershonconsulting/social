@@ -156,3 +156,72 @@ export function SettingsPageClient() {
     </div>
   );
 }
+
+function ChangePasswordCard() {
+  const [cur, setCur] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (next.length < 12) {
+      setMsg({ kind: "err", text: "New password must be at least 12 characters." });
+      return;
+    }
+    if (next !== confirm) {
+      setMsg({ kind: "err", text: "New password and confirmation do not match." });
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await fetch("/api/users/me/password", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: cur, newPassword: next }),
+      });
+      const j = await r.json().catch(() => null);
+      if (r.ok && j?.success) {
+        setMsg({ kind: "ok", text: "Password updated. You will stay signed in for the rest of this session." });
+        setCur(""); setNext(""); setConfirm("");
+      } else {
+        setMsg({ kind: "err", text: j?.error || ("Server returned " + r.status) });
+      }
+    } catch (err) {
+      setMsg({ kind: "err", text: err instanceof Error ? err.message : "Network error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="bg-white rounded-xl border border-gray-200 p-5 mb-6 space-y-3">
+      <div>
+        <div className="text-sm font-semibold text-gray-900">Change my password</div>
+        <div className="text-xs text-gray-500 mt-0.5">
+          The platform shipped with a weak default — set something stronger. Min 12 characters.
+        </div>
+      </div>
+      <input type="password" autoComplete="current-password" required
+        placeholder="Current password" value={cur} onChange={(e) => setCur(e.target.value)}
+        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-red-500" />
+      <input type="password" autoComplete="new-password" required minLength={12}
+        placeholder="New password (>= 12 chars)" value={next} onChange={(e) => setNext(e.target.value)}
+        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-red-500" />
+      <input type="password" autoComplete="new-password" required minLength={12}
+        placeholder="Confirm new password" value={confirm} onChange={(e) => setConfirm(e.target.value)}
+        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-red-500" />
+      <button type="submit" disabled={busy || !cur || !next || !confirm}
+        className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed">
+        {busy ? "Updating..." : "Update password"}
+      </button>
+      {msg && (
+        <div className={"text-xs px-3 py-2 rounded " + (msg.kind === "ok" ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800")}>
+          {msg.text}
+        </div>
+      )}
+    </form>
+  );
+}
