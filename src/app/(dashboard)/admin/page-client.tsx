@@ -351,7 +351,19 @@ export default function AdminPage() {
 
   return (
     <div>
-      <Header title="Admin" subtitle="Company Management, platform connections, and system controls" />
+      <Header
+        title="Admin"
+        subtitle="Company Management, platform connections, and system controls"
+        actions={
+          <a
+            href="/gershonai-extension.zip"
+            download="gershonai-extension.zip"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            ⬇️ Download GershonAI extension
+          </a>
+        }
+      />
 
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
