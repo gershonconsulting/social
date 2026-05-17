@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 /**
  * GET /api/extension/version
  *
- * Returns the latest shipped version of the Watchman Chrome extension.
+ * Returns the latest shipped version of the GershonAI Chrome extension.
  * The popup compares this against its installed version
  * (chrome.runtime.getManifest().version) and shows an "Update available"
  * banner if installed < latest.
@@ -13,9 +13,10 @@ import { NextResponse } from "next/server";
  * to the workspace folder. Keep semver — popup does a string-compare-aware
  * version diff (treating each dot-separated segment as a number).
  */
-const LATEST = "0.8.1";
+const LATEST = "0.9.0";
 
 const RELEASE_NOTES: Record<string, string> = {
+  "0.9.0": "Major: posts are now fetched inside YOUR browser (your real IP + cookies) — bypasses LinkedIn/X anti-bot that was rejecting our edge requests.",
   "0.8.1": "Fix: TypeError when re-enabling the Sync Now button (e.currentTarget null after await).",
   "0.8.0": "Sync Now now scrapes ALL clients (loops chunks until done) and shows running totals.",
   "0.7.0": "Branded icon (G + Golden Gate Bridge) now shown in the Chrome toolbar.",
@@ -33,7 +34,6 @@ export async function GET() {
     data: {
       latest: LATEST,
       releaseNotes: RELEASE_NOTES[LATEST] ?? "",
-      // How to install/update (rendered in the popup banner if installed < latest)
       updateInstructions: "Open chrome://extensions/ and click the reload icon on the GershonAI card.",
     },
   });
