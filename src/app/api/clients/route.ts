@@ -225,7 +225,7 @@ export async function GET(req: NextRequest) {
     }));
 
     return NextResponse.json({ success: true, data: enriched }, {
-      headers: light ? { "Cache-Control": "private, max-age=15" } : {},
+      headers: light ? { "Cache-Control": "public, max-age=15, s-maxage=60" } : {},
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Database query failed";

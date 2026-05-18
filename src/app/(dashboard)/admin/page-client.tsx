@@ -129,7 +129,7 @@ export default function AdminPage() {
     // /api/clients occasionally returns 500/503 (CF code 1101: "Worker
     // threw exception") on cold start, especially when Neon's pooler
     // also needs to spin up. Retrying transparently hides that flake.
-    const MAX_RETRIES = 3;
+    const MAX_RETRIES = 5;
     let lastError: string | null = null;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
@@ -142,7 +142,7 @@ export default function AdminPage() {
           // 5xx → retry. 4xx (other) → give up immediately.
           if (res.status >= 500 && attempt < MAX_RETRIES) {
             lastError = `HTTP ${res.status}`;
-            await new Promise((r) => setTimeout(r, 400 * attempt));
+            await new Promise((r) => setTimeout(r, 250 * attempt));
             continue;
           }
           throw new Error(`Server error ${res.status}`);
@@ -163,7 +163,7 @@ export default function AdminPage() {
       } catch (err) {
         lastError = err instanceof Error ? err.message : "Network error";
         if (attempt < MAX_RETRIES) {
-          await new Promise((r) => setTimeout(r, 400 * attempt));
+          await new Promise((r) => setTimeout(r, 250 * attempt));
           continue;
         }
       }
