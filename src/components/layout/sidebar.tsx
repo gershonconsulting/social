@@ -7,7 +7,6 @@ import {
   BarChart3,
   Building2,
   LayoutDashboard,
-  FileText,
   Settings,
   Shield,
   LogOut,
@@ -17,22 +16,20 @@ import {
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  // Community-manager view: only the routes a content verifier needs daily.
-  // Analytics / Errors / Logs moved to adminOnly so they don't clutter the CM nav.
+  // Single-user app (Olivier-only). No role gating. Reports removed
+  // per request 2026-05-18; bring back if monthly export becomes useful again.
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/clients", icon: Building2, label: "Companies" },
-  { href: "/reports", icon: FileText, label: "Reports" },
+  { href: "/analytics", icon: BarChart3, label: "Analytics" },
+  { href: "/logs", icon: ScrollText, label: "Logs" },
+  { href: "/errors", icon: AlertOctagon, label: "Errors" },
+  { href: "/admin", icon: Shield, label: "Admin" },
   { href: "/settings", icon: Settings, label: "Settings" },
-  { href: "/analytics", icon: BarChart3, label: "Analytics", adminOnly: true },
-  { href: "/errors", icon: AlertOctagon, label: "Errors", adminOnly: true },
-  { href: "/logs", icon: ScrollText, label: "Logs", adminOnly: true },
-  { href: "/admin", icon: Shield, label: "Admin", adminOnly: true },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const isAdmin = (session?.user as { role?: string })?.role === "ADMIN";
 
   return (
     <aside className="w-60 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0">
@@ -50,8 +47,6 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => {
-          if (item.adminOnly && !isAdmin) return null;
-
           const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
           return (
             <Link
