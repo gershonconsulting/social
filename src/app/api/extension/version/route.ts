@@ -5,17 +5,17 @@ import { NextResponse } from "next/server";
  * GET /api/extension/version
  *
  * Returns the latest shipped version of the GershonAI Chrome extension.
- * The popup compares this against its installed version
- * (chrome.runtime.getManifest().version) and shows an "Update available"
- * banner if installed < latest.
+ * The popup compares this against its installed version and shows an
+ * "Update available" banner if installed < latest.
  *
- * Bump LATEST whenever I publish a new version of the extension files
- * to the workspace folder. Keep semver — popup does a string-compare-aware
- * version diff (treating each dot-separated segment as a number).
+ * Bump LATEST whenever a new version of the extension files is published
+ * to public/gershonai-extension.zip. Keep semver — popup does a numeric
+ * dot-segment compare.
  */
-const LATEST = "0.9.0";
+const LATEST = "0.10.0";
 
 const RELEASE_NOTES: Record<string, string> = {
+  "0.10.0": "Daily auto-sync. The extension now runs the Sync Now flow once a day on its own via chrome.alarms — no clicking needed as long as Chrome is open. If Chrome was closed, the server falls back to Phantombuster at 06:00 UTC.",
   "0.9.0": "Major: posts are now fetched inside YOUR browser (your real IP + cookies) — bypasses LinkedIn/X anti-bot that was rejecting our edge requests.",
   "0.8.1": "Fix: TypeError when re-enabling the Sync Now button (e.currentTarget null after await).",
   "0.8.0": "Sync Now now scrapes ALL clients (loops chunks until done) and shows running totals.",
