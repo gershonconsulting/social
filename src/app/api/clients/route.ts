@@ -67,10 +67,31 @@ export async function GET(req: NextRequest) {
     }>;
 
     try {
+      const clientSelect = light
+        ? {
+            id: true,
+            slug: true,
+            name: true,
+            timezone: true,
+            status: true,
+            clientType: true,
+            campaignStartDate: true,
+            reportingStartDate: true,
+            internalOwner: true,
+            website: true,
+            archivedAt: true,
+            archiveReason: true,
+            logoUrl: true,
+            industry: true,
+            createdAt: true,
+            updatedAt: true,
+          }
+        : undefined;
       [clients, connRows] = await Promise.all([
         prisma.client.findMany({
           where,
           orderBy: [{ status: "asc" }, { name: "asc" }],
+          ...(clientSelect ? { select: clientSelect } : {}),
         }),
         prisma.platformConnection.findMany({
           where: { isEnabled: true },
@@ -95,6 +116,15 @@ export async function GET(req: NextRequest) {
         prisma.client.findMany({
           where,
           orderBy: [{ status: "asc" }, { name: "asc" }],
+          ...(light
+            ? { select: {
+                id: true, slug: true, name: true, timezone: true,
+                status: true, clientType: true, campaignStartDate: true,
+                reportingStartDate: true, internalOwner: true, website: true,
+                archivedAt: true, archiveReason: true, logoUrl: true,
+                industry: true, createdAt: true, updatedAt: true,
+              } }
+            : {}),
         }),
         prisma.platformConnection.findMany({
           where: { isEnabled: true },
@@ -194,7 +224,9 @@ export async function GET(req: NextRequest) {
       }),
     }));
 
-    return NextResponse.json({ success: true, data: enriched });
+    return NextResponse.json({ success: true, data: enriched }, {
+      headers: light ? { "Cache-Control": "private, max-age=15" } : {},
+    });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Database query failed";
     console.error("GET /api/clients error:", msg);
