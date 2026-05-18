@@ -103,12 +103,31 @@ export async function waitForPhantomFinish(
         last = flat;
         const status = (flat.lastEndType ?? null) as string | null;
         if (status && status !== "running") {
-          // Build the canonical result-object URL for this agent run
-          const orgFolder = flat.orgS3Folder;
-          const s3Folder = flat.s3Folder;
-          const resultObjectUrl = orgFolder && s3Folder
-            ? `https://phantombuster.s3.amazonaws.com/${orgFolder}/${s3Folder}/result.csv`
-            : null;
+          // Build candidate result CSV URLs. PB writes the full result file
+          // under the saved csvName argument (e.g. "Twitter Media
+          // Extractor.csv", 1MB+ of real data). The legacy "result.csv"
+          // path exists too but is just an error-log summary — using it
+          // makes us think we got 0 rows. Try the csvName URL first.
+          const orgFolder = (flat as { orgS3Folder?: string }).orgS3Folder;
+          const s3Folder = (flat as { s3Folder?: string }).s3Folder;
+          // Pull csvName out of the saved argument JSON if present.
+          const argRaw = (flat as { argument?: string }).argument;
+          let csvName: string | null = null;
+          if (typeof argRaw === "string") {
+            try {
+              const parsed = JSON.parse(argRaw) as { csvName?: string };
+              if (parsed && typeof parsed.csvName === "string" && parsed.csvName.trim()) {
+                csvName = parsed.csvName.trim();
+              }
+            } catch { /* ignore */ }
+          }
+          let resultObjectUrl: string | null = null;
+          if (orgFolder && s3Folder) {
+            const base = `https://phantombuster.s3.amazonaws.com/${orgFolder}/${s3Folder}`;
+            resultObjectUrl = csvName
+              ? `${base}/${encodeURIComponent(csvName)}.csv`
+              : `${base}/result.csv`;
+          }
           return { lastEndStatus: status, resultObjectUrl, rawAgent: last };
         }
       }

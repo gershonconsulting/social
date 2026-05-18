@@ -126,8 +126,13 @@ export async function runPhantombusterSync(): Promise<{
 
     const finish = await waitForPhantomFinish(config.apiKey, p.phantomId, 120_000, 5_000);
     r.finished = finish.lastEndStatus;
-    if (finish.lastEndStatus !== "success") {
-      r.error = `Phantom run ended with status: ${finish.lastEndStatus}`;
+    // PB's lastEndType values: "running" | "finished" | "error" | "timeout".
+    // "finished" IS the success case — there is no "success" status. We bail
+    // only on the truly-bad statuses (and on "running" which means the
+    // earlier waitForPhantomFinish hit its deadline).
+    const status = finish.lastEndStatus;
+    if (status !== "finished") {
+      r.error = `Phantom run ended with status: ${status ?? "unknown"}`;
       results.push(r);
       continue;
     }
