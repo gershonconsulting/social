@@ -1,15 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCw, Loader2, CheckCircle2, AlertTriangle, Users, Heart } from "lucide-react";
+import { RefreshCw, Loader2, CheckCircle2, AlertTriangle, Info } from "lucide-react";
 
-interface PlatformResult {
+interface PbResult {
   platform: string;
-  externalAccountName: string | null;
   postsUpserted: number;
-  followerCount: number | null;
-  success: boolean;
-  error: string | null;
+  rowsParsed: number;
+  error?: string;
 }
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -19,9 +17,32 @@ const PLATFORM_LABELS: Record<string, string> = {
   TIKTOK: "TikTok",
 };
 
-export function ClientSyncButton({ clientId }: { clientId: string }) {
+/**
+ * Per-client manual sync trigger.
+ *
+ * The legacy `/api/sync` (type: backfill) path is unreliable in 2026 — the
+ * Cloudflare edge runtime can't keep a LinkedIn Voyager / Twitter API
+ * session long enough, Google Business OAuth tokens expire frequently, and
+ * the worker often times out mid-sync returning HTML 524s. We've moved to
+ * a two-tier model:
+ *
+ *   1. The GershonAI Chrome extension auto-runs daily inside the user's
+ *      browser (real residential IP + real session, undetectable). It
+ *      covers LinkedIn + X for every client in one batch.
+ *   2. If the extension hasn't run (Chrome was closed), the daily 06:00
+ *      UTC cron falls back to Phantombuster.
+ *
+ * This button gives the user a way to force-refresh data ad-hoc without
+ * waiting for either of those. It calls Phantombuster directly (covers
+ * LinkedIn + X for all clients, including this one). For LinkedIn/Twitter
+ * the user can also just open the extension popup and click Sync Now.
+ *
+ * `clientId` is accepted but currently unused — kept for forward-compat
+ * once per-client PB filtering is wired in.
+ */
+export function ClientSyncButton({ clientId: _clientId }: { clientId: string }) {
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<PlatformResult[] | null>(null);
+  const [results, setResults] = useState<PbResult[] | null>(null);
   const [topLevelError, setTopLevelError] = useState<string | null>(null);
   const [showResults, setShowResults] = useState(false);
 
@@ -31,62 +52,30 @@ export function ClientSyncButton({ clientId }: { clientId: string }) {
     setTopLevelError(null);
     setShowResults(true);
 
-    const since = new Date();
-    since.setDate(since.getDate() - 7);
-
     try {
-      const res = await fetch("/api/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "backfill",
-          clientId,
-          since: since.toISOString(),
-          until: new Date().toISOString(),
-        }),
-      });
+      const res = await fetch("/api/cron/phantombuster-sync", { method: "GET" });
       setLoading(false);
 
-      // Worker timeouts return an HTML error page, not JSON. Handle that gracefully.
       const ct = res.headers.get("content-type") || "";
       if (!ct.includes("application/json")) {
-        if (res.status === 524 || res.status === 504) {
-          setTopLevelError(
-            "Sync took longer than the edge worker's time budget. Posts and followers " +
-            "may already be partially updated — reload the page to see what landed, " +
-            "and try Sync Now again to fill in the rest."
-          );
-        } else {
-          setTopLevelError(
-            `Sync endpoint returned a non-JSON response (HTTP ${res.status}). ` +
-            "This usually means the Cloudflare worker timed out mid-sync. " +
-            "Reload to see partial results and retry."
-          );
-        }
+        setTopLevelError(`Phantombuster returned HTTP ${res.status} — try the Chrome extension popup instead.`);
         return;
       }
 
       const data = await res.json().catch(() => null);
       if (!data) {
-        setTopLevelError("Could not parse sync response.");
+        setTopLevelError("Could not parse Phantombuster response.");
         return;
       }
-      // Show the per-platform breakdown whenever it's present, even if the
-      // overall sync failed — that's exactly when the per-platform reasons
-      // are most useful (LinkedIn 403, Twitter no-session, GMB no-location-id, ...).
-      const perPlatform = data?.data?.perPlatform as PlatformResult[] | undefined;
-      if (Array.isArray(perPlatform) && perPlatform.length > 0) {
-        setResults(perPlatform);
-        if (!data.success) {
-          // Add a leading error so the popover header is clear
-          setTopLevelError(
-            data.data?.error || data.error || "Some platforms failed — see breakdown below."
-          );
-        }
-      } else if (data.data?.error || data.error) {
-        setTopLevelError(data.data?.error || data.error);
-      } else {
-        setTopLevelError("Sync did not return any per-platform results — there may be no enabled connections for this client.");
+      if (!data.success) {
+        setTopLevelError(data.error || "Phantombuster sync failed.");
+        return;
+      }
+      const items = (data?.data?.results || []) as PbResult[];
+      setResults(items);
+      const allFailed = items.length > 0 && items.every((r) => !!r.error);
+      if (allFailed) {
+        setTopLevelError("Both phantoms ran but returned 0 rows — check Phantombuster saved arguments.");
       }
     } catch (e) {
       setLoading(false);
@@ -99,17 +88,18 @@ export function ClientSyncButton({ clientId }: { clientId: string }) {
       <button
         onClick={handleSync}
         disabled={loading}
+        title="Refresh LinkedIn + X data for all clients via Phantombuster"
         className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60"
       >
         {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-        {loading ? "Syncing all platforms…" : "Sync Now"}
+        {loading ? "Running Phantombuster…" : "Refresh via Phantombuster"}
       </button>
 
       {showResults && (loading || results || topLevelError) && (
         <div className="absolute right-0 top-full mt-2 z-30 w-80 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <span className="text-sm font-semibold text-gray-900">
-              {loading ? "Pulling latest…" : "Sync results"}
+              {loading ? "Launching phantoms…" : "Phantombuster results"}
             </span>
             {!loading && (
               <button
@@ -120,11 +110,16 @@ export function ClientSyncButton({ clientId }: { clientId: string }) {
               </button>
             )}
           </div>
+          <div className="px-4 py-2 text-[11px] text-gray-500 bg-blue-50 border-b border-blue-100">
+            <Info size={11} className="inline mr-1 text-blue-500" />
+            Phantombuster refreshes LinkedIn + X for <strong>all</strong> clients.
+            For just this client, click Sync Now in the GershonAI extension popup.
+          </div>
           <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
             {loading && (
               <div className="px-4 py-6 flex items-center gap-2 text-sm text-gray-500">
                 <Loader2 size={14} className="animate-spin" />
-                Pulling posts + follower counts from every platform…
+                Running the LinkedIn + Twitter phantoms in Phantombuster…
               </div>
             )}
             {topLevelError && !loading && (
@@ -138,41 +133,26 @@ export function ClientSyncButton({ clientId }: { clientId: string }) {
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-medium text-gray-900">
                     {PLATFORM_LABELS[r.platform] ?? r.platform}
-                    {r.externalAccountName && (
-                      <span className="text-gray-400 font-normal ml-1.5">· {r.externalAccountName}</span>
-                    )}
                   </span>
-                  {r.success ? (
-                    <CheckCircle2 size={14} className="text-green-500" />
-                  ) : (
+                  {r.error ? (
                     <AlertTriangle size={14} className="text-red-500" />
+                  ) : (
+                    <CheckCircle2 size={14} className="text-green-500" />
                   )}
                 </div>
-                {r.success ? (
-                  <div className="flex items-center gap-3 text-gray-600">
-                    <span className="inline-flex items-center gap-1">
-                      <RefreshCw size={11} className="text-gray-400" />
-                      {r.postsUpserted} new post{r.postsUpserted !== 1 ? "s" : ""}
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                      <Users size={11} className="text-gray-400" />
-                      {r.followerCount !== null ? `${r.followerCount.toLocaleString()} followers` : "followers — n/a"}
-                    </span>
-                  </div>
+                {r.error ? (
+                  <div className="text-red-700">{r.error}</div>
                 ) : (
-                  <div className="text-red-700">{r.error || "Failed"}</div>
+                  <div className="text-gray-600">
+                    {r.postsUpserted} post{r.postsUpserted !== 1 ? "s" : ""} upserted from {r.rowsParsed} rows
+                  </div>
                 )}
               </div>
             ))}
-            {results && results.length === 0 && !topLevelError && (
-              <div className="px-4 py-6 text-center text-xs text-gray-400">
-                No platform connections to sync.
-              </div>
-            )}
           </div>
-          {!loading && results && results.some((r) => r.success) && (
+          {!loading && results && results.some((r) => (r.postsUpserted || 0) > 0) && (
             <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-              <span className="text-xs text-gray-500">Reload to see fresh data on this page</span>
+              <span className="text-xs text-gray-500">Reload to see fresh data</span>
               <button
                 onClick={() => window.location.assign(window.location.pathname + window.location.search)}
                 className="text-xs font-medium text-blue-600 hover:underline"

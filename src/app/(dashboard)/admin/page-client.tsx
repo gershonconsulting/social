@@ -125,35 +125,52 @@ export default function AdminPage() {
   async function loadClients() {
     setLoading(true);
     setLoadError("");
-    try {
-      // Use light=1 so the worker doesn't do the heavy latest-post enrichment
-      // on the admin path — admin only needs the client + connection rows.
-      // Without it, 44 clients trigger Cloudflare CPU budget (1101) on cold start.
-      const res = await fetch(`/api/clients?light=1&includeArchived=${showArchived}`);
-      if (!res.ok) {
-        if (res.status === 401 || res.status === 403 || res.redirected) {
+    // Retry up to 3 times with backoff. The edge worker that serves
+    // /api/clients occasionally returns 500/503 (CF code 1101: "Worker
+    // threw exception") on cold start, especially when Neon's pooler
+    // also needs to spin up. Retrying transparently hides that flake.
+    const MAX_RETRIES = 3;
+    let lastError: string | null = null;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const res = await fetch(`/api/clients?light=1&includeArchived=${showArchived}`);
+        if (!res.ok) {
+          if (res.status === 401 || res.status === 403 || res.redirected) {
+            window.location.href = "/login";
+            return;
+          }
+          // 5xx → retry. 4xx (other) → give up immediately.
+          if (res.status >= 500 && attempt < MAX_RETRIES) {
+            lastError = `HTTP ${res.status}`;
+            await new Promise((r) => setTimeout(r, 400 * attempt));
+            continue;
+          }
+          throw new Error(`Server error ${res.status}`);
+        }
+        const contentType = res.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
           window.location.href = "/login";
           return;
         }
-        throw new Error(`Server error ${res.status}`);
+        const data = await res.json();
+        if (data.success) {
+          setClients(data.data);
+          setLoadError("");
+          setLoading(false);
+          return;
+        }
+        lastError = data.error || "Failed to load companies";
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : "Network error";
+        if (attempt < MAX_RETRIES) {
+          await new Promise((r) => setTimeout(r, 400 * attempt));
+          continue;
+        }
       }
-      const contentType = res.headers.get("content-type") || "";
-      if (!contentType.includes("application/json")) {
-        window.location.href = "/login";
-        return;
-      }
-      const data = await res.json();
-      if (data.success) {
-        setClients(data.data);
-      } else {
-        setLoadError(data.error || "Failed to load companies");
-      }
-    } catch (err) {
-      console.error("loadClients error:", err);
-      setLoadError("Failed to load companies. Please refresh the page.");
-    } finally {
-      setLoading(false);
     }
+    console.error("loadClients failed after retries:", lastError);
+    setLoadError(`Failed to load companies (${lastError}). Click Try again below or refresh the page.`);
+    setLoading(false);
   }
 
   useEffect(() => { loadClients(); }, [showArchived]);

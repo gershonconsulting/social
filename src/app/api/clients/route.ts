@@ -47,14 +47,36 @@ export async function GET(req: NextRequest) {
   // edge runtime when fetching all socialPost rows across every company.
   const light = searchParams.get("light") === "1" || searchParams.get("light") === "true";
 
+  // Edge runtime CPU note: Prisma's nested `include` serializes joins
+  // through the data-proxy worker and was occasionally exhausting CPU on
+  // the /admin path (intermittent 500/1101). Split into two flat queries
+  // and stitch in JS — far cheaper, and lets us avoid loading any column
+  // we don't actually render in /admin.
   try {
-    const clients = await prisma.client.findMany({
-      where,
-      include: {
-        platformConnections: {
+    let clients: Awaited<ReturnType<typeof prisma.client.findMany>>;
+    let connRows: Array<{
+      id: string;
+      clientId: string;
+      platform: Platform;
+      connectionStatus: ConnectionStatus;
+      isMandatory: boolean;
+      externalAccountUrl: string | null;
+      externalAccountName: string | null;
+      lastSyncAt: Date | null;
+      lastSyncError: string | null;
+    }>;
+
+    try {
+      [clients, connRows] = await Promise.all([
+        prisma.client.findMany({
+          where,
+          orderBy: [{ status: "asc" }, { name: "asc" }],
+        }),
+        prisma.platformConnection.findMany({
           where: { isEnabled: true },
           select: {
             id: true,
+            clientId: true,
             platform: true,
             connectionStatus: true,
             isMandatory: true,
@@ -63,13 +85,57 @@ export async function GET(req: NextRequest) {
             lastSyncAt: true,
             lastSyncError: true,
           },
-        },
-      },
-      orderBy: [{ status: "asc" }, { name: "asc" }],
-    });
+        }),
+      ]);
+    } catch (innerErr) {
+      // Retry once on transient Prisma/edge-worker errors. Neon cold-starts
+      // sometimes 500 the first call and succeed on the second within ~1s.
+      await new Promise((r) => setTimeout(r, 400));
+      [clients, connRows] = await Promise.all([
+        prisma.client.findMany({
+          where,
+          orderBy: [{ status: "asc" }, { name: "asc" }],
+        }),
+        prisma.platformConnection.findMany({
+          where: { isEnabled: true },
+          select: {
+            id: true,
+            clientId: true,
+            platform: true,
+            connectionStatus: true,
+            isMandatory: true,
+            externalAccountUrl: true,
+            externalAccountName: true,
+            lastSyncAt: true,
+            lastSyncError: true,
+          },
+        }),
+      ]);
+    }
+
+    const connsByClient = new Map<string, typeof connRows>();
+    for (const c of connRows) {
+      const arr = connsByClient.get(c.clientId) ?? [];
+      arr.push(c);
+      connsByClient.set(c.clientId, arr);
+    }
+    // Re-shape so each client has its connections inline (legacy API contract).
+    const clientsWithConns = clients.map((c) => ({
+      ...c,
+      platformConnections: (connsByClient.get(c.id) ?? []).map((cc) => ({
+        id: cc.id,
+        platform: cc.platform,
+        connectionStatus: cc.connectionStatus,
+        isMandatory: cc.isMandatory,
+        externalAccountUrl: cc.externalAccountUrl,
+        externalAccountName: cc.externalAccountName,
+        lastSyncAt: cc.lastSyncAt,
+        lastSyncError: cc.lastSyncError,
+      })),
+    }));
 
     // Fetch latest post for each client's platform connections (only when not in light mode)
-    const clientIds = clients.map((c) => c.id);
+    const clientIds = clientsWithConns.map((c) => c.id);
     let latestPosts: Array<{
       clientId: string;
       platform: string;
@@ -111,7 +177,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const enriched = clients.map((client) => ({
+    const enriched = clientsWithConns.map((client) => ({
       ...client,
       platformConnections: client.platformConnections.map((conn) => {
         const latestPost = latestPostMap.get(client.id + ":" + conn.platform);
