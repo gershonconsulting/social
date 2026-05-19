@@ -107,10 +107,14 @@ export function AnalyticsPageClient() {
     return () => { cancelled = true; };
   }, [days, attempt]);
 
+  const displayData: Summary | null = useMemo(
+    () => (demoMode ? buildDemoSummary(data) : data),
+    [demoMode, data]
+  );
   const maxDay = useMemo(() => {
-    if (!data) return 1;
-    return Math.max(1, ...data.postsByDay.map((d) => d.total));
-  }, [data]);
+    if (!displayData) return 1;
+    return Math.max(1, ...displayData.postsByDay.map((d) => d.total));
+  }, [displayData]);
 
   return (
     <div className="space-y-8">
@@ -152,25 +156,25 @@ export function AnalyticsPageClient() {
         </div>
       )}
 
-      {!loading && !error && data && (
+      {!loading && !error && displayData && (
         <>
           {/* Top KPIs */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <KpiCard label="Posts" value={data.totals.posts.toLocaleString()} />
-            <KpiCard label="Likes" value={data.totals.likes.toLocaleString()} />
-            <KpiCard label="Comments" value={data.totals.comments.toLocaleString()} />
-            <KpiCard label="Shares" value={data.totals.shares.toLocaleString()} />
-            <KpiCard label="Total Engagement" value={data.totals.engagement.toLocaleString()} highlight />
+            <KpiCard label="Posts" value={displayData.totals.posts.toLocaleString()} />
+            <KpiCard label="Likes" value={displayData.totals.likes.toLocaleString()} />
+            <KpiCard label="Comments" value={displayData.totals.comments.toLocaleString()} />
+            <KpiCard label="Shares" value={displayData.totals.shares.toLocaleString()} />
+            <KpiCard label="Total Engagement" value={displayData.totals.engagement.toLocaleString()} highlight />
           </div>
 
           {/* Posts by day */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <h2 className="text-sm font-semibold text-gray-900 mb-4">Posts per day</h2>
-            {data.postsByDay.length === 0 ? (
+            {displayData.postsByDay.length === 0 ? (
               <div className="py-8 text-center text-sm text-gray-400">No posts in this window.</div>
             ) : (
               <div className="flex items-end gap-1 h-40">
-                {data.postsByDay.map((d) => (
+                {displayData.postsByDay.map((d) => (
                   <div
                     key={d.date}
                     className="flex-1 flex flex-col justify-end group relative"
@@ -185,8 +189,8 @@ export function AnalyticsPageClient() {
               </div>
             )}
             <div className="flex justify-between text-[10px] text-gray-400 mt-2 font-mono">
-              <span>{data.postsByDay[0]?.date ?? ""}</span>
-              <span>{data.postsByDay[data.postsByDay.length - 1]?.date ?? ""}</span>
+              <span>{displayData.postsByDay[0]?.date ?? ""}</span>
+              <span>{displayData.postsByDay[displayData.postsByDay.length - 1]?.date ?? ""}</span>
             </div>
           </div>
 
@@ -194,11 +198,11 @@ export function AnalyticsPageClient() {
             {/* By platform */}
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="text-sm font-semibold text-gray-900 mb-4">By platform</h2>
-              {Object.keys(data.byPlatform).length === 0 ? (
-                <div className="py-8 text-center text-sm text-gray-400">No platform data.</div>
+              {Object.keys(displayData.byPlatform).length === 0 ? (
+                <div className="py-8 text-center text-sm text-gray-400">No platform displayData.</div>
               ) : (
                 <div className="space-y-3">
-                  {Object.entries(data.byPlatform)
+                  {Object.entries(displayData.byPlatform)
                     .sort((a, b) => b[1].posts - a[1].posts)
                     .map(([platform, t]) => {
                       const totalEng = t.likes + t.comments + t.shares;
@@ -223,11 +227,11 @@ export function AnalyticsPageClient() {
             {/* By category */}
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="text-sm font-semibold text-gray-900 mb-4">Companies by category</h2>
-              {Object.keys(data.byCategory).length === 0 ? (
+              {Object.keys(displayData.byCategory).length === 0 ? (
                 <div className="py-8 text-center text-sm text-gray-400">No companies.</div>
               ) : (
                 <div className="space-y-2 text-xs">
-                  {Object.entries(data.byCategory)
+                  {Object.entries(displayData.byCategory)
                     .sort((a, b) => b[1] - a[1])
                     .map(([k, n]) => (
                       <div key={k} className="flex items-center justify-between">
@@ -245,7 +249,7 @@ export function AnalyticsPageClient() {
             <div className="px-6 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Top 10 posts by engagement</h2>
             </div>
-            {data.topPosts.length === 0 ? (
+            {displayData.topPosts.length === 0 ? (
               <div className="px-6 py-12 text-center text-sm text-gray-400">No posts in this window.</div>
             ) : (
               <table className="w-full text-sm">
@@ -262,7 +266,7 @@ export function AnalyticsPageClient() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {data.topPosts.map((p) => (
+                  {displayData.topPosts.map((p) => (
                     <tr key={p.id} className="hover:bg-gray-50">
                       <td className="px-6 py-2 text-xs font-mono text-gray-600">{p.publishedDateLocal}</td>
                       <td className="px-4 py-2 text-xs">

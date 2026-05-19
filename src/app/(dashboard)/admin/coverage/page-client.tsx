@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useDemoMode } from "@/lib/use-demo-mode";
 import { Header } from "@/components/layout/header";
 import { Loader2, AlertTriangle, RefreshCw, Check, X as XIcon, ExternalLink } from "lucide-react";
 
@@ -106,10 +107,29 @@ function ChecksCell({ p }: { p: PerPlatform }) {
 }
 
 export function CoveragePageClient() {
-  const [clients, setClients] = useState<ClientRow[] | null>(null);
+  const demoMode = useDemoMode();
+  const [rawClients, setClients] = useState<ClientRow[] | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [filter, setFilter] = useState<"all" | "issues" | "perfect">("all");
+  // In demo mode, force every cell to tier-3 (✓✓✓): hasLink + hasData + upToDate.
+  // Synthetic post counts so the hover tooltip still looks plausible.
+  const clients: ClientRow[] | null = demoMode && rawClients
+    ? rawClients.map((c) => ({
+        ...c,
+        platforms: Object.fromEntries(
+          Object.entries(c.platforms).map(([k, v]) => [k, {
+            ...v,
+            hasLink: true,
+            hasData: true,
+            upToDate: true,
+            postCount: v.postCount > 0 ? v.postCount : 80 + (c.id.charCodeAt(0) % 50),
+            latestPostAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
+            externalAccountUrl: v.externalAccountUrl || ("https://example.com/" + k.toLowerCase() + "/" + c.slug),
+          }])
+        ),
+      }))
+    : rawClients;
 
   useEffect(() => {
     let cancelled = false;

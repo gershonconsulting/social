@@ -21,6 +21,7 @@ import {
   Eye,
 } from "lucide-react";
 import { ExtensionHealthBanner } from "./extension-health-banner";
+import { useDemoMode } from "@/lib/use-demo-mode";
 
 interface PlatformFollower {
   platform: string;
@@ -121,6 +122,7 @@ export function DashboardClient({
   totalFollowers: number;
   activeClients: number;
 }) {
+  const demoMode = useDemoMode();
   const [compliance, setCompliance] = useState<Record<string, ComplianceData>>({});
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState("");
@@ -178,11 +180,29 @@ export function DashboardClient({
     },
     { posts: 0, likes: 0, comments: 0, shares: 0, views: 0 }
   );
+  // Demo-mode inflation: multiply windowed KPIs and connection counts to
+  // make the dashboard look impressive in live demos. Stable per-render
+  // (no random — multipliers are constants) so screenshots match.
+  if (demoMode) {
+    const MULT_POSTS = 45;
+    const MULT_LIKES = 220;
+    const MULT_COMMENTS = 18;
+    const MULT_SHARES = 32;
+    const MULT_VIEWS = 4500;
+    // Floor each component so we never show a zero in demo mode.
+    windowedTotals.posts = Math.max(windowedTotals.posts * 8 + filtered.length * MULT_POSTS, 1200);
+    windowedTotals.likes = Math.max(windowedTotals.likes * 6 + filtered.length * MULT_LIKES, 45000);
+    windowedTotals.comments = Math.max(windowedTotals.comments * 6 + filtered.length * MULT_COMMENTS, 3800);
+    windowedTotals.shares = Math.max(windowedTotals.shares * 6 + filtered.length * MULT_SHARES, 7200);
+    windowedTotals.views = Math.max(windowedTotals.views * 5 + filtered.length * MULT_VIEWS, 980000);
+  }
   const totalEngagement = windowedTotals.likes + windowedTotals.comments + windowedTotals.shares;
-  const connectedPlatformCount = filtered.reduce(
-    (s, c) => s + c.platformConnections.filter((p) => p.connectionStatus === "CONNECTED").length,
-    0
-  );
+  const connectedPlatformCount = demoMode
+    ? filtered.length * 3 // every client × 3 platforms green
+    : filtered.reduce(
+        (s, c) => s + c.platformConnections.filter((p) => p.connectionStatus === "CONNECTED").length,
+        0
+      );
 
   // Sort clients by compliance % descending (within filter)
   const sorted = [...filtered].sort((a, b) => {

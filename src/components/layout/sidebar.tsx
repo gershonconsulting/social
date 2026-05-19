@@ -13,7 +13,10 @@ import {
   ScrollText,
   AlertOctagon,
   Network,
+  PlayCircle,
+  StopCircle,
 } from "lucide-react";
+import { useDemoMode, setDemoMode } from "@/lib/use-demo-mode";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -77,6 +80,7 @@ export function Sidebar() {
             {(session?.user as { role?: string })?.role?.toLowerCase() ?? "user"}
           </span>
         </div>
+        <DemoToggleButton />
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors"
@@ -86,5 +90,29 @@ export function Sidebar() {
         </button>
       </div>
     </aside>
+  );
+}
+
+
+function DemoToggleButton() {
+  const demoOn = useDemoMode();
+  return (
+    <button
+      onClick={() => {
+        setDemoMode(!demoOn);
+        // Force a hard reload so page data refetches with the new flag.
+        setTimeout(() => { window.location.reload(); }, 80);
+      }}
+      title={demoOn ? "Currently showing FAKE demo data. Click to switch back to real." : "Switch to fake demo data — every chart full, every number inflated."}
+      className={
+        "w-full flex items-center gap-3 px-3 py-2 mb-1 rounded-lg text-sm font-medium transition-colors " +
+        (demoOn
+          ? "bg-amber-100 text-amber-800 hover:bg-amber-200 ring-1 ring-amber-300"
+          : "text-gray-400 hover:bg-gray-50 hover:text-gray-600")
+      }
+    >
+      {demoOn ? <StopCircle size={16} /> : <PlayCircle size={16} />}
+      {demoOn ? "Demo mode ON" : "Demo mode"}
+    </button>
   );
 }
