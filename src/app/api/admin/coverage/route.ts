@@ -37,7 +37,7 @@ export async function GET() {
       prisma.client.findMany({
         where: { status: ClientStatus.ACTIVE },
         orderBy: { name: "asc" },
-        select: { id: true, name: true, slug: true, clientType: true },
+        select: { id: true, name: true, slug: true, clientType: true, website: true },
       }),
       prisma.platformConnection.findMany({
         where: { isEnabled: true, platform: { in: PLATFORMS } },
@@ -110,6 +110,7 @@ export async function GET() {
         name: c.name,
         slug: c.slug,
         clientType: c.clientType,
+        website: c.website,
         platforms,
       };
     });

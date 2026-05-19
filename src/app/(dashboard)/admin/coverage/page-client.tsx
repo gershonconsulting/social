@@ -19,6 +19,7 @@ interface ClientRow {
   name: string;
   slug: string;
   clientType: string;
+  website: string | null;
   platforms: Record<string, PerPlatform>;
 }
 
@@ -305,6 +306,19 @@ export function CoveragePageClient() {
                       <div className="font-medium text-gray-900 text-sm group-hover:text-blue-700">{c.name}</div>
                       <div className="text-[10px] text-gray-400 mt-0.5">{c.clientType.toLowerCase()} — open dashboard →</div>
                     </Link>
+                    {c.website && (
+                      <a
+                        href={c.website}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-0.5 text-[10px] text-gray-500 hover:text-blue-700 mt-1"
+                        title={c.website}
+                      >
+                        <ExternalLink size={9} />
+                        {c.website.replace(/^https?:\/\/(?:www\.)?/, "").replace(/\/.*$/, "")}
+                      </a>
+                    )}
                   </td>
                   {COLUMNS.map((col) => {
                     const p = c.platforms[col.platform];
