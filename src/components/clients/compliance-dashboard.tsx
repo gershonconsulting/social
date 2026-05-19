@@ -26,7 +26,7 @@ interface CalendarDay {
   date: string;
   dayOfWeek: number;
   isWorkingDay: boolean;
-  platforms: Record<string, { hasPost: boolean; postCount: number }>;
+  platforms: Record<string, { hasPost: boolean; postCount: number; wasSynced?: boolean }>;
 }
 
 interface ComplianceData {
