@@ -1,13 +1,23 @@
 "use client";
 
-import { useState } from "react";
-import { RefreshCw, Loader2, CheckCircle2, AlertTriangle, Info } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { RefreshCw, Loader2, CheckCircle2, AlertTriangle, Info, Chrome } from "lucide-react";
 
-interface PbResult {
+interface PlatformResult {
   platform: string;
   postsUpserted: number;
-  rowsParsed: number;
+  rowsParsed?: number;
   error?: string;
+}
+
+interface SyncResultData {
+  ok: boolean;
+  totalUpserted?: number;
+  totalFailed?: number;
+  accountCount?: number;
+  badPlatforms?: string[];
+  ingestErrors?: string[];
+  results?: PlatformResult[];
 }
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -18,108 +28,200 @@ const PLATFORM_LABELS: Record<string, string> = {
 };
 
 /**
- * Per-client manual sync trigger.
+ * Per-client manual sync.
  *
- * The legacy `/api/sync` (type: backfill) path is unreliable in 2026 — the
- * Cloudflare edge runtime can't keep a LinkedIn Voyager / Twitter API
- * session long enough, Google Business OAuth tokens expire frequently, and
- * the worker often times out mid-sync returning HTML 524s. We've moved to
- * a two-tier model:
+ * Primary path: drive the GershonAI Chrome extension via window.postMessage.
+ *   The extension's content script (running on social.gershoncrm.com) listens
+ *   for GERSHONAI_SYNC_CLIENT messages and forwards them to its background
+ *   service worker, which opens LinkedIn + X tabs and scrapes just this one
+ *   client. Real residential IP, real session, full extension flow — same as
+ *   the daily auto-sync but scoped to one company.
  *
- *   1. The GershonAI Chrome extension auto-runs daily inside the user's
- *      browser (real residential IP + real session, undetectable). It
- *      covers LinkedIn + X for every client in one batch.
- *   2. If the extension hasn't run (Chrome was closed), the daily 06:00
- *      UTC cron falls back to Phantombuster.
+ * Fallback: if the extension isn't installed or the user runs this from a
+ *   browser without it, fall through to /api/cron/phantombuster-sync (which
+ *   syncs all clients via PB's infra).
  *
- * This button gives the user a way to force-refresh data ad-hoc without
- * waiting for either of those. It calls Phantombuster directly (covers
- * LinkedIn + X for all clients, including this one). For LinkedIn/Twitter
- * the user can also just open the extension popup and click Sync Now.
- *
- * `clientId` is accepted but currently unused — kept for forward-compat
- * once per-client PB filtering is wired in.
+ * Detection: on mount, we postMessage GERSHONAI_PING. If we receive a
+ *   GERSHONAI_PONG within 1 second, the extension is installed and we use
+ *   the extension path. Otherwise we render the Phantombuster path.
  */
-export function ClientSyncButton({ clientId: _clientId }: { clientId: string }) {
+export function ClientSyncButton({ clientId }: { clientId: string }) {
+  const [extensionVersion, setExtensionVersion] = useState<string | null>(null);
+  const [extensionChecked, setExtensionChecked] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<PbResult[] | null>(null);
+  const [results, setResults] = useState<PlatformResult[] | null>(null);
+  const [summary, setSummary] = useState<SyncResultData | null>(null);
   const [topLevelError, setTopLevelError] = useState<string | null>(null);
   const [showResults, setShowResults] = useState(false);
+  const requestIdRef = useRef<string | null>(null);
 
-  async function handleSync() {
+  // Probe for the extension on mount.
+  useEffect(() => {
+    let cancelled = false;
+    const pingId = "ping-" + Math.random().toString(36).slice(2);
+    function onMessage(evt: MessageEvent) {
+      if (evt.source !== window) return;
+      if (evt.origin !== location.origin) return;
+      const d = evt.data;
+      if (!d || typeof d !== "object") return;
+      if (d.type === "GERSHONAI_HELLO" || (d.type === "GERSHONAI_PONG" && d.requestId === pingId)) {
+        if (!cancelled) {
+          setExtensionVersion(d.version || "unknown");
+          setExtensionChecked(true);
+        }
+      }
+    }
+    window.addEventListener("message", onMessage);
+    window.postMessage({ type: "GERSHONAI_PING", requestId: pingId }, location.origin);
+    const timer = setTimeout(() => {
+      if (!cancelled) setExtensionChecked(true);
+    }, 1200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      window.removeEventListener("message", onMessage);
+    };
+  }, []);
+
+  async function handleSyncViaExtension() {
     setLoading(true);
     setResults(null);
+    setSummary(null);
+    setTopLevelError(null);
+    setShowResults(true);
+    const requestId = "sync-" + Math.random().toString(36).slice(2);
+    requestIdRef.current = requestId;
+
+    return new Promise<void>((resolve) => {
+      const onMessage = (evt: MessageEvent) => {
+        if (evt.source !== window) return;
+        if (evt.origin !== location.origin) return;
+        const d = evt.data;
+        if (!d || typeof d !== "object") return;
+        if (d.type !== "GERSHONAI_SYNC_RESULT") return;
+        if (d.requestId !== requestId) return;
+        window.removeEventListener("message", onMessage);
+        setLoading(false);
+        if (!d.ok) {
+          setTopLevelError(d.error || "Extension sync failed");
+          resolve();
+          return;
+        }
+        const r: SyncResultData = d.result || {};
+        setSummary(r);
+        if ((r.badPlatforms || []).length > 0) {
+          setTopLevelError("Cookie capture failed for: " + r.badPlatforms!.join(", "));
+        }
+        resolve();
+      };
+      window.addEventListener("message", onMessage);
+
+      // Send to content script → background → runFullSync filtered to this client.
+      window.postMessage({
+        type: "GERSHONAI_SYNC_CLIENT",
+        clientId: clientId,
+        requestId: requestId,
+      }, location.origin);
+
+      // Safety timeout — extension can take 30-60s for the full LinkedIn + X
+      // capture + scrape, so we give it 120s.
+      setTimeout(() => {
+        window.removeEventListener("message", onMessage);
+        if (requestIdRef.current === requestId && loading) {
+          setLoading(false);
+          setTopLevelError("Extension didn't respond in 2 minutes — try the extension popup directly or use the Phantombuster fallback.");
+          resolve();
+        }
+      }, 120_000);
+    });
+  }
+
+  async function handleSyncViaPhantombuster() {
+    setLoading(true);
+    setResults(null);
+    setSummary(null);
     setTopLevelError(null);
     setShowResults(true);
 
     try {
-      const res = await fetch("/api/cron/phantombuster-sync", { method: "GET" });
+      const res = await fetch("/api/cron/phantombuster-sync");
       setLoading(false);
-
       const ct = res.headers.get("content-type") || "";
       if (!ct.includes("application/json")) {
         setTopLevelError(`Phantombuster returned HTTP ${res.status} — try the Chrome extension popup instead.`);
         return;
       }
-
       const data = await res.json().catch(() => null);
-      if (!data) {
-        setTopLevelError("Could not parse Phantombuster response.");
+      if (!data || !data.success) {
+        setTopLevelError(data?.error || "Phantombuster sync failed.");
         return;
       }
-      if (!data.success) {
-        setTopLevelError(data.error || "Phantombuster sync failed.");
-        return;
-      }
-      const items = (data?.data?.results || []) as PbResult[];
-      setResults(items);
-      const allFailed = items.length > 0 && items.every((r) => !!r.error);
-      if (allFailed) {
-        setTopLevelError("Both phantoms ran but returned 0 rows — check Phantombuster saved arguments.");
-      }
+      setResults(data?.data?.results || []);
     } catch (e) {
       setLoading(false);
       setTopLevelError(e instanceof Error ? e.message : "Network error");
     }
   }
 
+  const hasExtension = extensionChecked && !!extensionVersion;
+
   return (
     <div className="relative inline-block">
-      <button
-        onClick={handleSync}
-        disabled={loading}
-        title="Refresh LinkedIn + X data for all clients via Phantombuster"
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60"
-      >
-        {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-        {loading ? "Running Phantombuster…" : "Refresh via Phantombuster"}
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={hasExtension ? handleSyncViaExtension : handleSyncViaPhantombuster}
+          disabled={loading || !extensionChecked}
+          title={
+            hasExtension
+              ? "Drive the GershonAI extension to scrape this client's LinkedIn + X"
+              : "Extension not detected — falling back to Phantombuster"
+          }
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60"
+        >
+          {loading ? <Loader2 size={14} className="animate-spin" /> : hasExtension ? <Chrome size={14} /> : <RefreshCw size={14} />}
+          {loading
+            ? hasExtension ? "Scraping in your browser…" : "Running Phantombuster…"
+            : hasExtension ? "Sync via extension" : "Refresh via Phantombuster"}
+        </button>
+        {hasExtension && (
+          <button
+            onClick={handleSyncViaPhantombuster}
+            disabled={loading}
+            title="Fallback path — Phantombuster runs on its own infra (no browser needed). Slower; refreshes all clients."
+            className="text-[10px] text-gray-400 hover:text-gray-700 underline disabled:opacity-50"
+          >
+            or PB
+          </button>
+        )}
+      </div>
 
-      {showResults && (loading || results || topLevelError) && (
+      {showResults && (loading || results || summary || topLevelError) && (
         <div className="absolute right-0 top-full mt-2 z-30 w-80 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <span className="text-sm font-semibold text-gray-900">
-              {loading ? "Launching phantoms…" : "Phantombuster results"}
+              {loading
+                ? hasExtension ? "Scraping in your browser…" : "Launching Phantombuster…"
+                : "Sync results"}
             </span>
             {!loading && (
-              <button
-                onClick={() => setShowResults(false)}
-                className="text-xs text-gray-400 hover:text-gray-600"
-              >
+              <button onClick={() => setShowResults(false)} className="text-xs text-gray-400 hover:text-gray-600">
                 Close
               </button>
             )}
           </div>
-          <div className="px-4 py-2 text-[11px] text-gray-500 bg-blue-50 border-b border-blue-100">
-            <Info size={11} className="inline mr-1 text-blue-500" />
-            Phantombuster refreshes LinkedIn + X for <strong>all</strong> clients.
-            For just this client, click Sync Now in the GershonAI extension popup.
-          </div>
+          {hasExtension && (
+            <div className="px-4 py-2 text-[11px] text-gray-500 bg-blue-50 border-b border-blue-100">
+              <Info size={11} className="inline mr-1 text-blue-500" />
+              Using GershonAI extension v{extensionVersion} — opens LinkedIn + X in your browser and scrapes only this client.
+            </div>
+          )}
           <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
             {loading && (
               <div className="px-4 py-6 flex items-center gap-2 text-sm text-gray-500">
                 <Loader2 size={14} className="animate-spin" />
-                Running the LinkedIn + Twitter phantoms in Phantombuster…
+                {hasExtension
+                  ? "Opening LinkedIn + X tabs and capturing cookies…"
+                  : "Running the LinkedIn + Twitter phantoms in Phantombuster…"}
               </div>
             )}
             {topLevelError && !loading && (
@@ -128,29 +230,34 @@ export function ClientSyncButton({ clientId: _clientId }: { clientId: string }) 
                 {topLevelError}
               </div>
             )}
+            {summary && !loading && (
+              <div className="px-4 py-3 text-xs">
+                <div className="font-medium text-gray-900 mb-1.5 flex items-center gap-1">
+                  <CheckCircle2 size={14} className="text-green-600" />
+                  {summary.totalUpserted ?? 0} post{summary.totalUpserted === 1 ? "" : "s"} upserted across {summary.accountCount ?? 0} account{summary.accountCount === 1 ? "" : "s"}
+                </div>
+                {(summary.totalFailed ?? 0) > 0 && (
+                  <div className="text-red-700">{summary.totalFailed} failed</div>
+                )}
+                {(summary.ingestErrors || []).length > 0 && (
+                  <div className="text-amber-700 mt-1">{summary.ingestErrors!.join(" · ")}</div>
+                )}
+              </div>
+            )}
             {results?.map((r) => (
               <div key={r.platform} className="px-4 py-3 text-xs">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="font-medium text-gray-900">
-                    {PLATFORM_LABELS[r.platform] ?? r.platform}
-                  </span>
-                  {r.error ? (
-                    <AlertTriangle size={14} className="text-red-500" />
-                  ) : (
-                    <CheckCircle2 size={14} className="text-green-500" />
-                  )}
+                  <span className="font-medium text-gray-900">{PLATFORM_LABELS[r.platform] ?? r.platform}</span>
+                  {r.error ? <AlertTriangle size={14} className="text-red-500" /> : <CheckCircle2 size={14} className="text-green-500" />}
                 </div>
-                {r.error ? (
-                  <div className="text-red-700">{r.error}</div>
-                ) : (
-                  <div className="text-gray-600">
-                    {r.postsUpserted} post{r.postsUpserted !== 1 ? "s" : ""} upserted from {r.rowsParsed} rows
-                  </div>
-                )}
+                {r.error
+                  ? <div className="text-red-700">{r.error}</div>
+                  : <div className="text-gray-600">{r.postsUpserted} post{r.postsUpserted === 1 ? "" : "s"} upserted{r.rowsParsed != null ? ` (${r.rowsParsed} rows)` : ""}</div>
+                }
               </div>
             ))}
           </div>
-          {!loading && results && results.some((r) => (r.postsUpserted || 0) > 0) && (
+          {!loading && (summary?.totalUpserted ?? 0) > 0 && (
             <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
               <span className="text-xs text-gray-500">Reload to see fresh data</span>
               <button
