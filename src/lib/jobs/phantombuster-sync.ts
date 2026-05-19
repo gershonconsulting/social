@@ -80,7 +80,7 @@ export async function runPhantombusterSync(): Promise<{
     const row = await prisma.syncJob.create({
       data: {
         jobType: "BACKFILL",
-        scopeType: "GLOBAL",
+        scopeType: "ALL",
         status: "RUNNING",
         startedAt: jobStart,
         itemsProcessed: 0,
