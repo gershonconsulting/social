@@ -47,30 +47,55 @@ async function probeLinkedIn(cookies: Record<string,string>, capturedAt: string 
     testResult: "untested",
   };
   if (!cookies.li_at) return probe;
+  // LinkedIn started redirecting Voyager calls from datacenter IPs into a
+  // login-flow loop (the previous probe surfaced as 'Too many redirects' —
+  // the same /voyager/api/me URL bouncing 16+ times). Use redirect:'manual'
+  // so we never enter the loop, and treat any 30x as 'cookie is probably
+  // fine, but LinkedIn rejects this IP'.
   try {
     const r = await fetch("https://www.linkedin.com/voyager/api/me", {
       headers: {
         Cookie: cookieHeader(cookies),
-        // LinkedIn requires this header on Voyager calls
         "csrf-token": (cookies.JSESSIONID || "").replace(/"/g, ""),
         Accept: "application/vnd.linkedin.normalized+json+2.1",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
       },
+      redirect: "manual",
     });
     probe.testStatus = r.status;
     if (r.ok) {
       try {
-        const j = await r.json() as { data?: { firstName?: string; lastName?: string } };
+        const j = (await r.json()) as { data?: { firstName?: string; lastName?: string } };
         probe.identifiedAs = [j.data?.firstName, j.data?.lastName].filter(Boolean).join(" ") || null;
-      } catch {}
+      } catch { /* body wasn't JSON — odd but not fatal */ }
       probe.testResult = "ok";
+    } else if (r.status >= 300 && r.status < 400) {
+      // Redirected from voyager → login / interstitial. Almost always the
+      // datacenter-IP block, NOT a bad cookie. Surface that distinction.
+      probe.testResult = "fail";
+      probe.testMessage =
+        "Voyager redirected us to login (HTTP " + r.status + "). This is " +
+        "LinkedIn rejecting the server-side test because it sees a datacenter " +
+        "IP — the cookie is almost certainly fine when used from your browser " +
+        "by the extension. Confirm by clicking Sync Now in the popup.";
     } else {
       probe.testResult = "fail";
       probe.testMessage = `HTTP ${r.status} — likely IP fingerprint check (cookie may still be fine when called from your laptop).`;
     }
   } catch (e) {
-    probe.testResult = "fail";
-    probe.testMessage = `Network: ${e instanceof Error ? e.message : String(e)}`;
+    const m = e instanceof Error ? e.message : String(e);
+    // Cloudflare's fetch surfaces too-many-redirects as a regular network
+    // error before we can read the response. Detect it and translate.
+    if (/too many redirects/i.test(m)) {
+      probe.testResult = "fail";
+      probe.testMessage =
+        "Voyager bounced us through a redirect loop — LinkedIn rejecting the " +
+        "datacenter IP. Cookie is probably fine; the extension's in-browser " +
+        "scrape (real IP + real session) will still work.";
+    } else {
+      probe.testResult = "fail";
+      probe.testMessage = `Network: ${m}`;
+    }
   }
   return probe;
 }
