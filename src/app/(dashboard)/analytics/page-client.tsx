@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { Loader2, AlertTriangle, RefreshCw, ExternalLink, ThumbsUp, MessageCircle, Share2 } from "lucide-react";
 import { Header } from "@/components/layout/header";
+import { useDemoMode, seededRand, pickInt } from "@/lib/use-demo-mode";
 
 interface DayBucket {
   date: string;
@@ -66,7 +67,78 @@ const RANGE_OPTIONS = [
   { value: 90, label: "Last 90 days" },
 ];
 
+function buildDemoSummary(real: Summary | null): Summary {
+  const days = real?.days ?? 30;
+  const since = real?.since ?? new Date(Date.now() - days * 86400000).toISOString();
+  const rng = seededRand("gershonai-demo-v1-" + days);
+  const today = new Date();
+  const postsByDay: DayBucket[] = [];
+  let totalPosts = 0, totalLikes = 0, totalComments = 0, totalShares = 0;
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const date = d.toISOString().slice(0, 10);
+    const li = pickInt(rng, 12, 28);
+    const tw = pickInt(rng, 10, 24);
+    const gmb = pickInt(rng, 6, 14);
+    const total = li + tw + gmb;
+    postsByDay.push({ date, total, byPlatform: { LINKEDIN: li, TWITTER: tw, GOOGLE_BUSINESS: gmb } });
+    totalPosts += total;
+    totalLikes += pickInt(rng, 30, 60) * total;
+    totalComments += pickInt(rng, 2, 6) * total;
+    totalShares += pickInt(rng, 3, 8) * total;
+  }
+  const byPlatform: Record<string, PlatformTotals> = {
+    LINKEDIN: { posts: 0, likes: 0, comments: 0, shares: 0 },
+    TWITTER: { posts: 0, likes: 0, comments: 0, shares: 0 },
+    GOOGLE_BUSINESS: { posts: 0, likes: 0, comments: 0, shares: 0 },
+  };
+  for (const day of postsByDay) {
+    for (const [k, v] of Object.entries(day.byPlatform)) {
+      const tp = byPlatform[k];
+      tp.posts += v;
+      tp.likes += pickInt(rng, 30, 60) * v;
+      tp.comments += pickInt(rng, 2, 6) * v;
+      tp.shares += pickInt(rng, 3, 8) * v;
+    }
+  }
+  const fakeClients = ["APM Music", "WALLIX", "Business France", "SelectUSA", "MAbSilico", "Finance Montreal", "Edflex", "VALOS"];
+  const topPosts: TopPost[] = Array.from({ length: 5 }).map((_, i) => {
+    const c = fakeClients[i % fakeClients.length];
+    const plats = ["LINKEDIN", "TWITTER", "LINKEDIN", "GOOGLE_BUSINESS", "TWITTER"];
+    return {
+      id: "demo-" + i,
+      platform: plats[i],
+      clientName: c,
+      clientId: "demo-" + i,
+      postUrl: "#demo",
+      textSnippet: [
+        "Thrilled to announce our new partnership.",
+        "We crossed a major milestone this quarter.",
+        "Behind the scenes from our latest event.",
+        "Three lessons from a year of building in this space.",
+        "Honored to be recognized in the latest industry report.",
+      ][i],
+      publishedDateLocal: new Date(Date.now() - i * 86400000).toISOString().slice(0, 10),
+      likeCount: pickInt(rng, 380, 1240),
+      commentCount: pickInt(rng, 40, 180),
+      shareCount: pickInt(rng, 60, 220),
+      totalEngagement: 0,
+    };
+  }).map((p) => ({ ...p, totalEngagement: p.likeCount + p.commentCount + p.shareCount }));
+  return {
+    days,
+    since,
+    totals: { posts: totalPosts, likes: totalLikes, comments: totalComments, shares: totalShares, engagement: totalLikes + totalComments + totalShares },
+    postsByDay,
+    byPlatform,
+    byCategory: { Client: 8, Prospect: 11, Partner: 4, Internal: 2, Competition: 2 },
+    topPosts: topPosts.sort((a, b) => b.totalEngagement - a.totalEngagement),
+  };
+}
+
 export function AnalyticsPageClient() {
+  const demoMode = useDemoMode();
   const [days, setDays] = useState(30);
   const [data, setData] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
