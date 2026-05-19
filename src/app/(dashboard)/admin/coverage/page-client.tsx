@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
-import { Loader2, AlertTriangle, RefreshCw, Check, ExternalLink } from "lucide-react";
+import { Loader2, AlertTriangle, RefreshCw, Check, X as XIcon, ExternalLink } from "lucide-react";
 
 interface PerPlatform {
   hasLink: boolean;
@@ -76,7 +76,7 @@ function ChecksCell({ p }: { p: PerPlatform }) {
   return (
     <div className="px-3 py-3 text-center border-l border-gray-100" title={tooltip}>
       {tier === 0 ? (
-        <span className="text-gray-300 text-xl select-none">—</span>
+        <XIcon size={20} strokeWidth={3} className="text-red-500 inline-block" />
       ) : (
         <div className="inline-flex items-center justify-center gap-0.5">
           {Array.from({ length: tier }).map((_, i) => (
@@ -107,7 +107,7 @@ export function CoveragePageClient() {
   const [clients, setClients] = useState<ClientRow[] | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
-  const [filter, setFilter] = useState<"all" | "issues">("all");
+  const [filter, setFilter] = useState<"all" | "issues" | "perfect">("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -158,12 +158,21 @@ export function CoveragePageClient() {
     ? []
     : filter === "all"
       ? clients
-      : clients.filter((c) => {
-          return COLUMNS.some((col) => {
-            const p = c.platforms[col.platform];
-            return !p || !p.upToDate; // anything less than 3 checks counts as an issue
+      : filter === "perfect"
+        ? clients.filter((c) =>
+            // Every column has 3 checks: has link + has data + up to date.
+            COLUMNS.every((col) => {
+              const p = c.platforms[col.platform];
+              return !!p && p.hasLink && p.hasData && p.upToDate;
+            })
+          )
+        : clients.filter((c) => {
+            // Less than 3 checks on at least one column.
+            return COLUMNS.some((col) => {
+              const p = c.platforms[col.platform];
+              return !p || !p.upToDate;
+            });
           });
-        });
 
   return (
     <div className="space-y-4">
@@ -223,6 +232,15 @@ export function CoveragePageClient() {
           All ({clients?.length ?? 0})
         </button>
         <button
+          onClick={() => setFilter("perfect")}
+          className={`px-3 py-1.5 rounded-lg font-medium inline-flex items-center gap-1 ${filter === "perfect" ? "bg-green-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+        >
+          <span className="inline-flex items-center gap-0">
+            <Check size={11} strokeWidth={3} /><Check size={11} strokeWidth={3} /><Check size={11} strokeWidth={3} />
+          </span>
+          All 3 checks
+        </button>
+        <button
           onClick={() => setFilter("issues")}
           className={`px-3 py-1.5 rounded-lg font-medium ${filter === "issues" ? "bg-amber-600 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"}`}
         >
@@ -268,7 +286,11 @@ export function CoveragePageClient() {
               {visible.length === 0 && (
                 <tr>
                   <td colSpan={COLUMNS.length + 1} className="px-6 py-12 text-center text-sm text-gray-400">
-                    {filter === "issues" ? "Every company has 3 checks on every platform — nothing to fix." : "No companies."}
+                    {filter === "issues"
+                      ? "Every company has 3 checks on every platform — nothing to fix."
+                      : filter === "perfect"
+                        ? "No company has 3 checks across every platform yet."
+                        : "No companies."}
                   </td>
                 </tr>
               )}
