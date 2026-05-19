@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { fetchWithRetry } from "@/lib/fetch-retry";
 import Link from "next/link";
 import { Calendar, AlertCircle, Loader2 } from "lucide-react";
 import { formatRelative } from "@/lib/utils";
@@ -46,24 +47,6 @@ interface ClientData {
   platformConnections: Connection[];
 }
 
-// Fetch with retry-on-5xx — Cloudflare 1102 worker-limit hits flap between
-// 200 and 500 on the SAME url; one retry usually resolves it. We retry up to
-// 3 times with backoff.
-async function fetchWithRetry(url: string, attempts = 3): Promise<Response> {
-  let lastErr: unknown = null;
-  for (let i = 0; i < attempts; i++) {
-    try {
-      const r = await fetch(url, { cache: "no-store" });
-      if (r.status < 500) return r;
-      lastErr = new Error("HTTP " + r.status);
-    } catch (e) {
-      lastErr = e;
-    }
-    // exponential backoff: 200ms, 500ms, 1200ms
-    if (i < attempts - 1) await new Promise((res) => setTimeout(res, 200 * Math.pow(2.5, i)));
-  }
-  throw lastErr instanceof Error ? lastErr : new Error("fetch failed");
-}
 
 export function ClientDetailPageClient({ clientId }: { clientId: string }) {
   const router = useRouter();
