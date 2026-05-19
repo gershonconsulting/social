@@ -169,30 +169,18 @@ export function ClientSyncButton({ clientId }: { clientId: string }) {
     <div className="relative inline-block">
       <div className="flex items-center gap-2">
         <button
-          onClick={hasExtension ? handleSyncViaExtension : handleSyncViaPhantombuster}
-          disabled={loading || !extensionChecked}
+          onClick={hasExtension ? handleSyncViaExtension : undefined}
+          disabled={loading || !extensionChecked || !hasExtension}
           title={
             hasExtension
-              ? "Drive the GershonAI extension to scrape this client's LinkedIn + X"
-              : "Extension not detected — falling back to Phantombuster"
+              ? "Drive the GershonAI extension to scrape this client's LinkedIn + X in your browser"
+              : "Install the GershonAI Chrome extension to enable this"
           }
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60"
         >
-          {loading ? <Loader2 size={14} className="animate-spin" /> : hasExtension ? <Chrome size={14} /> : <RefreshCw size={14} />}
-          {loading
-            ? hasExtension ? "Scraping in your browser…" : "Running Phantombuster…"
-            : hasExtension ? "Sync via extension" : "Refresh via Phantombuster"}
+          {loading ? <Loader2 size={14} className="animate-spin" /> : <Chrome size={14} />}
+          {loading ? "Scraping in your browser…" : hasExtension ? "Sync via extension" : extensionChecked ? "Install extension to sync" : "Detecting extension…"}
         </button>
-        {hasExtension && (
-          <button
-            onClick={handleSyncViaPhantombuster}
-            disabled={loading}
-            title="Fallback path — Phantombuster runs on its own infra (no browser needed). Slower; refreshes all clients."
-            className="text-[10px] text-gray-400 hover:text-gray-700 underline disabled:opacity-50"
-          >
-            or PB
-          </button>
-        )}
       </div>
 
       {showResults && (loading || results || summary || topLevelError) && (

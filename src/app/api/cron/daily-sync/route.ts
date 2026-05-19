@@ -27,11 +27,6 @@ import prisma from "@/lib/db";
 import { recomputeClientCompliance } from "@/lib/compliance/engine";
 import { ClientStatus } from "@prisma/client";
 import { subDays } from "date-fns";
-import {
-  runPhantombusterSync,
-  findStaleConnections,
-} from "@/lib/jobs/phantombuster-sync";
-
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (secret) {
@@ -84,24 +79,11 @@ export async function GET(req: NextRequest) {
     report.compliance.error = e instanceof Error ? e.message : String(e);
   }
 
-  // 3. Phantombuster fallback. Only fires when at least one mandatory
-  //    LinkedIn/X connection didn't get refreshed in the last 22 hours —
-  //    meaning the extension didn't run (Chrome was closed, etc.).
-  try {
-    const stale = await findStaleConnections();
-    report.fallback.staleBefore = stale.length;
-    if (stale.length === 0) {
-      report.fallback.reason = "all LinkedIn/X connections refreshed in the last 22h";
-    } else {
-      report.fallback.reason = `${stale.length} stale connection(s) detected — launching Phantombuster`;
-      const out = await runPhantombusterSync();
-      report.fallback.ran = true;
-      report.fallback.results = out.results;
-      if (!out.ok) report.fallback.error = out.error;
-    }
-  } catch (e) {
-    report.fallback.error = e instanceof Error ? e.message : String(e);
-  }
+  // Phantombuster fallback is intentionally disabled.
+  // The Chrome extension (chrome.alarms daily auto-sync + per-client
+  // postMessage bridge) is now the only data path. PB code is preserved
+  // in /api/cron/phantombuster-sync for manual invocation if ever needed.
+  report.fallback.reason = "extension-only mode — PB is dormant";
 
   return NextResponse.json(report);
 }
