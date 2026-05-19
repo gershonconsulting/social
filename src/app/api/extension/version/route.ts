@@ -12,9 +12,10 @@ import { NextResponse } from "next/server";
  * to public/gershonai-extension.zip. Keep semver — popup does a numeric
  * dot-segment compare.
  */
-const LATEST = "0.10.0";
+const LATEST = "0.10.1";
 
 const RELEASE_NOTES: Record<string, string> = {
+  "0.10.1": "More robust X cookie capture — looks for auth_token on x.com AND twitter.com domains (Twitter still sets the legacy domain in some flows). Longer settle time on x.com home tab. Fixes the symptom where the X tab opened and immediately closed without saving cookies.",
   "0.10.0": "Daily auto-sync. The extension now runs the Sync Now flow once a day on its own via chrome.alarms — no clicking needed as long as Chrome is open. If Chrome was closed, the server falls back to Phantombuster at 06:00 UTC.",
   "0.9.0": "Major: posts are now fetched inside YOUR browser (your real IP + cookies) — bypasses LinkedIn/X anti-bot that was rejecting our edge requests.",
   "0.8.1": "Fix: TypeError when re-enabling the Sync Now button (e.currentTarget null after await).",

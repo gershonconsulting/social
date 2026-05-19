@@ -83,26 +83,52 @@ async function probeTwitter(cookies: Record<string,string>, capturedAt: string |
     testResult: "untested",
   };
   if (!cookies.auth_token || !cookies.ct0) return probe;
+  // X retired the v1.1 verify_credentials endpoint — it returns 404 even with
+  // valid cookies. Probe by fetching x.com/home with the auth cookies and
+  // following 0 redirects. A logged-in browser gets HTTP 200 + the SPA shell;
+  // an expired session gets a 30x to the login page or returns the public
+  // homepage HTML (which contains the marketing copy and Sign in button).
   try {
-    const r = await fetch("https://api.x.com/1.1/account/verify_credentials.json", {
+    const r = await fetch("https://x.com/home", {
       headers: {
         Cookie: cookieHeader(cookies),
-        "x-csrf-token": cookies.ct0,
-        // X's web client uses this hard-coded bearer for read paths
-        Authorization: "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9",
+        "Accept-Language": "en-US,en;q=0.9",
       },
+      redirect: "manual",
     });
     probe.testStatus = r.status;
-    if (r.ok) {
-      try {
-        const j = await r.json() as { screen_name?: string; name?: string };
-        probe.identifiedAs = j.screen_name ? `@${j.screen_name}` : (j.name ?? null);
-      } catch {}
-      probe.testResult = "ok";
+    if (r.status >= 300 && r.status < 400) {
+      const loc = r.headers.get("location") || "";
+      probe.testResult = "fail";
+      probe.testMessage = `Redirected to ${loc} — session cookies likely expired.`;
+    } else if (r.ok) {
+      // Best-effort body sniff: logged-in body contains the SPA's data-testid
+      // for the navbar / compose-tweet button. Logged-out body contains the
+      // 'Sign in to X' marketing chunk.
+      const text = await r.text();
+      const loggedIn =
+        text.includes('"isLoggedIn":true') ||
+        text.includes('"is_logged_in":true') ||
+        text.includes("/i/api/2/notifications/all.json") ||
+        text.includes("twitter:title");
+      const loggedOut =
+        text.includes("Sign in to X") ||
+        text.includes("loggedOutAccountSwitcher") ||
+        text.includes("/login");
+      if (loggedIn && !loggedOut) {
+        probe.testResult = "ok";
+      } else {
+        probe.testResult = "fail";
+        probe.testMessage =
+          "x.com/home returned 200 but the body looks logged-out (no SPA shell). " +
+          "Cookie may still be fine when used from your real browser via the extension — " +
+          "X checks IP fingerprint against the cookie's issuing IP and rejects datacenter IPs.";
+      }
     } else {
       probe.testResult = "fail";
-      probe.testMessage = `HTTP ${r.status} — likely IP fingerprint check.`;
+      probe.testMessage = `HTTP ${r.status} — likely IP fingerprint check (datacenter IPs frequently rejected by X).`;
     }
   } catch (e) {
     probe.testResult = "fail";
