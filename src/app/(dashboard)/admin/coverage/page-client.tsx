@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { Loader2, AlertTriangle, RefreshCw, Check, X as XIcon, ExternalLink } from "lucide-react";
 
@@ -295,10 +296,15 @@ export function CoveragePageClient() {
                 </tr>
               )}
               {visible.map((c) => (
-                <tr key={c.id} className="hover:bg-gray-50">
+                <tr key={c.id} className="hover:bg-gray-50 group">
                   <td className="px-4 py-2 align-top">
-                    <div className="font-medium text-gray-900 text-sm">{c.name}</div>
-                    <div className="text-[10px] text-gray-400 mt-0.5">{c.clientType.toLowerCase()}</div>
+                    <Link
+                      href={`/clients/${c.id}`}
+                      className="block group-hover:underline"
+                    >
+                      <div className="font-medium text-gray-900 text-sm group-hover:text-blue-700">{c.name}</div>
+                      <div className="text-[10px] text-gray-400 mt-0.5">{c.clientType.toLowerCase()} — open dashboard →</div>
+                    </Link>
                   </td>
                   {COLUMNS.map((col) => {
                     const p = c.platforms[col.platform];
