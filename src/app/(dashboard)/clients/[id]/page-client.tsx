@@ -45,32 +45,42 @@ function AddConnectionInline({ clientId, platform }: { clientId: string; platfor
     }
     setSaving(true);
     setError("");
-    try {
-      const r = await fetch("/api/platforms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId,
-          platform,
-          externalAccountUrl: trimmed,
-        }),
-      });
-      const ct = r.headers.get("content-type") || "";
-      if (!ct.includes("application/json")) {
-        setError(`HTTP ${r.status}`);
-      } else {
+    // Retry 5x on 5xx — CF worker cold-starts occasionally throw 1101/1102
+    // even on a perfectly valid POST. Hide those from the user.
+    let lastErr = "";
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        const r = await fetch("/api/platforms", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clientId, platform, externalAccountUrl: trimmed }),
+        });
+        const ct = r.headers.get("content-type") || "";
+        if (!ct.includes("application/json")) {
+          if (r.status >= 500 && attempt < 5) {
+            lastErr = `transient HTTP ${r.status}`;
+            await new Promise((res) => setTimeout(res, 250 * attempt));
+            continue;
+          }
+          lastErr = `HTTP ${r.status}`;
+          break;
+        }
         const j = await r.json();
         if (j.success) {
           window.location.assign(window.location.pathname + window.location.search);
           return;
         }
-        setError(j.error || "Save failed");
+        lastErr = j.error || "Save failed";
+        // Server-side validation error — don't retry.
+        if (r.status < 500) break;
+        await new Promise((res) => setTimeout(res, 250 * attempt));
+      } catch (e) {
+        lastErr = e instanceof Error ? e.message : "Network error";
+        if (attempt < 5) await new Promise((res) => setTimeout(res, 250 * attempt));
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Network error");
-    } finally {
-      setSaving(false);
     }
+    setError(lastErr || "Save failed");
+    setSaving(false);
   }
 
   if (!open) {

@@ -123,7 +123,7 @@ export function ComplianceDashboard({ clientId, platforms }: { clientId: string;
     setError("");
     (async () => {
       let lastErr = "";
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 5; i++) {
         try {
           const r = await fetch(`/api/clients/${clientId}/compliance?month=${selectedMonth}`, { cache: "no-store" });
           const ct = r.headers.get("content-type") || "";
