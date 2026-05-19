@@ -56,6 +56,10 @@ jobs:
           echo "https://social.gershoncrm.com" | npx wrangler pages secret put NEXT_PUBLIC_APP_URL --project-name gershoncrm-social
           echo "${{ secrets.CF_NEXTAUTH_SECRET }}" | npx wrangler pages secret put NEXTAUTH_SECRET --project-name gershoncrm-social
           echo "${{ secrets.CF_CRON_SECRET }}" | npx wrangler pages secret put CRON_SECRET --project-name gershoncrm-social
+          echo "${{ secrets.RESEND_API_KEY }}" | npx wrangler pages secret put RESEND_API_KEY --project-name gershoncrm-social
+          echo "${{ vars.DIGEST_TO || 'oattia@gmail.com' }}" | npx wrangler pages secret put DIGEST_TO --project-name gershoncrm-social
+          echo "${{ vars.DIGEST_FROM || 'onboarding@resend.dev' }}" | npx wrangler pages secret put DIGEST_FROM --project-name gershoncrm-social
+          echo "${{ secrets.GOOGLE_SHEETS_SVC_JSON }}" | npx wrangler pages secret put GOOGLE_SHEETS_SVC_JSON --project-name gershoncrm-social
           echo "${{ secrets.CF_GOOGLE_CLIENT_ID }}" | npx wrangler pages secret put GOOGLE_CLIENT_ID --project-name gershoncrm-social
           echo "${{ secrets.CF_GOOGLE_CLIENT_SECRET }}" | npx wrangler pages secret put GOOGLE_CLIENT_SECRET --project-name gershoncrm-social
           echo "${{ secrets.CF_LINKEDIN_CLIENT_ID }}" | npx wrangler pages secret put LINKEDIN_CLIENT_ID --project-name gershoncrm-social
