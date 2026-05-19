@@ -304,5 +304,14 @@ export async function POST(req: NextRequest) {
     include: { platformConnections: true },
   });
 
+  // Fire-and-forget: keep the Phantombuster source spreadsheet in sync.
+  // Doesn't block the response — if it fails the client is still created.
+  void (async () => {
+    try {
+      const url = new URL(req.url);
+      await fetch(`${url.protocol}//${url.host}/api/admin/sheets-sync`, { method: "POST" });
+    } catch { /* swallow — non-fatal */ }
+  })();
+
   return NextResponse.json({ success: true, data: fullClient }, { status: 201 });
 }
