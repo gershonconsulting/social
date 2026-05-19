@@ -12,6 +12,7 @@ import {
   LogOut,
   ScrollText,
   AlertOctagon,
+  Network,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ const navItems = [
   // per request 2026-05-18; bring back if monthly export becomes useful again.
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/clients", icon: Building2, label: "Companies" },
+  { href: "/admin/coverage", icon: Network, label: "Networks" },
   { href: "/analytics", icon: BarChart3, label: "Analytics" },
   { href: "/logs", icon: ScrollText, label: "Logs" },
   { href: "/errors", icon: AlertOctagon, label: "Errors" },

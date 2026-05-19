@@ -72,7 +72,7 @@ export function LogsPageClient() {
     setError("");
     (async () => {
       let lastErr = "";
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 5; i++) {
         try {
           const r = await fetch("/api/jobs?limit=200", { cache: "no-store" });
           const ct = r.headers.get("content-type") || "";
