@@ -51,11 +51,14 @@ export async function GET(
     orderBy: { publishedDateLocal: "asc" },
   });
 
-  // Get client's platform connections
+  // Get client's platform connections — include lastSyncAt so we can tell
+  // 'never synced' apart from 'synced and found nothing' in the day grid.
   const connections = await prisma.platformConnection.findMany({
     where: { clientId: id, isEnabled: true },
-    select: { platform: true, externalAccountName: true },
+    select: { platform: true, externalAccountName: true, lastSyncAt: true },
   });
+  const lastSyncByPlatform = new Map<string, Date | null>();
+  for (const c of connections) lastSyncByPlatform.set(c.platform, c.lastSyncAt);
 
   const trackedPlatforms = connections.map((c) => c.platform);
 
@@ -64,7 +67,7 @@ export async function GET(
     date: string;
     dayOfWeek: number;
     isWorkingDay: boolean;
-    platforms: Record<string, { hasPost: boolean; postCount: number }>;
+    platforms: Record<string, { hasPost: boolean; postCount: number; wasSynced: boolean }>;
   }> = [];
 
   for (let d = 1; d <= lastDay; d++) {
@@ -76,14 +79,20 @@ export async function GET(
     const dow = dateObj.getDay(); // 0=Sun, 6=Sat
     const isWorkingDay = dow >= 1 && dow <= 5;
 
-    const platformData: Record<string, { hasPost: boolean; postCount: number }> = {};
+    const platformData: Record<string, { hasPost: boolean; postCount: number; wasSynced: boolean }> = {};
+    // End-of-day cutoff: a sync running at 06:00 UTC on day D should have
+    // caught posts from day D-1. We use end-of-day-UTC as the cutoff.
+    const endOfDayUtc = new Date(dateStr + "T23:59:59Z");
     for (const p of trackedPlatforms) {
       const dayPosts = posts.filter(
         (post) => post.publishedDateLocal === dateStr && post.platform === p
       );
+      const lastSync = lastSyncByPlatform.get(p) ?? null;
+      const wasSynced = !!lastSync && lastSync.getTime() >= endOfDayUtc.getTime();
       platformData[p] = {
         hasPost: dayPosts.length > 0,
         postCount: dayPosts.length,
+        wasSynced,
       };
     }
 

@@ -55,6 +55,47 @@ export async function runPhantombusterSync(): Promise<{
     };
   }
 
+  // Open a SyncJob row so this run shows up in /logs with all the details
+  // Olivier needs: which phantom launched, which spreadsheet feeds it, which
+  // container ran, CSV URL downloaded, per-account upsert counts, errors.
+  const jobStart = new Date();
+  type StepLog = {
+    step: string;
+    at: string;
+    detail: Record<string, unknown>;
+  };
+  const stepLog: StepLog[] = [];
+  function logStep(step: string, detail: Record<string, unknown>) {
+    stepLog.push({ step, at: new Date().toISOString(), detail });
+  }
+  logStep("init", {
+    apiKey: config.apiKey ? `${config.apiKey.slice(0, 4)}…${config.apiKey.slice(-4)}` : null,
+    twitterPhantomId: config.twitterPhantomId,
+    linkedinPhantomId: config.linkedinPhantomId,
+    deleteAfterRun: config.deleteAfterRun,
+  });
+
+  let syncJobId: string | null = null;
+  try {
+    const row = await prisma.syncJob.create({
+      data: {
+        jobType: "PHANTOMBUSTER",
+        scopeType: "GLOBAL",
+        status: "RUNNING",
+        startedAt: jobStart,
+        itemsProcessed: 0,
+        itemsSucceeded: 0,
+        itemsFailed: 0,
+        notes: "Phantombuster fallback — runs PB phantoms server-side and upserts CSV results.",
+      },
+      select: { id: true },
+    });
+    syncJobId = row.id;
+  } catch (e) {
+    // Non-fatal — the sync can still run, the user just won't see it in /logs.
+    logStep("syncjob-create-failed", { error: e instanceof Error ? e.message : String(e) });
+  }
+
   const platforms: Array<{
     platform: Platform;
     phantomId: string | null;
@@ -112,20 +153,29 @@ export async function runPhantombusterSync(): Promise<{
     };
     if (!p.phantomId) {
       r.error = "No Phantom ID configured for this platform.";
+      logStep(`${p.platform}: no-phantom-id`, { platform: p.platform });
       results.push(r);
       continue;
     }
+    logStep(`${p.platform}: launch-start`, { platform: p.platform, phantomId: p.phantomId });
 
     const launch = await launchPhantom(config.apiKey, p.phantomId);
     if (!launch.containerId) {
       r.error = `Launch failed (HTTP ${launch.rawStatus})${launch.bodyHead ? `: ${launch.bodyHead}` : ""}`;
+      logStep(`${p.platform}: launch-failed`, { platform: p.platform, status: launch.rawStatus, bodyHead: launch.bodyHead });
       results.push(r);
       continue;
     }
     r.launched = true;
+    logStep(`${p.platform}: launched`, { platform: p.platform, containerId: launch.containerId });
 
     const finish = await waitForPhantomFinish(config.apiKey, p.phantomId, 120_000, 5_000);
     r.finished = finish.lastEndStatus;
+    logStep(`${p.platform}: finished`, {
+      platform: p.platform,
+      lastEndStatus: finish.lastEndStatus,
+      resultObjectUrl: finish.resultObjectUrl,
+    });
     // PB's lastEndType values: "running" | "finished" | "error" | "timeout".
     // "finished" IS the success case — there is no "success" status. We bail
     // only on the truly-bad statuses (and on "running" which means the
@@ -145,12 +195,19 @@ export async function runPhantombusterSync(): Promise<{
     const csv = await downloadCsv(finish.resultObjectUrl);
     if (!csv) {
       r.error = "Could not download result CSV.";
+      logStep(`${p.platform}: csv-download-failed`, { url: finish.resultObjectUrl });
       results.push(r);
       continue;
     }
+    logStep(`${p.platform}: csv-downloaded`, {
+      platform: p.platform,
+      url: finish.resultObjectUrl,
+      bytes: csv.length,
+    });
 
     const rows = parseCsv(csv);
     r.rowsParsed = Math.max(0, rows.length - 1);
+    logStep(`${p.platform}: csv-parsed`, { platform: p.platform, totalRows: r.rowsParsed });
     if (rows.length < 2) {
       results.push(r);
       continue;
@@ -265,7 +322,49 @@ export async function runPhantombusterSync(): Promise<{
       r.deleted = await deletePhantom(config.apiKey, p.phantomId);
     }
 
+    logStep(`${p.platform}: done`, {
+      platform: p.platform,
+      rowsParsed: r.rowsParsed,
+      postsUpserted: r.postsUpserted,
+      deleted: r.deleted ?? false,
+      error: r.error ?? null,
+    });
     results.push(r);
+  }
+
+  // Close the SyncJob row with the full breakdown.
+  if (syncJobId) {
+    const totalUpserted = results.reduce((s, x) => s + (x.postsUpserted ?? 0), 0);
+    const totalRows = results.reduce((s, x) => s + (x.rowsParsed ?? 0), 0);
+    const anyErrors = results.some((x) => !!x.error);
+    const status = anyErrors && totalUpserted === 0 ? "FAILED"
+      : anyErrors ? "PARTIAL"
+      : "COMPLETED";
+    try {
+      await prisma.syncJob.update({
+        where: { id: syncJobId },
+        data: {
+          status,
+          finishedAt: new Date(),
+          itemsProcessed: results.length,
+          itemsSucceeded: results.filter((x) => !x.error).length,
+          itemsFailed: results.filter((x) => !!x.error).length,
+          errorLogJson: anyErrors
+            ? JSON.stringify(results.filter((x) => x.error).map((x) => `${x.platform}: ${x.error}`))
+            : null,
+          resultsJson: JSON.stringify({
+            phantoms: results,
+            steps: stepLog,
+            totalRowsParsed: totalRows,
+            totalPostsUpserted: totalUpserted,
+            spreadsheets: {
+              twitter: "https://docs.google.com/spreadsheets/d/1YpDcoQHF-g-TakXG8EHdMymXfVBvXRP1gLF1FqX-V9c/edit?gid=2068816684",
+              linkedin: "https://docs.google.com/spreadsheets/d/1YpDcoQHF-g-TakXG8EHdMymXfVBvXRP1gLF1FqX-V9c/edit",
+            },
+          }),
+        },
+      });
+    } catch { /* non-fatal */ }
   }
 
   return { ok: true, results };

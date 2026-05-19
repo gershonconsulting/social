@@ -381,7 +381,8 @@ function ComplianceCalendar({ data }: { data: ComplianceData }) {
       {/* Legend */}
       <div className="flex items-center gap-4 text-xs text-gray-500 mb-4">
         <span className="flex items-center gap-1"><CheckCircle2 size={12} className="text-green-500" /> Posted</span>
-        <span className="flex items-center gap-1"><XCircle size={12} className="text-red-400" /> Missing</span>
+        <span className="flex items-center gap-1"><XCircle size={12} className="text-red-400" /> Missing (synced, no post)</span>
+        <span className="flex items-center gap-1"><Minus size={12} className="text-gray-300" /> Not yet synced</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-100 inline-block border border-gray-200" /> Weekend</span>
       </div>
 
@@ -419,11 +420,15 @@ function ComplianceCalendar({ data }: { data: ComplianceData }) {
           // Working day: check if ALL tracked platforms have posts
           const allPosted = trackedPlatforms.every((p) => day.platforms[p]?.hasPost);
           const somePosted = trackedPlatforms.some((p) => day.platforms[p]?.hasPost);
-          const nonePosted = !somePosted;
+          // Only treat as 'missed' (red) when we have evidence we actually
+          // synced this day for at least one platform. Otherwise the day is
+          // ambiguous — show as neutral instead of pretending we know.
+          const anySynced = trackedPlatforms.some((p) => day.platforms[p]?.wasSynced);
+          const noneSyncedYet = !anySynced;
 
-          let bgClass = "bg-red-50 border-red-200";
-          let icon = <XCircle size={14} className="text-red-400 mt-0.5" />;
-          let textClass = "text-red-600";
+          let bgClass: string;
+          let icon: JSX.Element;
+          let textClass: string;
 
           if (allPosted) {
             bgClass = "bg-green-50 border-green-200";
@@ -433,16 +438,35 @@ function ComplianceCalendar({ data }: { data: ComplianceData }) {
             bgClass = "bg-amber-50 border-amber-200";
             icon = <CheckCircle2 size={14} className="text-amber-500 mt-0.5" />;
             textClass = "text-amber-700";
+          } else if (noneSyncedYet) {
+            // Never synced for this day on any tracked platform — leave neutral.
+            bgClass = "bg-gray-50 border-gray-100";
+            icon = <Minus size={14} className="text-gray-300 mt-0.5" />;
+            textClass = "text-gray-400";
+          } else {
+            // Synced at least one platform, found nothing → genuine miss.
+            bgClass = "bg-red-50 border-red-200";
+            icon = <XCircle size={14} className="text-red-400 mt-0.5" />;
+            textClass = "text-red-600";
           }
 
           // Platform dots
           const dots = trackedPlatforms.map((p) => {
-            const has = day.platforms[p]?.hasPost;
+            const info = day.platforms[p];
+            const has = info?.hasPost;
+            const synced = info?.wasSynced;
+            // Color logic: green=posted, red=synced+no-post, gray=not-synced-yet
+            const dotCls = has
+              ? (PLATFORM_COLORS[p] || "bg-green-500")
+              : synced
+                ? "bg-red-300"
+                : "bg-gray-200";
+            const titleSuffix = has ? "Posted" : synced ? "Missing" : "Not synced yet";
             return (
               <span
                 key={p}
-                className={`w-1.5 h-1.5 rounded-full ${has ? PLATFORM_COLORS[p] || "bg-green-500" : "bg-gray-300"}`}
-                title={`${PLATFORM_LABELS[p] ?? p}: ${has ? "Posted" : "Missing"}`}
+                className={`w-1.5 h-1.5 rounded-full ${dotCls}`}
+                title={`${PLATFORM_LABELS[p] ?? p}: ${titleSuffix}`}
               />
             );
           });
@@ -451,7 +475,7 @@ function ComplianceCalendar({ data }: { data: ComplianceData }) {
             <div
               key={day.date}
               className={`aspect-square rounded-md flex flex-col items-center justify-center border relative ${bgClass} ${isToday ? "ring-2 ring-blue-400" : ""}`}
-              title={`${day.date}: ${trackedPlatforms.map((p) => `${PLATFORM_LABELS[p] ?? p}: ${day.platforms[p]?.hasPost ? "Posted" : "Missing"}`).join(", ")}`}
+              title={`${day.date}: ${trackedPlatforms.map((p) => `${PLATFORM_LABELS[p] ?? p}: ${day.platforms[p]?.hasPost ? "Posted" : day.platforms[p]?.wasSynced ? "Missing" : "Not synced yet"}`).join(", ")}`}
             >
               <span className={`text-[10px] font-medium ${textClass}`}>{dayNum}</span>
               {icon}
