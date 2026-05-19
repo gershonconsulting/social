@@ -27,6 +27,91 @@ const PLATFORM_LABELS_MAP: Record<string, string> = {
   BLOG_RSS: "Blog / RSS",
 };
 
+// Lightweight inline form to create a new PlatformConnection for this
+// client. Used when the company has no row for LinkedIn / X / GMB yet
+// — Olivier wanted to be able to add missing links from the company
+// page rather than having to go to /admin.
+function AddConnectionInline({ clientId, platform }: { clientId: string; platform: string }) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    const trimmed = url.trim();
+    if (!trimmed) {
+      setError("URL required");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const r = await fetch("/api/platforms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId,
+          platform,
+          externalAccountUrl: trimmed,
+        }),
+      });
+      const ct = r.headers.get("content-type") || "";
+      if (!ct.includes("application/json")) {
+        setError(`HTTP ${r.status}`);
+      } else {
+        const j = await r.json();
+        if (j.success) {
+          window.location.assign(window.location.pathname + window.location.search);
+          return;
+        }
+        setError(j.error || "Save failed");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="text-xs text-blue-600 hover:underline"
+      >
+        + Add link
+      </button>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1">
+      <input
+        type="url"
+        autoFocus
+        placeholder={
+          platform === "LINKEDIN" ? "https://www.linkedin.com/company/..." :
+          platform === "TWITTER" ? "https://x.com/handle" :
+          platform === "GOOGLE_BUSINESS" ? "Maps URL or business name" :
+          "https://..."
+        }
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") { setOpen(false); setError(""); } }}
+        className="text-xs px-2 py-1 border border-gray-300 rounded w-72"
+        disabled={saving}
+      />
+      <button onClick={save} disabled={saving} className="text-xs px-2 py-1 bg-green-600 text-white rounded">
+        {saving ? "…" : "Save"}
+      </button>
+      <button onClick={() => { setOpen(false); setUrl(""); setError(""); }} className="text-xs px-2 py-1 text-gray-500 hover:text-gray-700">
+        Cancel
+      </button>
+      {error && <span className="text-xs text-red-600">{error}</span>}
+    </span>
+  );
+}
+
+
 interface Connection {
   id: string;
   platform: string;
@@ -181,6 +266,24 @@ export function ClientDetailPageClient({ clientId }: { clientId: string }) {
               </div>
             </div>
           ))}
+          {/* Show an 'Add link' row for any of the 3 core platforms (LinkedIn / X / GMB)
+              that doesn't already have a PlatformConnection row for this client. */}
+          {(["LINKEDIN", "TWITTER", "GOOGLE_BUSINESS"] as const)
+            .filter((p) => !client.platformConnections.some((c) => c.platform === p))
+            .map((platform) => (
+              <div key={"missing-" + platform} className="px-5 py-3 flex items-center gap-3 bg-gray-50/60">
+                <PlatformIcon platform={platform as never} size={28} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-700">
+                    {PLATFORM_LABELS_MAP[platform] ?? platform}
+                    <span className="ml-2 text-[10px] uppercase tracking-wide text-gray-400">not configured</span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    <AddConnectionInline clientId={client.id} platform={platform} />
+                  </div>
+                </div>
+              </div>
+            ))}
         </div>
       </div>
 
