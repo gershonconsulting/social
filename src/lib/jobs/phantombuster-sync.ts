@@ -79,7 +79,7 @@ export async function runPhantombusterSync(): Promise<{
   try {
     const row = await prisma.syncJob.create({
       data: {
-        jobType: "PHANTOMBUSTER",
+        jobType: "BACKFILL",
         scopeType: "GLOBAL",
         status: "RUNNING",
         startedAt: jobStart,
