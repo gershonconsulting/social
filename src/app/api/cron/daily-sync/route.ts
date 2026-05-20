@@ -79,11 +79,29 @@ export async function GET(req: NextRequest) {
     report.compliance.error = e instanceof Error ? e.message : String(e);
   }
 
-  // Phantombuster fallback is intentionally disabled.
-  // The Chrome extension (chrome.alarms daily auto-sync + per-client
-  // postMessage bridge) is now the only data path. PB code is preserved
-  // in /api/cron/phantombuster-sync for manual invocation if ever needed.
-  report.fallback.reason = "extension-only mode — PB is dormant";
+  // Daily PB import: fetch whatever CSV PB has produced since the last
+  // import + upsert. Does NOT launch a new PB run — PB runs on its own
+  // schedule on PB's side. This keeps us inside the worker time budget
+  // while still getting fresh data daily even when the Chrome extension
+  // hasn't run.
+  try {
+    const url = new URL(req.url);
+    const r = await fetch(`${url.protocol}//${url.host}/api/cron/pb-import-latest`, {
+      headers: secret ? { Authorization: `Bearer ${secret}` } : {},
+    });
+    if (r.ok) {
+      const j = await r.json() as { data?: { perPlatform?: Array<{ platform: string; postsUpserted: number }> } };
+      report.fallback.ran = true;
+      report.fallback.results = j.data?.perPlatform;
+      const total = (j.data?.perPlatform ?? []).reduce((s, p) => s + (p.postsUpserted ?? 0), 0);
+      report.fallback.reason = `PB import: ${total} posts upserted`;
+    } else {
+      report.fallback.error = `pb-import-latest HTTP ${r.status}`;
+      report.fallback.reason = "PB import attempted but failed";
+    }
+  } catch (e) {
+    report.fallback.error = e instanceof Error ? e.message : String(e);
+  }
 
   return NextResponse.json(report);
 }

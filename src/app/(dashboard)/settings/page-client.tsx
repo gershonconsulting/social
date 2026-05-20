@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
-import { CheckCircle2, AlertCircle, XCircle, Download, RefreshCw } from "lucide-react";
+import { CheckCircle2, AlertCircle, XCircle, Download, RefreshCw, KeyRound, Eye, EyeOff, Loader2 } from "lucide-react";
 
 interface Probe {
   hasCookies: boolean;
@@ -128,6 +128,8 @@ export function SettingsPageClient() {
         {row("X / Twitter", "#000", tw)}
       </div>
 
+      <PhantombusterCard />
+
       <ChangePasswordCard />
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
@@ -223,5 +225,203 @@ function ChangePasswordCard() {
         </div>
       )}
     </form>
+  );
+}
+
+
+function PhantombusterCard() {
+  const [configured, setConfigured] = useState(false);
+  const [masked, setMasked] = useState<string | null>(null);
+  const [twitterPhantomId, setTwitterPhantomId] = useState("");
+  const [linkedinPhantomId, setLinkedinPhantomId] = useState("");
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [showKey, setShowKey] = useState(false);
+  const [newKey, setNewKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
+
+  async function load() {
+    try {
+      const r = await fetch("/api/settings/phantombuster", { cache: "no-store" });
+      if (r.ok) {
+        const j = await r.json();
+        if (j?.success && j.data) {
+          setConfigured(!!j.data.configured);
+          setMasked(j.data.apiKeyMasked ?? null);
+          setTwitterPhantomId(j.data.twitterPhantomId ?? "");
+          setLinkedinPhantomId(j.data.linkedinPhantomId ?? "");
+          setUpdatedAt(j.data.updatedAt ?? null);
+        }
+      }
+    } catch {}
+  }
+  useEffect(() => { load(); }, []);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (newKey && newKey.length < 20) {
+      setMsg({ kind: "err", text: "API key looks too short — expected 30+ chars from Phantombuster." });
+      return;
+    }
+    setBusy(true);
+    try {
+      // POST overwrites; if the user didn't paste a fresh key, server requires
+      // it as min 20 chars. So we only POST when newKey is supplied. For
+      // phantom-ID-only updates we'd need a PATCH route — kept simple here:
+      // if no newKey, we just no-op and tell the user.
+      if (!newKey) {
+        setMsg({ kind: "err", text: "Paste a fresh API key to save." });
+        return;
+      }
+      const r = await fetch("/api/settings/phantombuster", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          apiKey: newKey.trim(),
+          twitterPhantomId: twitterPhantomId.trim() || null,
+          linkedinPhantomId: linkedinPhantomId.trim() || null,
+        }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({} as { error?: string }));
+        setMsg({ kind: "err", text: j.error || `HTTP ${r.status}` });
+      } else {
+        setMsg({ kind: "ok", text: "Saved. Daily import will use the new credentials starting tomorrow." });
+        setNewKey("");
+        await load();
+      }
+    } catch (e) {
+      setMsg({ kind: "err", text: e instanceof Error ? e.message : "Network error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runImportNow() {
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const r = await fetch("/api/cron/pb-import-latest");
+      const j = await r.json().catch(() => null);
+      if (!j?.success) {
+        setImportResult("Import failed: " + (j?.error || `HTTP ${r.status}`));
+      } else {
+        const per = (j.data?.perPlatform || []) as Array<{ platform: string; postsUpserted: number; rowsParsed: number; clientsMatched: number; error?: string }>;
+        const lines = per.map((p) =>
+          p.error
+            ? `${p.platform}: ${p.error}`
+            : `${p.platform}: ${p.postsUpserted} posts upserted across ${p.clientsMatched} clients (${p.rowsParsed} rows parsed)`
+        );
+        setImportResult(lines.join(" · "));
+      }
+    } catch (e) {
+      setImportResult(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+      <div className="flex items-start gap-3 mb-4">
+        <KeyRound size={18} className="text-red-600 mt-0.5 shrink-0" />
+        <div className="flex-1">
+          <div className="text-sm font-semibold text-gray-900">Phantombuster — backup data source</div>
+          <div className="text-xs text-gray-500 mt-0.5">
+            The daily 06:00 UTC cron imports the latest CSVs from these phantoms whenever the Chrome extension hasn&apos;t run.
+            {configured && masked && (
+              <> Current key: <code className="bg-gray-100 px-1 rounded">{masked}</code></>
+            )}
+            {updatedAt && (
+              <> · updated {relTime(updatedAt)}</>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <form onSubmit={save} className="space-y-3">
+        <div>
+          <label className="text-xs font-medium text-gray-700 block mb-1">
+            API key {configured ? <span className="text-gray-400">(paste a new value to rotate; current is masked above)</span> : null}
+          </label>
+          <div className="relative">
+            <input
+              type={showKey ? "text" : "password"}
+              value={newKey}
+              onChange={(e) => setNewKey(e.target.value)}
+              placeholder={configured ? "(paste a new key to replace)" : "DFApuorw…"}
+              className="w-full text-sm px-3 py-2 pr-9 border border-gray-300 rounded-lg font-mono"
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey((v) => !v)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              tabIndex={-1}
+            >
+              {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium text-gray-700 block mb-1">Twitter / X phantom ID</label>
+            <input
+              type="text"
+              value={twitterPhantomId}
+              onChange={(e) => setTwitterPhantomId(e.target.value)}
+              placeholder="3106895142569208"
+              className="w-full text-sm px-3 py-2 border border-gray-300 rounded-lg font-mono"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-700 block mb-1">LinkedIn phantom ID</label>
+            <input
+              type="text"
+              value={linkedinPhantomId}
+              onChange={(e) => setLinkedinPhantomId(e.target.value)}
+              placeholder="607354820598909"
+              className="w-full text-sm px-3 py-2 border border-gray-300 rounded-lg font-mono"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 pt-1">
+          <button
+            type="submit"
+            disabled={busy}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-60"
+          >
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={runImportNow}
+            disabled={!configured || importing}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-300 bg-white hover:bg-gray-50 rounded-lg disabled:opacity-60"
+            title="Pull the latest CSVs from S3 and upsert posts right now"
+          >
+            {importing ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+            Import latest CSV now
+          </button>
+        </div>
+
+        {msg && (
+          <div className={"text-xs px-3 py-2 rounded " + (msg.kind === "ok" ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800")}>
+            {msg.text}
+          </div>
+        )}
+        {importResult && (
+          <div className="text-xs px-3 py-2 rounded bg-gray-50 text-gray-700 font-mono whitespace-pre-wrap">
+            {importResult}
+          </div>
+        )}
+      </form>
+    </div>
   );
 }
