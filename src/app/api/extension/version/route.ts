@@ -12,9 +12,10 @@ import { NextResponse } from "next/server";
  * to public/gershonai-extension.zip. Keep semver — popup does a numeric
  * dot-segment compare.
  */
-const LATEST = "0.10.4";
+const LATEST = "0.10.5";
 
 const RELEASE_NOTES: Record<string, string> = {
+  "0.10.5": "Smarter sync: only opens the LinkedIn / X tabs the targeted client actually has. A Twitter-only client no longer triggers a LinkedIn cookie capture attempt.",
   "0.10.4": "Detailed per-step log of each sync run. Click "View detailed log" in the popup to see exactly which cookies were found, which domains were checked, per-platform capture and scrape results, and ingest errors. Also expands LinkedIn cookie lookup to www.linkedin.com + fr.linkedin.com domains.",
   "0.10.3": "Per-client refresh from the company detail page. The Sync Now button there now drives the extension via a postMessage bridge instead of going through Phantombuster — opens LinkedIn + X in your browser, scrapes only that client.",
   "0.10.2": "X tab stays open after Sync Now so you can inspect what x.com is rendering when auth_token isn't found (logged out / partitioned / interstitial). Also activates the tab so it pops to the foreground.",
