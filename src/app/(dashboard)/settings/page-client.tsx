@@ -303,25 +303,28 @@ function PhantombusterCard() {
   async function runImportNow() {
     setImporting(true);
     setImportResult(null);
-    try {
-      const r = await fetch("/api/cron/pb-import-latest");
-      const j = await r.json().catch(() => null);
-      if (!j?.success) {
-        setImportResult("Import failed: " + (j?.error || `HTTP ${r.status}`));
-      } else {
+    // Two requests — one per platform — so each stays inside the CF
+    // worker budget. The single-call variant timed out on LinkedIn.
+    const lines: string[] = [];
+    for (const platform of ["TWITTER", "LINKEDIN"]) {
+      try {
+        const r = await fetch(`/api/cron/pb-import-latest?platform=${platform}`);
+        const j = await r.json().catch(() => null);
+        if (!j?.success) {
+          lines.push(`${platform}: import failed (${j?.error || "HTTP " + r.status})`);
+          continue;
+        }
         const per = (j.data?.perPlatform || []) as Array<{ platform: string; postsUpserted: number; rowsParsed: number; clientsMatched: number; error?: string }>;
-        const lines = per.map((p) =>
-          p.error
-            ? `${p.platform}: ${p.error}`
-            : `${p.platform}: ${p.postsUpserted} posts upserted across ${p.clientsMatched} clients (${p.rowsParsed} rows parsed)`
-        );
-        setImportResult(lines.join(" · "));
+        for (const p of per) {
+          if (p.error) lines.push(`${p.platform}: ${p.error}`);
+          else lines.push(`${p.platform}: ${p.postsUpserted} posts upserted across ${p.clientsMatched} clients (${p.rowsParsed} rows parsed)`);
+        }
+      } catch (e) {
+        lines.push(`${platform}: ${e instanceof Error ? e.message : "network error"}`);
       }
-    } catch (e) {
-      setImportResult(e instanceof Error ? e.message : "Network error");
-    } finally {
-      setImporting(false);
     }
+    setImportResult(lines.join("\n"));
+    setImporting(false);
   }
 
   return (

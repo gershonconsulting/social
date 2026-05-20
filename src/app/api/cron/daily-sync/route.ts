@@ -86,19 +86,34 @@ export async function GET(req: NextRequest) {
   // hasn't run.
   try {
     const url = new URL(req.url);
-    const r = await fetch(`${url.protocol}//${url.host}/api/cron/pb-import-latest`, {
-      headers: secret ? { Authorization: `Bearer ${secret}` } : {},
-    });
-    if (r.ok) {
-      const j = await r.json() as { data?: { perPlatform?: Array<{ platform: string; postsUpserted: number }> } };
-      report.fallback.ran = true;
-      report.fallback.results = j.data?.perPlatform;
-      const total = (j.data?.perPlatform ?? []).reduce((s, p) => s + (p.postsUpserted ?? 0), 0);
-      report.fallback.reason = `PB import: ${total} posts upserted`;
-    } else {
-      report.fallback.error = `pb-import-latest HTTP ${r.status}`;
-      report.fallback.reason = "PB import attempted but failed";
+    // Call pb-import-latest once per platform — running both in a single
+    // worker invocation exceeded the CF time budget (Twitter would succeed
+    // but the LinkedIn agent-fetch right after would time out). Two
+    // sequential same-origin fetches give each its own worker invocation
+    // with a clean CPU budget.
+    const platforms = ["TWITTER", "LINKEDIN"] as const;
+    const results: Array<unknown> = [];
+    let totalUpserted = 0;
+    for (const platform of platforms) {
+      try {
+        const r = await fetch(`${url.protocol}//${url.host}/api/cron/pb-import-latest?platform=${platform}`, {
+          headers: secret ? { Authorization: `Bearer ${secret}` } : {},
+        });
+        if (r.ok) {
+          const j = await r.json() as { data?: { perPlatform?: Array<{ platform: string; postsUpserted: number; error?: string }> } };
+          const per = j.data?.perPlatform ?? [];
+          results.push(...per);
+          totalUpserted += per.reduce((s, p) => s + (p.postsUpserted ?? 0), 0);
+        } else {
+          results.push({ platform, error: `HTTP ${r.status}` });
+        }
+      } catch (e) {
+        results.push({ platform, error: e instanceof Error ? e.message : String(e) });
+      }
     }
+    report.fallback.ran = true;
+    report.fallback.results = results;
+    report.fallback.reason = `PB import: ${totalUpserted} posts upserted across ${platforms.length} platforms`;
   } catch (e) {
     report.fallback.error = e instanceof Error ? e.message : String(e);
   }
