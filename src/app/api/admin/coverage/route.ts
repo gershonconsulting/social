@@ -31,9 +31,11 @@ export async function GET() {
   try {
     const FRESH_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
     const cutoff = new Date(Date.now() - FRESH_WINDOW_MS);
+    const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const cutoff7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     // Pull active clients + their connections, then aggregate posts in JS.
-    const [clients, conns, postCounts, latestPosts, recentPostKeys] = await Promise.all([
+    const [clients, conns, postCounts, latestPosts, recentPostKeys, posts24h, posts7d] = await Promise.all([
       prisma.client.findMany({
         where: { status: ClientStatus.ACTIVE },
         orderBy: { name: "asc" },
@@ -48,22 +50,30 @@ export async function GET() {
           externalAccountName: true,
         },
       }),
-      // Total post counts per (clientId, platform). Counting via groupBy is
-      // far cheaper than fetching every row.
       prisma.socialPost.groupBy({
         by: ["clientId", "platform"],
         _count: { _all: true },
       }),
-      // Most recent post timestamp per (clientId, platform). groupBy with
-      // _max is one round-trip.
       prisma.socialPost.groupBy({
         by: ["clientId", "platform"],
         _max: { publishedAtUtc: true },
       }),
-      // Did this (clientId, platform) post anything inside the fresh window?
       prisma.socialPost.groupBy({
         by: ["clientId", "platform"],
         where: { publishedAtUtc: { gte: cutoff } },
+        _count: { _all: true },
+      }),
+      // Posts ingested with a publish date in the last 24h — for the
+      // 'fresh today' headline stat.
+      prisma.socialPost.groupBy({
+        by: ["clientId", "platform"],
+        where: { publishedAtUtc: { gte: cutoff24h } },
+        _count: { _all: true },
+      }),
+      // Posts published in the last 7 days — for the 'this week' stat.
+      prisma.socialPost.groupBy({
+        by: ["clientId", "platform"],
+        where: { publishedAtUtc: { gte: cutoff7d } },
         _count: { _all: true },
       }),
     ]);
@@ -115,8 +125,44 @@ export async function GET() {
       };
     });
 
+    // Aggregate stats for the headline panel.
+    const fresh24h = new Set(posts24h.filter((r) => (r._count._all ?? 0) > 0).map((r) => `${r.clientId}:${r.platform}`));
+    const fresh7d = new Set(posts7d.filter((r) => (r._count._all ?? 0) > 0).map((r) => `${r.clientId}:${r.platform}`));
+    const hasData = new Set(postCounts.filter((r) => (r._count._all ?? 0) > 0).map((r) => `${r.clientId}:${r.platform}`));
+
+    const stats = {
+      activeClients: clients.length,
+      platforms: PLATFORMS.length,
+      totalCells: clients.length * PLATFORMS.length,
+      cellsWithLink: 0,
+      cellsWithData: 0,
+      cellsFresh7d: 0,
+      cellsFresh14d: 0,
+      cellsFresh24h: 0,
+      clientsWithDataEver: 0,
+      clientsWithData7d: 0,
+      clientsWithData24h: 0,
+    };
+    const seenWithData = new Set<string>();
+    const seenWith7d = new Set<string>();
+    const seenWith24h = new Set<string>();
+    for (const c of clients) {
+      for (const plat of PLATFORMS) {
+        const k = `${c.id}:${plat}`;
+        const conn = connByKey.get(k);
+        if (conn?.url) stats.cellsWithLink++;
+        if (hasData.has(k)) { stats.cellsWithData++; seenWithData.add(c.id); }
+        if (freshByKey.has(k)) stats.cellsFresh14d++;
+        if (fresh7d.has(k)) { stats.cellsFresh7d++; seenWith7d.add(c.id); }
+        if (fresh24h.has(k)) { stats.cellsFresh24h++; seenWith24h.add(c.id); }
+      }
+    }
+    stats.clientsWithDataEver = seenWithData.size;
+    stats.clientsWithData7d = seenWith7d.size;
+    stats.clientsWithData24h = seenWith24h.size;
+
     return NextResponse.json(
-      { success: true, data: { clients: rows, freshWindowDays: 14 } },
+      { success: true, data: { clients: rows, freshWindowDays: 14, stats } },
       { headers: { "Cache-Control": "public, max-age=15, s-maxage=60" } }
     );
   } catch (err) {

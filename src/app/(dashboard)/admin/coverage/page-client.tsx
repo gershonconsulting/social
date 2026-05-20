@@ -106,9 +106,24 @@ function ChecksCell({ p }: { p: PerPlatform }) {
   );
 }
 
+interface CollectionStats {
+  activeClients: number;
+  platforms: number;
+  totalCells: number;
+  cellsWithLink: number;
+  cellsWithData: number;
+  cellsFresh7d: number;
+  cellsFresh14d: number;
+  cellsFresh24h: number;
+  clientsWithDataEver: number;
+  clientsWithData7d: number;
+  clientsWithData24h: number;
+}
+
 export function CoveragePageClient() {
   const demoMode = useDemoMode();
   const [rawClients, setClients] = useState<ClientRow[] | null>(null);
+  const [stats, setStats] = useState<CollectionStats | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [filter, setFilter] = useState<"all" | "issues" | "perfect">("all");
@@ -142,8 +157,10 @@ export function CoveragePageClient() {
       if (!r.ok) { setError(`HTTP ${r.status}`); return; }
       try {
         const j = await r.json();
-        if (j.success) setClients(j.data.clients);
-        else setError(j.error || "Unknown error");
+        if (j.success) {
+          setClients(j.data.clients);
+          if (j.data.stats) setStats(j.data.stats);
+        } else setError(j.error || "Unknown error");
       } catch {
         setError("Server returned non-JSON response");
       }
@@ -211,6 +228,52 @@ export function CoveragePageClient() {
           </button>
         }
       />
+
+      {stats && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex items-baseline justify-between mb-3">
+            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Daily collection — at a glance</div>
+            <div className="text-[10px] text-gray-400">{demoMode ? "DEMO numbers" : "live data"}</div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <StatCard
+              label="Got data in last 24h"
+              value={stats.clientsWithData24h}
+              total={stats.activeClients}
+              tone="primary"
+              caption="distinct companies"
+            />
+            <StatCard
+              label="Got data this week"
+              value={stats.clientsWithData7d}
+              total={stats.activeClients}
+              tone="ok"
+              caption="last 7 days"
+            />
+            <StatCard
+              label="Ever ingested"
+              value={stats.clientsWithDataEver}
+              total={stats.activeClients}
+              tone="ok"
+              caption="data on file at least once"
+            />
+            <StatCard
+              label="Cells with link"
+              value={stats.cellsWithLink}
+              total={stats.totalCells}
+              tone="neutral"
+              caption={`${stats.activeClients} × ${stats.platforms} platforms`}
+            />
+            <StatCard
+              label="Cells fully fresh"
+              value={stats.cellsFresh14d}
+              total={stats.totalCells}
+              tone="ok"
+              caption="post in last 14 days"
+            />
+          </div>
+        </div>
+      )}
 
       {summary && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -354,6 +417,35 @@ export function CoveragePageClient() {
       <div className="text-[11px] text-gray-400 italic">
         Hover any cell to see the source URL, post count, and time since the most recent post.
       </div>
+    </div>
+  );
+}
+
+
+function StatCard({
+  label, value, total, tone, caption,
+}: {
+  label: string;
+  value: number;
+  total: number;
+  tone: "primary" | "ok" | "neutral" | "warn";
+  caption?: string;
+}) {
+  const pct = total > 0 ? Math.round((100 * value) / total) : 0;
+  const toneCls =
+    tone === "primary" ? "bg-red-50 border-red-200 text-red-800"
+    : tone === "ok"    ? "bg-green-50 border-green-200 text-green-800"
+    : tone === "warn"  ? "bg-amber-50 border-amber-200 text-amber-800"
+    : "bg-gray-50 border-gray-200 text-gray-800";
+  return (
+    <div className={`rounded-xl border p-3 ${toneCls}`}>
+      <div className="text-[10px] uppercase font-medium tracking-wide opacity-80">{label}</div>
+      <div className="flex items-baseline gap-1.5 mt-1">
+        <div className="text-2xl font-bold">{value}</div>
+        <div className="text-xs opacity-70">/ {total}</div>
+        <div className="text-xs font-semibold ml-auto opacity-80">{pct}%</div>
+      </div>
+      {caption && <div className="text-[10px] opacity-60 mt-0.5">{caption}</div>}
     </div>
   );
 }
