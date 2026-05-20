@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, AlertTriangle, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import { Header } from "@/components/layout/header";
+import { DailyCollectionGrid } from "@/components/admin/daily-collection-grid";
 
 interface PlatformResult {
   platform: string;
@@ -122,6 +123,8 @@ export function LogsPageClient() {
 
   return (
     <div className="space-y-6">
+      <DailyCollectionGrid />
+
       <Header
         title="Sync log"
         subtitle="Recent data-collection runs across every connected platform"
