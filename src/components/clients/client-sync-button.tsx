@@ -228,7 +228,14 @@ export function ClientSyncButton({ clientId }: { clientId: string }) {
                   <div className="text-red-700">{summary.totalFailed} failed</div>
                 )}
                 {(summary.ingestErrors || []).length > 0 && (
-                  <div className="text-amber-700 mt-1">{summary.ingestErrors!.join(" · ")}</div>
+                  <ul className="text-amber-700 mt-1 space-y-0.5">
+                    {summary.ingestErrors!.map((line, idx) => (
+                      <li key={idx} className="flex gap-1">
+                        <span aria-hidden>·</span>
+                        <span>{line}</span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
             )}

@@ -12,9 +12,10 @@ import { NextResponse } from "next/server";
  * to public/gershonai-extension.zip. Keep semver — popup does a numeric
  * dot-segment compare.
  */
-const LATEST = "0.10.6";
+const LATEST = "0.10.7";
 
 const RELEASE_NOTES: Record<string, string> = {
+  "0.10.7": "Fix: posts are now scraped from the real profile pages — linkedin.com/company/<vanity>/posts/ and x.com/<handle> — by reading the rendered DOM. Drops the deprecated voyager + v1.1 user_timeline endpoints that started failing in 2026 (LinkedIn rejected our csrf because JSESSIONID is HttpOnly; X v1.1 user_timeline is locked behind the paid API plan). The Sync via extension popover now also surfaces the per-platform error instead of just \"N failed\".",
   "0.10.6": "Auto-reauth on LinkedIn — when your LinkedIn session has expired the extension now drives the login wall itself: clicks the saved-account button, lets Chrome's password autofill populate the password, and submits the form before resuming the scrape.",
   "0.10.5": "Smarter sync: only opens the LinkedIn / X tabs the targeted client actually has. A Twitter-only client no longer triggers a LinkedIn cookie capture attempt.",
   "0.10.4": "Detailed per-step log of each sync run. Click 'View detailed log' in the popup to see exactly which cookies were found, which domains were checked, per-platform capture and scrape results, and ingest errors. Also expands LinkedIn cookie lookup to www.linkedin.com + fr.linkedin.com domains.",
