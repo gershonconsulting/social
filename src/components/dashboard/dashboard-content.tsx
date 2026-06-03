@@ -1,6 +1,98 @@
 import prisma from "@/lib/db";
 import { ClientStatus } from "@prisma/client";
 import { DashboardClient } from "./dashboard-client";
+import type {
+  CollectionStatus,
+  CollectionState,
+  ConnStatus,
+} from "./collection-status-panel";
+
+// A connection is considered "stale" if it has not been scraped within this
+// window. The local Watchman scraper runs at least daily, so 48h gives one
+// missed run of slack before we flag it.
+const STALE_MS = 48 * 60 * 60 * 1000;
+
+async function getCollectionStatus(): Promise<CollectionStatus> {
+  const now = Date.now();
+  const recentWindow = new Date(now - STALE_MS);
+
+  const [conns, clients, collectedGroups] = await Promise.all([
+    prisma.platformConnection.findMany({
+      where: {
+        isEnabled: true,
+        externalAccountUrl: { not: null },
+        client: { status: ClientStatus.ACTIVE },
+      },
+      select: {
+        id: true,
+        clientId: true,
+        platform: true,
+        connectionStatus: true,
+        lastSyncAt: true,
+        lastSyncError: true,
+      },
+    }),
+    prisma.client.findMany({
+      where: { status: ClientStatus.ACTIVE },
+      select: { id: true, name: true },
+    }),
+    // Connections that had at least one post written/refreshed in the window —
+    // i.e. the last run actually pulled content for them.
+    prisma.socialPost.groupBy({
+      by: ["platformConnectionId"],
+      where: { updatedAt: { gte: recentWindow } },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const nameById = new Map(clients.map((c) => [c.id, c.name]));
+  const collectedConnIds = new Set(
+    collectedGroups
+      .filter((g) => (g._count._all ?? 0) > 0)
+      .map((g) => g.platformConnectionId)
+  );
+
+  const counts = { collected: 0, empty: 0, failed: 0, stale: 0 };
+  let lastUpdate: number | null = null;
+
+  const connections: ConnStatus[] = conns.map((c) => {
+    const synced = c.lastSyncAt ? c.lastSyncAt.getTime() : null;
+    if (synced !== null && (lastUpdate === null || synced > lastUpdate)) {
+      lastUpdate = synced;
+    }
+    const recentlySynced = synced !== null && now - synced <= STALE_MS;
+    const failed = c.connectionStatus === "ERROR" || !!c.lastSyncError;
+
+    let state: CollectionState;
+    if (!recentlySynced) state = "stale";
+    else if (failed) state = "failed";
+    else if (collectedConnIds.has(c.id)) state = "collected";
+    else state = "empty";
+    counts[state] += 1;
+
+    return {
+      clientId: c.clientId,
+      clientName: nameById.get(c.clientId) ?? c.clientId,
+      platform: c.platform as string,
+      state,
+      lastSyncAt: c.lastSyncAt?.toISOString() ?? null,
+      lastSyncError: c.lastSyncError ?? null,
+    };
+  });
+
+  // Surface the problems first: failed, then stale, then empty, then collected.
+  const severity: Record<CollectionState, number> = { failed: 0, stale: 1, empty: 2, collected: 3 };
+  connections.sort(
+    (a, b) => severity[a.state] - severity[b.state] || a.clientName.localeCompare(b.clientName)
+  );
+
+  return {
+    lastUpdate: lastUpdate !== null ? new Date(lastUpdate).toISOString() : null,
+    totalConfigured: conns.length,
+    counts,
+    connections,
+  };
+}
 
 async function getDashboardData() {
   const clients = await prisma.client.findMany({
@@ -159,10 +251,21 @@ async function getDashboardData() {
 }
 
 export async function DashboardContent() {
-  const clients = await getDashboardData();
+  const [clients, collectionStatus] = await Promise.all([
+    getDashboardData(),
+    getCollectionStatus(),
+  ]);
   const totalPosts = clients.reduce((sum, c) => sum + c.totalPosts, 0);
   const totalFollowers = clients.reduce((sum, c) => sum + c.totalFollowers, 0);
   const activeClients = clients.length;
 
-  return <DashboardClient clients={clients} totalPosts={totalPosts} totalFollowers={totalFollowers} activeClients={activeClients} />;
+  return (
+    <DashboardClient
+      clients={clients}
+      totalPosts={totalPosts}
+      totalFollowers={totalFollowers}
+      activeClients={activeClients}
+      collectionStatus={collectionStatus}
+    />
+  );
 }

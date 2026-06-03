@@ -21,6 +21,7 @@ import {
   Eye,
 } from "lucide-react";
 import { ExtensionHealthBanner } from "./extension-health-banner";
+import { CollectionStatusPanel, type CollectionStatus } from "./collection-status-panel";
 import { useDemoMode } from "@/lib/use-demo-mode";
 
 interface PlatformFollower {
@@ -116,11 +117,13 @@ export function DashboardClient({
   totalPosts,
   totalFollowers,
   activeClients,
+  collectionStatus,
 }: {
   clients: DashboardClientData[];
   totalPosts: number;
   totalFollowers: number;
   activeClients: number;
+  collectionStatus: CollectionStatus;
 }) {
   const demoMode = useDemoMode();
   const [compliance, setCompliance] = useState<Record<string, ComplianceData>>({});
@@ -214,6 +217,7 @@ export function DashboardClient({
   return (
     <div>
       <ExtensionHealthBanner />
+      <CollectionStatusPanel data={collectionStatus} />
       {/* Header */}
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div>
