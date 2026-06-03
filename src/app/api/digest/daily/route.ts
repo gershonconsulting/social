@@ -302,7 +302,9 @@ export async function POST(req: NextRequest) {
   try {
     const d = await buildDigest();
     const html = renderHtml(d);
-    const subject = `social.gershoncrm — ${d.totals.newPosts} new posts in the last 24h`;
+    const dateStr = new Date(d.generatedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    const companyWord = d.totals.clientsWithActivity === 1 ? "company" : "companies";
+    const subject = `Report social.gershonCRM.com ${dateStr} — ${d.totals.newPosts} posts collected from ${d.totals.clientsWithActivity} ${companyWord}`;
     const send = await sendViaResend(html, subject);
     return NextResponse.json({
       success: send.ok,
