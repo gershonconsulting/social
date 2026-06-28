@@ -7,7 +7,7 @@ import {
 } from "recharts";
 import {
   MONTHLY, LAG, APPROVAL_SRC, SNAPSHOT_AT, PARTIAL_MONTHS, FUNNEL_COLORS,
-  overallByMonth, fmtMonth, clientMonth, workingDays, focusMonths, type Funnel,
+  overallByMonth, fmtMonth, clientMonth, workingDays, focusMonths, isFutureMonth, type Funnel,
 } from "@/lib/cloudcampaign-data";
 
 const C = FUNNEL_COLORS;
@@ -65,8 +65,8 @@ function TabBtn({ on, onClick, children }: { on: boolean; onClick: () => void; c
 
 /* ---------------- Tab: output vs target (1 post / working day) ---------------- */
 function TargetTab() {
-  const { thisM, lastM } = focusMonths();
-  const months = [lastM, thisM];
+  const { lastM, thisM, nextM } = focusMonths();
+  const months = [lastM, thisM, nextM];
   const target = Object.fromEntries(months.map((m) => [m, workingDays(m)])) as Record<string, { target: number; current: boolean }>;
   const names = Object.keys(MONTHLY)
     .filter((n) => months.some((m) => clientMonth(n, m).some(Boolean)))
@@ -76,15 +76,16 @@ function TargetTab() {
     <div>
       <div className="text-sm text-gray-600 bg-white border border-gray-200 rounded-xl p-3.5 shadow-sm mb-5">
         <b className="text-gray-900">Goal: one published post per working day.</b> Each figure is output ÷ working days that month —{" "}
-        <b className="text-gray-900">{fmtMonth(lastM)} = {target[lastM].target} days</b>,{" "}
-        <b className="text-gray-900">{fmtMonth(thisM)} = {target[thisM].target} days so far</b> (month-to-date). 100% = on cadence; the grey line marks 100%.
+        <b className="text-gray-900">{fmtMonth(lastM)} {target[lastM].target}d</b>,{" "}
+        <b className="text-gray-900">{fmtMonth(thisM)} {target[thisM].target}d so far</b>,{" "}
+        <b className="text-gray-900">{fmtMonth(nextM)} {target[nextM].target}d</b>. 100% = on cadence (grey line). Next month shows what is already <b className="text-gray-900">scheduled</b> — its planned coverage.
       </div>
       <div className="space-y-5">
         {names.map((n) => (
           <div key={n}>
             <div className="text-sm font-extrabold text-gray-900 mb-2.5">{n}</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {months.map((m) => <TargetBlock key={m} counts={clientMonth(n, m)} month={m} t={target[m]} />)}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {months.map((m) => <TargetBlock key={m} counts={clientMonth(n, m)} month={m} t={target[m]} future={isFutureMonth(m)} />)}
             </div>
           </div>
         ))}
@@ -93,17 +94,18 @@ function TargetTab() {
   );
 }
 
-function TargetBlock({ counts, month, t }: { counts: Funnel; month: string; t: { target: number; current: boolean } }) {
+function TargetBlock({ counts, month, t, future = false }: { counts: Funnel; month: string; t: { target: number; current: boolean }; future?: boolean }) {
   const idle = !counts.some(Boolean);
   const rows: [string, number, keyof typeof C][] = [
     ["Created", counts[0], "created"],
     ["Validated", counts[1], "validated"],
     ["Published", counts[2], "published"],
   ];
+  if (counts[3] > 0) rows.push(["Scheduled", counts[3], "scheduled"]);
   return (
     <div className={"bg-white border border-gray-200 rounded-2xl p-4 shadow-sm " + (idle ? "opacity-60" : "")}>
       <div className="flex items-baseline justify-between mb-3">
-        <div className="text-sm font-bold text-gray-900">{fmtMonth(month)}</div>
+        <div className="text-sm font-bold text-gray-900">{fmtMonth(month)}{future && <span className="ml-2 text-[10px] font-semibold text-sky-600 bg-sky-50 rounded-full px-2 py-0.5 align-middle">planned</span>}</div>
         <div className="text-[11px] text-gray-500">target {t.target} working days{t.current ? " · to-date" : ""}</div>
       </div>
       {rows.map(([label, val, key]) => {

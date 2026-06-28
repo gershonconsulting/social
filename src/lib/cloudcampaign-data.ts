@@ -105,11 +105,24 @@ export function workingDays(ym: string): { target: number; current: boolean } {
   return { target: n, current };
 }
 
-// The snapshot month and the one before it ("this month" / "last month").
-export function focusMonths(): { thisM: string; lastM: string } {
+// "last month" / "this month" / "next month" relative to the snapshot.
+export function focusMonths(): { lastM: string; thisM: string; nextM: string } {
   const d = new Date(SNAPSHOT_AT);
-  const thisM = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-  const prev = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1));
-  const lastM = `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, "0")}`;
-  return { thisM, lastM };
+  const key = (yy: number, mm: number) => {
+    const dt = new Date(Date.UTC(yy, mm, 1));
+    return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;
+  };
+  return {
+    lastM: key(d.getUTCFullYear(), d.getUTCMonth() - 1),
+    thisM: key(d.getUTCFullYear(), d.getUTCMonth()),
+    nextM: key(d.getUTCFullYear(), d.getUTCMonth() + 1),
+  };
+}
+
+// A month entirely in the future relative to the snapshot.
+export function isFutureMonth(ym: string): boolean {
+  const d = new Date(SNAPSHOT_AT);
+  const cur = d.getUTCFullYear() * 12 + d.getUTCMonth();
+  const [y, m] = ym.split("-").map(Number);
+  return (y * 12 + (m - 1)) > cur;
 }
