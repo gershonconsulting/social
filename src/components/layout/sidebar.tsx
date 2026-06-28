@@ -23,7 +23,12 @@ const navItems = [
   // Single-user app (Olivier-only). No role gating. Reports removed
   // per request 2026-05-18; bring back if monthly export becomes useful again.
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { href: "/clients", icon: Building2, label: "Companies" },
+  {
+    href: "/clients",
+    icon: Building2,
+    label: "Companies",
+    children: [{ href: "/clients/by-cloudcampaign", label: "By Cloud Campaign" }],
+  },
   { href: "/admin/coverage", icon: Network, label: "Networks" },
   { href: "/analytics", icon: BarChart3, label: "Analytics" },
   { href: "/logs", icon: ScrollText, label: "Logs" },
@@ -53,20 +58,43 @@ export function Sidebar() {
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+          const children = "children" in item ? item.children : undefined;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-red-50 text-[#FE1B04]"
-                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+            <div key={item.href}>
+              <Link
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-red-50 text-[#FE1B04]"
+                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                )}
+              >
+                <item.icon className="flex-shrink-0" size={18} />
+                {item.label}
+              </Link>
+              {children && isActive && (
+                <div className="mt-0.5 mb-1 ml-7 pl-3 border-l border-gray-200 space-y-0.5">
+                  {children.map((sub) => {
+                    const subActive = pathname === sub.href || pathname.startsWith(sub.href + "/");
+                    return (
+                      <Link
+                        key={sub.href}
+                        href={sub.href}
+                        className={cn(
+                          "block px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors",
+                          subActive
+                            ? "bg-red-50 text-[#FE1B04]"
+                            : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+                        )}
+                      >
+                        {sub.label}
+                      </Link>
+                    );
+                  })}
+                </div>
               )}
-            >
-              <item.icon className="flex-shrink-0" size={18} />
-              {item.label}
-            </Link>
+            </div>
           );
         })}
       </nav>
