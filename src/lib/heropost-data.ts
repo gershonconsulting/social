@@ -23,7 +23,7 @@ export const MONTHLY: Record<string, Record<string, Funnel>> = {
   "My Workspace": {},
 };
 
-export const FUNNEL_COLORS = { created: "#6366f1", published: "#10b981", scheduled: "#f59e0b" };
+export const FUNNEL_COLORS = { created: "#6366f1", validated: "#0ea5e9", scheduled: "#f59e0b", published: "#10b981" };
 
 export function clientMonth(workspace: string, month: string): Funnel {
   return MONTHLY[workspace]?.[month] ?? [0, 0, 0];

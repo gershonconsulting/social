@@ -9,7 +9,7 @@ import {
 const C = FUNNEL_COLORS;
 
 export function ByHeroPostClient() {
-  const subtitle = `Snapshot ${new Date(SNAPSHOT_AT).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })} · created → published → scheduled`;
+  const subtitle = `Snapshot ${new Date(SNAPSHOT_AT).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })} · created → validated → scheduled → published`;
   const { lastM, thisM, nextM } = focusMonths();
   const months = [lastM, thisM, nextM];
   const wd = Object.fromEntries(months.map((m) => [m, workingDays(m)])) as Record<string, { target: number; current: boolean }>;
@@ -47,10 +47,10 @@ export function ByHeroPostClient() {
       </div>
 
       <p className="text-xs text-gray-400 mt-8">
-        Source: HeroPost GraphQL API (9 client workspaces). Periodic snapshot — June is month-to-date. HeroPost has no
-        created/validated approval step like Cloud Campaign, so the funnel is created → published, plus what is already
-        scheduled ahead. Targets are 1 post per working day unless a weekly cadence is set (Wallix: 3/week). EDFLEX North
-        America, Puente Latin and “My Workspace” have no posts in this window.
+        Source: HeroPost GraphQL API (9 client workspaces). Periodic snapshot — June is month-to-date. Funnel stages:
+        <b> Created</b> = all content for the month (incl. drafts), <b>Validated</b> = approved / past draft (scheduled + published),
+        <b> Scheduled</b> = queued for a future date, <b>Published</b> = live. Targets are 1 post per working day unless a weekly
+        cadence is set (Wallix: 3/week). EDFLEX North America, Puente Latin and “My Workspace” have no posts in this window.
       </p>
     </div>
   );
@@ -59,11 +59,14 @@ export function ByHeroPostClient() {
 function TargetBlock({ name, counts, month, future = false }: { name: string; counts: Funnel; month: string; future?: boolean }) {
   const t = clientTarget(name, month);
   const idle = !counts.some(Boolean);
+  const created = counts[0], published = counts[1], scheduled = counts[2];
+  const validated = published + scheduled; // approved = everything past the draft stage
   const rows: [string, number, keyof typeof C][] = [
-    ["Created", counts[0], "created"],
-    ["Published", counts[1], "published"],
+    ["Created", created, "created"],
+    ["Validated", validated, "validated"],
   ];
-  if (counts[2] > 0) rows.push(["Scheduled", counts[2], "scheduled"]);
+  if (scheduled > 0) rows.push(["Scheduled", scheduled, "scheduled"]);
+  rows.push(["Published", published, "published"]);
   const unit = t.perWeek ? `${t.target} posts · ${t.perWeek}/week` : `${t.target} working days`;
   return (
     <div className={"bg-white border border-gray-200 rounded-2xl p-4 shadow-sm " + (idle ? "opacity-60" : "")}>
