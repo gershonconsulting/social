@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, AlertTriangle, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, AlertTriangle, RefreshCw, ChevronDown, ChevronRight, XCircle } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { DailyCollectionGrid } from "@/components/admin/daily-collection-grid";
 
@@ -57,6 +57,22 @@ function fmtDuration(start: string, end: string | null) {
   if (ms < 1000) return "<1s";
   if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
   return `${Math.round(ms / 60_000)}m`;
+}
+
+// Classify a per-platform failure. "unreachable" = the page does not exist or
+// could not be reached (404 / 410 / 5xx / 999 / DNS / timeout / bad URL /
+// "company not found"). "auth" = reachable but blocked by a login/session wall.
+const UNREACHABLE_RE = /not found|http\s*(404|410|5\d\d|999)|enotfound|econnrefused|etimedout|getaddrinfo|fetch failed|network error|timed? ?out|unreachable|couldn.?t parse (vanity|handle)|no such/i;
+const AUTH_RE = /http\s*(401|403)|sign[- ]?in|log[- ]?in|login wall|unauthorized|session expired|no (linkedin|x|twitter) cookies/i;
+function classifyError(error: string | null): "unreachable" | "auth" | "other" {
+  if (!error) return "other";
+  if (UNREACHABLE_RE.test(error)) return "unreachable";
+  if (AUTH_RE.test(error)) return "auth";
+  return "other";
+}
+function parseResults(resultsJson: string | null): PlatformResult[] {
+  if (!resultsJson) return [];
+  try { const p = JSON.parse(resultsJson); return Array.isArray(p) ? (p as PlatformResult[]) : []; } catch { return []; }
 }
 
 export function LogsPageClient() {
@@ -208,7 +224,9 @@ export function LogsPageClient() {
                   if (!job.errorLogJson) return [];
                   try { const e = JSON.parse(job.errorLogJson); return Array.isArray(e) ? e : [String(e)]; } catch { return [job.errorLogJson]; }
                 })();
-                const hasDetail = errors.length > 0 || !!job.notes;
+                const rowResults = parseResults(job.resultsJson);
+                const unreachable = rowResults.filter((p) => !p.success && classifyError(p.error) === "unreachable");
+                const hasDetail = errors.length > 0 || !!job.notes || rowResults.length > 0;
                 return (
                   <>
                     <tr key={job.id} className="hover:bg-gray-50">
@@ -222,8 +240,17 @@ export function LogsPageClient() {
                       <td className="px-4 py-2 text-xs font-mono text-gray-600 whitespace-nowrap">{fmtDate(job.startedAt)}</td>
                       <td className="px-4 py-2 text-xs text-gray-700">{job.jobType}</td>
                       <td className="px-4 py-2 text-xs text-gray-700">{job.client?.name ?? "—"}</td>
-                      <td className="px-4 py-2 text-center">
+                      <td className="px-4 py-2 text-center whitespace-nowrap">
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_BADGE[job.status] ?? "bg-gray-50 text-gray-500"}`}>{job.status}</span>
+                        {unreachable.length > 0 && (
+                          <span
+                            title={`Page not found / unreachable:\n${unreachable.map((p) => `${PLATFORM_LABELS[p.platform] ?? p.platform}${p.externalAccountName ? " · " + p.externalAccountName : ""} — ${p.error ?? ""}`).join("\n")}`}
+                            className="ml-1.5 inline-flex items-center align-middle text-red-600"
+                            aria-label="Page not found or unreachable"
+                          >
+                            <XCircle size={15} strokeWidth={2.5} />
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-2 text-center text-xs">
                         <span className="text-green-700">{job.itemsSucceeded}</span>
@@ -270,6 +297,13 @@ export function LogsPageClient() {
                                         <td className="px-2 py-1">
                                           {p.success ? (
                                             <span className="text-green-700">OK</span>
+                                          ) : classifyError(p.error) === "unreachable" ? (
+                                            <span className="inline-flex items-center gap-1 font-medium text-red-600" title={p.error || ""}>
+                                              <XCircle size={13} strokeWidth={2.5} />
+                                              Page not found / unreachable
+                                            </span>
+                                          ) : classifyError(p.error) === "auth" ? (
+                                            <span className="text-amber-700" title={p.error || ""}>Sign-in required</span>
                                           ) : (
                                             <span className="text-red-700" title={p.error || ""}>{(p.error || "Failed").slice(0, 80)}</span>
                                           )}
