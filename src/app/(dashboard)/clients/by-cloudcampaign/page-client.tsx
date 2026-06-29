@@ -102,9 +102,9 @@ function TargetBlock({ counts, month, t, future = false }: { counts: Funnel; mon
   const rows: [string, number, keyof typeof C][] = [
     ["Created", counts[0], "created"],
     ["Validated", counts[1], "validated"],
+    ["Scheduled", counts[3], "scheduled"],
     ["Published", counts[2], "published"],
   ];
-  if (counts[3] > 0) rows.push(["Scheduled", counts[3], "scheduled"]);
   return (
     <div className={"bg-white border border-gray-200 rounded-2xl p-4 shadow-sm " + (idle ? "opacity-60" : "")}>
       <div className="flex items-baseline justify-between mb-3">
