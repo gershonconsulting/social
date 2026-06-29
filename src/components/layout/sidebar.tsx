@@ -27,7 +27,7 @@ const navItems = [
     href: "/clients",
     icon: Building2,
     label: "Companies",
-    children: [{ href: "/clients/by-cloudcampaign", label: "By Cloud Campaign" }],
+    children: [{ href: "/clients/by-cloudcampaign", label: "By Cloud Campaign" }, { href: "/clients/by-heropost", label: "By HeroPost" }],
   },
   { href: "/admin/coverage", icon: Network, label: "Networks" },
   { href: "/analytics", icon: BarChart3, label: "Analytics" },
