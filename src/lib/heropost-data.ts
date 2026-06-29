@@ -68,3 +68,29 @@ export function isFutureMonth(ym: string): boolean {
   const [y, m] = ym.split("-").map(Number);
   return (y * 12 + (m - 1)) > cur;
 }
+
+// Per-client posting cadence. Default cadence is 1 published post per working day
+// (~5/week) and uses workingDays() as the target. Clients listed here instead use
+// a fixed weekly cadence (posts per week).
+export const WEEKLY_CADENCE: Record<string, number> = {
+  "Wallix": 3,
+};
+
+// Target for a weekly-cadence client: perWeek x weeks in the period. The current
+// (snapshot) month counts only elapsed days, for a fair pace-to-date read.
+export function weeklyTarget(ym: string, perWeek: number): { target: number; current: boolean } {
+  const snap = new Date(SNAPSHOT_AT);
+  const [y, m] = ym.split("-").map(Number);
+  const current = y === snap.getUTCFullYear() && m - 1 === snap.getUTCMonth();
+  const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const days = current ? snap.getUTCDate() : daysInMonth;
+  return { target: Math.max(1, Math.round((days / 7) * perWeek)), current };
+}
+
+// Resolve the right target for a client in a month: weekly cadence if set,
+// otherwise the default 1-per-working-day target.
+export function clientTarget(name: string, ym: string): { target: number; current: boolean; perWeek?: number } {
+  const pw = WEEKLY_CADENCE[name];
+  if (pw) return { ...weeklyTarget(ym, pw), perWeek: pw };
+  return workingDays(ym);
+}
