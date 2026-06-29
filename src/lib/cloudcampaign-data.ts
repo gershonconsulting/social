@@ -105,6 +105,31 @@ export function workingDays(ym: string): { target: number; current: boolean } {
   return { target: n, current };
 }
 
+// Posting cadence target per client, in posts per week. Default is one post per
+// working day (5/week). Override per client here.
+export const CADENCE_PER_WEEK: Record<string, number> = {
+  "Wallix": 3,
+};
+export const DEFAULT_CADENCE_PER_WEEK = 5; // one post per working day
+
+export function cadence(workspace: string): number {
+  return CADENCE_PER_WEEK[workspace] ?? DEFAULT_CADENCE_PER_WEEK;
+}
+
+export function cadenceLabel(workspace: string): string {
+  const c = cadence(workspace);
+  return c === 5 ? "1 / working day" : `${c} / week`;
+}
+
+// Target number of POSTS for a client in a month, derived from its weekly cadence
+// scaled by working days (so a 5/week client's target equals the working days,
+// preserving the original one-a-day behaviour). Current month uses days elapsed.
+export function postTarget(workspace: string, ym: string): { target: number; current: boolean } {
+  const { target: wd, current } = workingDays(ym);
+  const t = Math.round((cadence(workspace) / 5) * wd);
+  return { target: Math.max(t, 0), current };
+}
+
 // "last month" / "this month" / "next month" relative to the snapshot.
 export function focusMonths(): { lastM: string; thisM: string; nextM: string } {
   const d = new Date(SNAPSHOT_AT);

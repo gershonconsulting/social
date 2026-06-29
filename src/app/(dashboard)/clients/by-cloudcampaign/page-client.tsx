@@ -7,7 +7,7 @@ import {
 } from "recharts";
 import {
   MONTHLY, LAG, APPROVAL_SRC, SNAPSHOT_AT, PARTIAL_MONTHS, FUNNEL_COLORS,
-  overallByMonth, fmtMonth, clientMonth, workingDays, focusMonths, isFutureMonth, type Funnel,
+  overallByMonth, fmtMonth, clientMonth, workingDays, postTarget, cadenceLabel, focusMonths, isFutureMonth, type Funnel,
 } from "@/lib/cloudcampaign-data";
 
 const C = FUNNEL_COLORS;
@@ -75,17 +75,20 @@ function TargetTab() {
   return (
     <div>
       <div className="text-sm text-gray-600 bg-white border border-gray-200 rounded-xl p-3.5 shadow-sm mb-5">
-        <b className="text-gray-900">Goal: one published post per working day.</b> Each figure is output ÷ working days that month —{" "}
-        <b className="text-gray-900">{fmtMonth(lastM)} {target[lastM].target}d</b>,{" "}
-        <b className="text-gray-900">{fmtMonth(thisM)} {target[thisM].target}d so far</b>,{" "}
-        <b className="text-gray-900">{fmtMonth(nextM)} {target[nextM].target}d</b>. 100% = on cadence (grey line). Next month shows what is already <b className="text-gray-900">scheduled</b> — its planned coverage.
+        <b className="text-gray-900">Goal: hit each client&apos;s posting cadence.</b> Default is one post per working day; per-client targets (e.g. Wallix 3/week) are scaled by the working days in the month —{" "}
+        <b className="text-gray-900">{fmtMonth(lastM)} {target[lastM].target}wd</b>,{" "}
+        <b className="text-gray-900">{fmtMonth(thisM)} {target[thisM].target}wd so far</b>,{" "}
+        <b className="text-gray-900">{fmtMonth(nextM)} {target[nextM].target}wd</b>. Each figure is output ÷ that client&apos;s target posts; 100% = on cadence (grey line). Next month shows what is already <b className="text-gray-900">scheduled</b>.
       </div>
       <div className="space-y-5">
         {names.map((n) => (
           <div key={n}>
-            <div className="text-sm font-extrabold text-gray-900 mb-2.5">{n}</div>
+            <div className="flex items-center gap-2 mb-2.5">
+              <span className="text-sm font-extrabold text-gray-900">{n}</span>
+              <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">{cadenceLabel(n)}</span>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {months.map((m) => <TargetBlock key={m} counts={clientMonth(n, m)} month={m} t={target[m]} future={isFutureMonth(m)} />)}
+              {months.map((m) => <TargetBlock key={m} counts={clientMonth(n, m)} month={m} t={postTarget(n, m)} future={isFutureMonth(m)} />)}
             </div>
           </div>
         ))}
@@ -106,7 +109,7 @@ function TargetBlock({ counts, month, t, future = false }: { counts: Funnel; mon
     <div className={"bg-white border border-gray-200 rounded-2xl p-4 shadow-sm " + (idle ? "opacity-60" : "")}>
       <div className="flex items-baseline justify-between mb-3">
         <div className="text-sm font-bold text-gray-900">{fmtMonth(month)}{future && <span className="ml-2 text-[10px] font-semibold text-sky-600 bg-sky-50 rounded-full px-2 py-0.5 align-middle">planned</span>}</div>
-        <div className="text-[11px] text-gray-500">target {t.target} working days{t.current ? " · to-date" : ""}</div>
+        <div className="text-[11px] text-gray-500">target {t.target} post{t.target === 1 ? "" : "s"}{t.current ? " · to-date" : ""}</div>
       </div>
       {rows.map(([label, val, key]) => {
         const pct = t.target ? Math.round((val / t.target) * 100) : 0;
