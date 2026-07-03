@@ -4,6 +4,7 @@ import prisma from "@/lib/db";
 import { ClientStatus, ClientType } from "@prisma/client";
 import { slugify } from "@/lib/utils";
 import {
+  getStreakConfig,
   listPipelines,
   fetchCurrentClients,
   type CurrentClient,
@@ -12,32 +13,27 @@ import {
 /**
  * Streak → Social client sync.
  *
- * Reads the current clients out of our Streak "Clients" pipeline and upserts
- * them into the Client table, keyed by the Streak boxKey (stable id). Keeps
+ * Reads current clients from our Streak "Clients" pipeline and upserts them
+ * into the Client table, keyed by the Streak boxKey (stable id). Keeps
  * Social's client list in sync without anyone re-typing it.
  *
+ * Config comes from Settings → Streak (Setting table, key "streak"), with
+ * STREAK_* env vars as fallback. See src/lib/streak.ts.
+ *
  * ── GET /api/admin/streak-sync?discover=1 ──────────────────────────────────
- *   Discovery mode. Returns every pipeline with its stages so you can find
- *   the client pipelineKey and which stageKey means "current/active". Set
- *   those as STREAK_CLIENT_PIPELINE_KEY and STREAK_CURRENT_STAGE_KEYS. No DB
- *   writes. (Requires STREAK_API_KEY.)
+ *   Discovery mode. Returns every pipeline with its stages so you can pick
+ *   the client pipelineKey and which stageKey means "current/active". No DB
+ *   writes.
  *
  * ── POST /api/admin/streak-sync ────────────────────────────────────────────
  *   Runs the sync. For each current client:
  *     - match existing Client by streakBoxKey, else by slug, else create;
  *     - fill name / streakStageKey; set clientType=CLIENT, status=ACTIVE.
- *   Idempotent. Never deletes — clients that drop out of the current stage
- *   are reported under `staleInDb` for manual review (we don't auto-archive).
+ *   Idempotent. Never deletes — clients no longer in the current set are
+ *   reported under `staleInDb` for manual review (no auto-archive).
  *
- * Env:
- *   STREAK_API_KEY               (required) — server-side secret.
- *   STREAK_CLIENT_PIPELINE_KEY   (required for POST) — the Clients pipeline.
- *   STREAK_CURRENT_STAGE_KEYS    (optional) — comma-separated "current" stages.
- *                                 Omit to sync every box regardless of stage.
- *
- * Auth: same CRON_SECRET Bearer pattern as the other admin/cron routes.
- * Same-origin calls with no Authorization header are allowed (parity with
- * /api/admin/sheets-sync).
+ * Auth: CRON_SECRET Bearer (same as sheets-sync). Same-origin calls with no
+ * Authorization header are allowed so the Settings UI can trigger it.
  */
 
 function checkAuth(req: NextRequest): NextResponse | null {
@@ -64,8 +60,16 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  const cfg = await getStreakConfig();
+  if (!cfg) {
+    return NextResponse.json(
+      { success: false, error: "No Streak API key configured — add it in Settings → Streak." },
+      { status: 400 },
+    );
+  }
+
   try {
-    const pipelines = await listPipelines();
+    const pipelines = await listPipelines(cfg.apiKey);
     const data = pipelines.map((p) => ({
       pipelineKey: p.pipelineKey,
       name: p.name,
@@ -86,9 +90,17 @@ export async function POST(req: NextRequest) {
   const unauth = checkAuth(req);
   if (unauth) return unauth;
 
+  const cfg = await getStreakConfig();
+  if (!cfg) {
+    return NextResponse.json(
+      { success: false, error: "No Streak API key configured — add it in Settings → Streak." },
+      { status: 400 },
+    );
+  }
+
   let current: CurrentClient[];
   try {
-    current = await fetchCurrentClients();
+    current = await fetchCurrentClients(cfg);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Streak fetch failed";
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
@@ -113,7 +125,7 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        // 2) Not linked yet — match an existing client by slug and adopt it.
+        // 2) Not linked yet — adopt an existing client with the same slug.
         const baseSlug = slugify(c.name) || `streak-${c.boxKey.slice(-8)}`;
         const bySlug = await prisma.client.findUnique({ where: { slug: baseSlug } });
         if (bySlug && !bySlug.streakBoxKey) {
@@ -148,8 +160,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Report Streak-sourced clients that are no longer in the current set,
-    // so Olivier can archive them by hand (we never auto-archive).
+    // Streak-sourced clients no longer in the current set — flag for manual review.
     const currentKeys = new Set(current.map((c) => c.boxKey));
     const linked = await prisma.client.findMany({
       where: { streakBoxKey: { not: null }, status: { not: ClientStatus.ARCHIVED } },

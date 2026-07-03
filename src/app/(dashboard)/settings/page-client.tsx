@@ -130,6 +130,8 @@ export function SettingsPageClient() {
 
       <PhantombusterCard />
 
+      <StreakCard />
+
       <ChangePasswordCard />
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
@@ -422,6 +424,270 @@ function PhantombusterCard() {
         {importResult && (
           <div className="text-xs px-3 py-2 rounded bg-gray-50 text-gray-700 font-mono whitespace-pre-wrap">
             {importResult}
+          </div>
+        )}
+      </form>
+    </div>
+  );
+}
+
+function StreakCard() {
+  const [configured, setConfigured] = useState(false);
+  const [masked, setMasked] = useState<string | null>(null);
+  const [pipelineKey, setPipelineKey] = useState("");
+  const [stageKeys, setStageKeys] = useState("");
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [showKey, setShowKey] = useState(false);
+  const [newKey, setNewKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [discovering, setDiscovering] = useState(false);
+  const [pipelines, setPipelines] = useState<
+    Array<{ pipelineKey: string; name: string; stages: Array<{ stageKey: string; name: string }> }>
+  >([]);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+
+  async function load() {
+    try {
+      const r = await fetch("/api/settings/streak", { cache: "no-store" });
+      if (r.ok) {
+        const j = await r.json();
+        if (j?.success && j.data) {
+          setConfigured(!!j.data.configured);
+          setMasked(j.data.apiKeyMasked ?? null);
+          setPipelineKey(j.data.pipelineKey ?? "");
+          setStageKeys(j.data.currentStageKeys ?? "");
+          setUpdatedAt(j.data.updatedAt ?? null);
+        }
+      }
+    } catch {}
+  }
+  useEffect(() => { load(); }, []);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (newKey && newKey.length < 10) {
+      setMsg({ kind: "err", text: "API key looks too short." });
+      return;
+    }
+    if (!configured && !newKey) {
+      setMsg({ kind: "err", text: "Paste your Streak API key to save." });
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await fetch("/api/settings/streak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          apiKey: newKey.trim() || undefined,
+          pipelineKey: pipelineKey.trim() || null,
+          currentStageKeys: stageKeys.trim(),
+        }),
+      });
+      const j = await r.json().catch(() => ({} as { error?: string }));
+      if (!r.ok || !j?.success) {
+        setMsg({ kind: "err", text: j.error || `HTTP ${r.status}` });
+      } else {
+        setMsg({ kind: "ok", text: "Saved." });
+        setNewKey("");
+        await load();
+      }
+    } catch (e) {
+      setMsg({ kind: "err", text: e instanceof Error ? e.message : "Network error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Discover pipelines + stages so the user can copy the right keys.
+  // Save the pasted key first if it isn't stored yet.
+  async function discover() {
+    setDiscovering(true);
+    setMsg(null);
+    setPipelines([]);
+    try {
+      if (newKey && !configured) {
+        await fetch("/api/settings/streak", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ apiKey: newKey.trim() }),
+        });
+        setNewKey("");
+        await load();
+      }
+      const r = await fetch("/api/admin/streak-sync?discover=1", { cache: "no-store" });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.success) {
+        setMsg({ kind: "err", text: j?.error || `HTTP ${r.status}` });
+      } else {
+        setPipelines(j.data.pipelines ?? []);
+      }
+    } catch (e) {
+      setMsg({ kind: "err", text: e instanceof Error ? e.message : "Network error" });
+    } finally {
+      setDiscovering(false);
+    }
+  }
+
+  async function syncNow() {
+    setSyncing(true);
+    setSyncResult(null);
+    setMsg(null);
+    try {
+      const r = await fetch("/api/admin/streak-sync", { method: "POST" });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.success) {
+        setSyncResult(`Sync failed: ${j?.error || "HTTP " + r.status}`);
+      } else {
+        const d = j.data;
+        const stale = (d.staleInDb || []).length;
+        setSyncResult(
+          `Fetched ${d.fetched} · created ${d.created} · linked ${d.linked} · updated ${d.updated}` +
+            (d.errors ? ` · ${d.errors} errors` : "") +
+            (stale ? ` · ${stale} no longer current (review)` : ""),
+        );
+      }
+    } catch (e) {
+      setSyncResult(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+      <div className="flex items-start gap-3 mb-4">
+        <KeyRound size={18} className="text-red-600 mt-0.5 shrink-0" />
+        <div className="flex-1">
+          <div className="text-sm font-semibold text-gray-900">Streak CRM — client list source</div>
+          <div className="text-xs text-gray-500 mt-0.5">
+            Pulls current clients from your Streak &ldquo;Clients&rdquo; pipeline into this app.
+            Get the key in Gmail → Streak icon → Integrations.
+            {configured && masked && (
+              <> Current key: <code className="bg-gray-100 px-1 rounded">{masked}</code></>
+            )}
+            {updatedAt && <> · updated {relTime(updatedAt)}</>}
+          </div>
+        </div>
+      </div>
+
+      <form onSubmit={save} className="space-y-3">
+        <div>
+          <label className="text-xs font-medium text-gray-700 block mb-1">
+            Streak API key {configured ? <span className="text-gray-400">(paste a new value to rotate)</span> : null}
+          </label>
+          <div className="relative">
+            <input
+              type={showKey ? "text" : "password"}
+              value={newKey}
+              onChange={(e) => setNewKey(e.target.value)}
+              placeholder={configured ? "(paste a new key to replace)" : "paste Streak API key…"}
+              className="w-full text-sm px-3 py-2 pr-9 border border-gray-300 rounded-lg font-mono"
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey((v) => !v)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              tabIndex={-1}
+            >
+              {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium text-gray-700 block mb-1">Client pipeline key</label>
+            <input
+              type="text"
+              value={pipelineKey}
+              onChange={(e) => setPipelineKey(e.target.value)}
+              placeholder="use Discover to find this"
+              className="w-full text-sm px-3 py-2 border border-gray-300 rounded-lg font-mono"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-700 block mb-1">
+              Current stage keys <span className="text-gray-400">(comma-sep; blank = all)</span>
+            </label>
+            <input
+              type="text"
+              value={stageKeys}
+              onChange={(e) => setStageKeys(e.target.value)}
+              placeholder="e.g. 5001,5003"
+              className="w-full text-sm px-3 py-2 border border-gray-300 rounded-lg font-mono"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <button
+            type="submit"
+            disabled={busy}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-60"
+          >
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={discover}
+            disabled={discovering || (!configured && !newKey)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-300 bg-white hover:bg-gray-50 rounded-lg disabled:opacity-60"
+            title="List Streak pipelines and stages so you can copy the right keys"
+          >
+            {discovering ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            Discover pipelines
+          </button>
+          <button
+            type="button"
+            onClick={syncNow}
+            disabled={!configured || syncing}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-300 bg-white hover:bg-gray-50 rounded-lg disabled:opacity-60"
+            title="Pull current clients from Streak now"
+          >
+            {syncing ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+            Sync clients now
+          </button>
+        </div>
+
+        {msg && (
+          <div className={"text-xs px-3 py-2 rounded " + (msg.kind === "ok" ? "bg-green-50 text-green-800" : "bg-red-50 text-red-800")}>
+            {msg.text}
+          </div>
+        )}
+        {syncResult && (
+          <div className="text-xs px-3 py-2 rounded bg-gray-50 text-gray-700 font-mono whitespace-pre-wrap">
+            {syncResult}
+          </div>
+        )}
+
+        {pipelines.length > 0 && (
+          <div className="mt-2 border border-gray-200 rounded-lg overflow-hidden">
+            <div className="px-3 py-2 bg-gray-50 text-xs font-semibold text-gray-700 border-b border-gray-100">
+              Pipelines — copy the client pipeline key + its current stage key(s) into the fields above
+            </div>
+            <div className="divide-y divide-gray-100">
+              {pipelines.map((p) => (
+                <div key={p.pipelineKey} className="px-3 py-2">
+                  <div className="text-xs">
+                    <strong className="text-gray-900">{p.name}</strong>{" "}
+                    <code className="bg-gray-100 px-1 rounded text-[10px]">{p.pipelineKey}</code>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {p.stages.map((s) => (
+                      <span key={s.stageKey} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-gray-50 border border-gray-200 text-gray-700">
+                        {s.name || "(unnamed)"} <code className="text-gray-400">{s.stageKey}</code>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </form>
