@@ -30,6 +30,9 @@ export const authOptions: NextAuthOptions = {
 
         if (!user || !user.isActive) return null;
 
+        // LinkedIn-only users have no password — they must use "Continue with LinkedIn".
+        if (!user.password) return null;
+
         const passwordValid = await bcrypt.compare(credentials.password, user.password);
         if (!passwordValid) return null;
 

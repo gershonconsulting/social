@@ -1,4 +1,6 @@
 export const runtime = 'edge';
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
 import { Sidebar } from "@/components/layout/sidebar";
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
@@ -24,6 +26,12 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Multi-user: require a signed-in session for the whole dashboard.
+  const session = await getSession();
+  if (!session?.user) {
+    redirect("/login");
+  }
+
   const shortVersion = APP_VERSION.length > 8 ? APP_VERSION.slice(0, 7) : APP_VERSION;
   const buildDate = formatBuildDate(BUILD_DATE);
   const buildLabel = BUILD_NUMBER ? `Build #${BUILD_NUMBER}` : "";

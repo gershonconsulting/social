@@ -33,7 +33,7 @@ const navItems = [
   { href: "/analytics", icon: BarChart3, label: "Analytics" },
   { href: "/logs", icon: ScrollText, label: "Logs" },
   { href: "/errors", icon: AlertOctagon, label: "Errors" },
-  { href: "/admin", icon: Shield, label: "Admin" },
+  { href: "/admin", icon: Shield, label: "Admin", children: [{ href: "/admin/users", label: "Users" }] },
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
