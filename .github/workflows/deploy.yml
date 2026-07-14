@@ -56,6 +56,7 @@ jobs:
           echo "https://social.gershoncrm.com" | npx wrangler pages secret put NEXT_PUBLIC_APP_URL --project-name gershoncrm-social
           echo "${{ secrets.CF_NEXTAUTH_SECRET }}" | npx wrangler pages secret put NEXTAUTH_SECRET --project-name gershoncrm-social
           echo "${{ secrets.CF_CRON_SECRET }}" | npx wrangler pages secret put CRON_SECRET --project-name gershoncrm-social
+          echo "${{ secrets.CF_CAMPAIGN_API_KEY }}" | npx wrangler pages secret put CAMPAIGN_API_KEY --project-name gershoncrm-social
           echo "${{ secrets.RESEND_API_KEY }}" | npx wrangler pages secret put RESEND_API_KEY --project-name gershoncrm-social
           echo "${{ vars.DIGEST_TO || 'oattia@gmail.com' }}" | npx wrangler pages secret put DIGEST_TO --project-name gershoncrm-social
           echo "${{ vars.DIGEST_FROM || 'onboarding@resend.dev' }}" | npx wrangler pages secret put DIGEST_FROM --project-name gershoncrm-social
