@@ -33,6 +33,17 @@ export async function PATCH(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
     }
+    // LinkedIn-only users have no password to compare against — they sign in
+    // via "Continue with LinkedIn" and have no password to change.
+    if (!user.password) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "This account signs in with LinkedIn and has no password to change.",
+        },
+        { status: 400 },
+      );
+    }
     const ok = await bcrypt.compare(body.currentPassword, user.password);
     if (!ok) {
       return NextResponse.json({ success: false, error: "Current password is incorrect" }, { status: 403 });
