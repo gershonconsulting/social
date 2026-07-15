@@ -155,6 +155,17 @@ export async function GET(req: NextRequest) {
     }
 
     finalize(totals);
+
+    // Diagnostics: if nothing came back, say WHY (no campaigns tagged vs. no
+    // schedule data) instead of silently returning zeros.
+    const campaignClientCount = await prisma.client.count({
+      where: { clientType: ClientType.CAMPAIGN, status: { not: ClientStatus.ARCHIVED } },
+    });
+    const byType = await prisma.client.groupBy({
+      by: ["clientType"],
+      where: { status: { not: ClientStatus.ARCHIVED } },
+      _count: { _all: true },
+    });
     const campaigns = [...perCampaign.values()].map((c) => {
       finalize(c.periods);
       return c;
@@ -169,6 +180,17 @@ export async function GET(req: NextRequest) {
         scope: "clientType=CAMPAIGN, not archived",
         periods: totals,
         campaigns,
+        diagnostics: {
+          campaignClients: campaignClientCount,
+          complianceRowsInRange: rows.length,
+          clientsByType: Object.fromEntries(byType.map((b) => [b.clientType, b._count._all])),
+          note:
+            campaignClientCount === 0
+              ? "No clients are tagged clientType=CAMPAIGN, so there is nothing to report. Tag your campaign clients, or switch this endpoint's scope."
+              : rows.length === 0
+                ? "Campaign clients exist but have no DailyCompliance rows in range — check posting schedules / compliance recompute."
+                : null,
+        },
       },
     });
   } catch (e) {
