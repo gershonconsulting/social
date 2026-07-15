@@ -1,0 +1,21 @@
+name: Streak Client Sync
+
+on:
+  schedule:
+    - cron: '30 5 * * *'   # 05:30 UTC — 30 min before the daily-sync cron
+  workflow_dispatch:
+
+jobs:
+  streak-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Streak client sync
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.CF_CRON_SECRET }}" \
+            "https://social.gershoncrm.com/api/admin/streak-sync")
+          echo "Streak sync response: $response"
+          if [ "$response" != "200" ]; then
+            echo "Streak sync failed with status $response"; exit 1
+          fi
