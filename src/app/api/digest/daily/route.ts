@@ -8,10 +8,10 @@ import { ClientStatus, Platform } from "@prisma/client";
  * POST /api/digest/daily            — render AND send via Resend.
  *
  * Daily digest content:
- *   - new posts in last 24h, grouped by platform + client
+ *   - new posts in last 24h, grouped by company (client) with per-platform breakdown
  *   - compliance fresh-rate change vs the prior 24h
  *   - any sync errors in last 24h
- *   - per-platform sync recency summary
+ *   - coverage snapshot
  *
  * Auth (POST only): Bearer CRON_SECRET or DIGEST_SECRET.
  * Recipient: process.env.DIGEST_TO (defaults to oattia@gmail.com).
@@ -24,7 +24,8 @@ interface DigestData {
   generatedAt: string;
   window: { from: string; to: string };
   totals: { newPosts: number; clientsWithActivity: number };
-  perPlatform: Array<{ platform: string; newPosts: number; topClients: Array<{ name: string; postCount: number }> }>;
+  perCompany: Array<{ id: string; name: string; newPosts: number; platforms: Array<{ platform: string; newPosts: number }> }>;
+  quietCompanies: number;
   topPosts: Array<{ clientName: string; platform: string; snippet: string; postUrl: string; engagement: number; publishedAt: string }>;
   recentSyncErrors: Array<{ clientName: string; platform: string; error: string; lastSyncAt: string | null }>;
   coverageSummary: { tier3: number; tier2: number; tier1: number; tier0: number; totalCells: number };
@@ -60,25 +61,24 @@ async function buildDigest(): Promise<DigestData> {
   });
   const clientName = new Map<string, string>();
   for (const c of clients) clientName.set(c.id, c.name);
-  const clientSlug = new Map<string, string>();
-  for (const c of clients) clientSlug.set(c.id, c.slug);
 
-  // 3. Per-platform aggregation + top clients per platform
-  const platformAgg = new Map<string, { newPosts: number; perClient: Map<string, number> }>();
+  // 3. Per-company aggregation + per-platform breakdown within each company
+  const companyAgg = new Map<string, { newPosts: number; perPlatform: Map<string, number> }>();
   for (const p of recentPosts) {
-    const slot = platformAgg.get(p.platform) ?? { newPosts: 0, perClient: new Map<string, number>() };
+    const slot = companyAgg.get(p.clientId) ?? { newPosts: 0, perPlatform: new Map<string, number>() };
     slot.newPosts++;
-    slot.perClient.set(p.clientId, (slot.perClient.get(p.clientId) ?? 0) + 1);
-    platformAgg.set(p.platform, slot);
+    slot.perPlatform.set(p.platform, (slot.perPlatform.get(p.platform) ?? 0) + 1);
+    companyAgg.set(p.clientId, slot);
   }
-  const perPlatform = Array.from(platformAgg.entries()).map(([platform, slot]) => ({
-    platform,
+  const perCompany = Array.from(companyAgg.entries()).map(([cid, slot]) => ({
+    id: cid,
+    name: clientName.get(cid) ?? cid,
     newPosts: slot.newPosts,
-    topClients: Array.from(slot.perClient.entries())
-      .map(([cid, n]) => ({ name: clientName.get(cid) ?? cid, postCount: n }))
-      .sort((a, b) => b.postCount - a.postCount)
-      .slice(0, 5),
-  })).sort((a, b) => b.newPosts - a.newPosts);
+    platforms: Array.from(slot.perPlatform.entries())
+      .map(([platform, n]) => ({ platform, newPosts: n }))
+      .sort((a, b) => b.newPosts - a.newPosts),
+  })).sort((a, b) => b.newPosts - a.newPosts || a.name.localeCompare(b.name));
+  const quietCompanies = clients.filter((c) => !companyAgg.has(c.id)).length;
 
   // 4. Top 5 posts by engagement (likes + comments + shares)
   const topPosts = [...recentPosts]
@@ -153,7 +153,8 @@ async function buildDigest(): Promise<DigestData> {
       newPosts: recentPosts.length,
       clientsWithActivity: new Set(recentPosts.map((p) => p.clientId)).size,
     },
-    perPlatform,
+    perCompany,
+    quietCompanies,
     topPosts,
     recentSyncErrors,
     coverageSummary: cov,
@@ -173,12 +174,14 @@ function renderHtml(d: DigestData): string {
   };
   const day = new Date(d.generatedAt).toLocaleDateString("en-US", { dateStyle: "full" });
 
-  const platformRows = d.perPlatform.map((p) => `
+  const companyRows = d.perCompany.map((c) => `
     <tr>
-      <td style="padding:8px 12px;border-bottom:1px solid #eee;font-weight:600;">${PLATFORM_LABELS[p.platform] ?? p.platform}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:700;font-size:18px;">${p.newPosts}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;font-weight:600;">
+        <a href="https://social.gershoncrm.com/clients/${c.id}" style="color:#111;text-decoration:none;">${c.name}</a>
+      </td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:700;font-size:18px;">${c.newPosts}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;color:#555;">
-        ${p.topClients.map((c) => `${c.name} (${c.postCount})`).join(" · ")}
+        ${c.platforms.map((p) => `${PLATFORM_LABELS[p.platform] ?? p.platform} (${p.newPosts})`).join(" · ")}
       </td>
     </tr>
   `).join("");
@@ -217,11 +220,12 @@ function renderHtml(d: DigestData): string {
     <div style="font-size:13px;color:#666;margin-top:4px;">new posts ingested in the last 24 hours across ${d.totals.clientsWithActivity} ${d.totals.clientsWithActivity === 1 ? "client" : "clients"}</div>
   </div>
   <div style="padding:18px 24px;">
-    <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#666;margin-bottom:10px;">Per platform</div>
+    <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#666;margin-bottom:10px;">Per company</div>
     <table style="width:100%;border-collapse:collapse;font-size:14px;">
-      <thead><tr style="background:#f3f4f6;"><th style="text-align:left;padding:8px 12px;">Platform</th><th style="text-align:right;padding:8px 12px;">New posts</th><th style="text-align:left;padding:8px 12px;">Top clients</th></tr></thead>
-      <tbody>${platformRows || `<tr><td colspan="3" style="padding:12px;color:#999;font-style:italic;">No new posts in this window.</td></tr>`}</tbody>
+      <thead><tr style="background:#f3f4f6;"><th style="text-align:left;padding:8px 12px;">Company</th><th style="text-align:right;padding:8px 12px;">New posts</th><th style="text-align:left;padding:8px 12px;">Platforms</th></tr></thead>
+      <tbody>${companyRows || `<tr><td colspan="3" style="padding:12px;color:#999;font-style:italic;">No new posts in this window.</td></tr>`}</tbody>
     </table>
+    ${d.quietCompanies > 0 ? `<div style="font-size:12px;color:#999;margin-top:8px;">${d.quietCompanies} active ${d.quietCompanies === 1 ? "company" : "companies"} had no new posts in this window.</div>` : ""}
   </div>
   <div style="padding:18px 24px;">
     <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#666;margin-bottom:10px;">Top posts by engagement</div>
@@ -250,7 +254,7 @@ function renderHtml(d: DigestData): string {
     </div>
   </div>
   <div style="padding:14px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:11px;color:#999;">
-    Generated ${fmtDate(d.generatedAt)} · <a href="https://social.gershoncrm.com" style="color:#6b7280;">social.gershoncrm.com</a>
+    Generated ${fmtDate(d.generatedAt)} · <a href="https://social.gershoncrm.com" style="color:#6b7280;">social.gershoncrm.com</a> · v${process.env.NEXT_PUBLIC_APP_VERSION || "dev"}
   </div>
 </div>
 </body></html>
@@ -309,7 +313,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: send.ok,
       data: {
-        digest: { totals: d.totals, perPlatform: d.perPlatform.map((p) => ({ platform: p.platform, newPosts: p.newPosts })) },
+        digest: { totals: d.totals, perCompany: d.perCompany.map((c) => ({ name: c.name, newPosts: c.newPosts })) },
         send,
       },
     }, { status: send.ok ? 200 : 502 });
