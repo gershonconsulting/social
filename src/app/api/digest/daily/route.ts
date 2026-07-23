@@ -254,7 +254,7 @@ function renderHtml(d: DigestData): string {
     </div>
   </div>
   <div style="padding:14px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:11px;color:#999;">
-    Generated ${fmtDate(d.generatedAt)} · <a href="https://social.gershoncrm.com" style="color:#6b7280;">social.gershoncrm.com</a> · v${process.env.NEXT_PUBLIC_APP_VERSION || "dev"}
+    Generated ${fmtDate(d.generatedAt)} · <a href="https://social.gershoncrm.com" style="color:#6b7280;">social.gershoncrm.com</a> · v${(process.env.NEXT_PUBLIC_APP_VERSION || "dev").slice(0, 7)}
   </div>
 </div>
 </body></html>
