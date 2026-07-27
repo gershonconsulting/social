@@ -24,7 +24,7 @@ interface DigestData {
   generatedAt: string;
   window: { from: string; to: string };
   totals: { newPosts: number; clientsWithActivity: number };
-  perCompany: Array<{ id: string; name: string; newPosts: number; platforms: Array<{ platform: string; newPosts: number }> }>;
+  perCompany: Array<{ id: string; name: string; category: string; newPosts: number; platforms: Array<{ platform: string; newPosts: number }> }>;
   quietCompanies: number;
   topPosts: Array<{ clientName: string; platform: string; snippet: string; postUrl: string; engagement: number; publishedAt: string }>;
   recentSyncErrors: Array<{ clientName: string; platform: string; error: string; lastSyncAt: string | null }>;
@@ -57,10 +57,12 @@ async function buildDigest(): Promise<DigestData> {
   // 2. Active clients (for name lookup)
   const clients = await prisma.client.findMany({
     where: { status: ClientStatus.ACTIVE },
-    select: { id: true, name: true, slug: true },
+    select: { id: true, name: true, slug: true, clientType: true },
   });
   const clientName = new Map<string, string>();
   for (const c of clients) clientName.set(c.id, c.name);
+  const clientCategory = new Map<string, string>();
+  for (const c of clients) clientCategory.set(c.id, c.clientType);
 
   // 3. Per-company aggregation + per-platform breakdown within each company
   const companyAgg = new Map<string, { newPosts: number; perPlatform: Map<string, number> }>();
@@ -70,14 +72,24 @@ async function buildDigest(): Promise<DigestData> {
     slot.perPlatform.set(p.platform, (slot.perPlatform.get(p.platform) ?? 0) + 1);
     companyAgg.set(p.clientId, slot);
   }
+  const CATEGORY_ORDER = ["CAMPAIGN", "CLIENT", "PARTNER", "PROSPECT", "INTERNAL", "COMPANY", "COMPETITION"];
+  const catRank = (cat: string) => {
+    const i = CATEGORY_ORDER.indexOf(cat);
+    return i === -1 ? CATEGORY_ORDER.length : i;
+  };
   const perCompany = Array.from(companyAgg.entries()).map(([cid, slot]) => ({
     id: cid,
     name: clientName.get(cid) ?? cid,
+    category: clientCategory.get(cid) ?? "CLIENT",
     newPosts: slot.newPosts,
     platforms: Array.from(slot.perPlatform.entries())
       .map(([platform, n]) => ({ platform, newPosts: n }))
       .sort((a, b) => b.newPosts - a.newPosts),
-  })).sort((a, b) => b.newPosts - a.newPosts || a.name.localeCompare(b.name));
+  })).sort((a, b) =>
+    catRank(a.category) - catRank(b.category) ||
+    b.newPosts - a.newPosts ||
+    a.name.localeCompare(b.name)
+  );
   const quietCompanies = clients.filter((c) => !companyAgg.has(c.id)).length;
 
   // 4. Top 5 posts by engagement (likes + comments + shares)
@@ -167,6 +179,16 @@ const PLATFORM_LABELS: Record<string, string> = {
   GOOGLE_BUSINESS: "Google Business",
 };
 
+const CATEGORY_LABELS: Record<string, string> = {
+  CAMPAIGN: "Campaign",
+  CLIENT: "Client",
+  PARTNER: "Partner",
+  PROSPECT: "Prospect",
+  INTERNAL: "Internal",
+  COMPANY: "Company",
+  COMPETITION: "Competition",
+};
+
 function renderHtml(d: DigestData): string {
   const fmtDate = (iso: string) => {
     try { return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }); }
@@ -174,7 +196,18 @@ function renderHtml(d: DigestData): string {
   };
   const day = new Date(d.generatedAt).toLocaleDateString("en-US", { dateStyle: "full" });
 
-  const companyRows = d.perCompany.map((c) => `
+  let lastCategory = "";
+  const companyRows = d.perCompany.map((c) => {
+    const catTotal = d.perCompany.filter((x) => x.category === c.category).reduce((s, x) => s + x.newPosts, 0);
+    const header = c.category !== lastCategory ? `
+    <tr>
+      <td colspan="3" style="padding:10px 12px 6px;background:${c.category === "CAMPAIGN" ? "#fff8f7" : "#f9fafb"};border-bottom:1px solid #e5e7eb;">
+        <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:${c.category === "CAMPAIGN" ? "#FE1B04" : "#374151"};">${CATEGORY_LABELS[c.category] ?? c.category}</span>
+        <span style="font-size:11px;color:#9ca3af;margin-left:8px;">${catTotal} ${catTotal === 1 ? "post" : "posts"}</span>
+      </td>
+    </tr>` : "";
+    lastCategory = c.category;
+    return `${header}
     <tr>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;font-weight:600;">
         <a href="https://social.gershoncrm.com/clients/${c.id}" style="color:#111;text-decoration:none;">${c.name}</a>
@@ -183,8 +216,8 @@ function renderHtml(d: DigestData): string {
       <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;color:#555;">
         ${c.platforms.map((p) => `${PLATFORM_LABELS[p.platform] ?? p.platform} (${p.newPosts})`).join(" · ")}
       </td>
-    </tr>
-  `).join("");
+    </tr>`;
+  }).join("");
 
   const topPostRows = d.topPosts.map((p) => `
     <tr>
