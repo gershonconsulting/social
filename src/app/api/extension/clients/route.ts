@@ -26,6 +26,15 @@ import { Platform } from "@prisma/client";
  *     }
  *   }
  */
+// Scrape priority: X rate limits cap how many clients a run can cover, so the
+// order of this list decides who gets scraped. Campaign companies and internal
+// (Gershon) accounts go first; competition last.
+const SCRAPE_PRIORITY = ["CAMPAIGN", "INTERNAL", "CLIENT", "PARTNER", "PROSPECT", "COMPANY", "COMPETITION"];
+const priorityRank = (t: string) => {
+  const i = SCRAPE_PRIORITY.indexOf(t);
+  return i === -1 ? SCRAPE_PRIORITY.length : i;
+};
+
 export async function GET() {
   try {
     const clients = await prisma.client.findMany({
@@ -47,9 +56,15 @@ export async function GET() {
       id: string;
       name: string;
       slug: string;
+      category: string;
       linkedin: { connectionId: string; url: string; vanity: string } | null;
       twitter: { connectionId: string; url: string; handle: string } | null;
     }> = [];
+
+    clients.sort((a, b) =>
+      priorityRank(a.clientType) - priorityRank(b.clientType) ||
+      a.name.localeCompare(b.name)
+    );
 
     for (const c of clients) {
       const li = c.platformConnections.find((p) => p.platform === Platform.LINKEDIN);
@@ -65,7 +80,7 @@ export async function GET() {
         if (m) twitter = { connectionId: tw.id, url: tw.externalAccountUrl, handle: m[1] };
       }
       if (!linkedin && !twitter) continue;
-      out.push({ id: c.id, name: c.name, slug: c.slug, linkedin, twitter });
+      out.push({ id: c.id, name: c.name, slug: c.slug, category: c.clientType, linkedin, twitter });
     }
 
     return NextResponse.json({ success: true, data: { clients: out, totalClients: out.length } });
