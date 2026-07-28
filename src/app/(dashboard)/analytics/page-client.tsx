@@ -30,9 +30,13 @@ interface TopPost {
   shareCount: number;
   totalEngagement: number;
 }
+interface ClientOption { id: string; name: string; }
 interface Summary {
   days: number;
   since: string;
+  clientId?: string | null;
+  selectedClientName?: string | null;
+  clients?: ClientOption[];
   totals: { posts: number; likes: number; comments: number; shares: number; engagement: number };
   postsByDay: DayBucket[];
   byPlatform: Record<string, PlatformTotals>;
@@ -140,6 +144,10 @@ function buildDemoSummary(real: Summary | null): Summary {
 export function AnalyticsPageClient() {
   const demoMode = useDemoMode();
   const [days, setDays] = useState(30);
+  const [clientId, setClientId] = useState("");
+  // Client dropdown options — captured from the last real response so the
+  // selector stays populated even while a new (scoped) fetch is in flight.
+  const [clientOptions, setClientOptions] = useState<ClientOption[]>([]);
   const [data, setData] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -153,7 +161,9 @@ export function AnalyticsPageClient() {
       let lastErr = "";
       for (let i = 0; i < 3; i++) {
         try {
-          const r = await fetch(`/api/analytics/summary?days=${days}`, { cache: "no-store" });
+          const qs = new URLSearchParams({ days: String(days) });
+          if (clientId) qs.set("clientId", clientId);
+          const r = await fetch(`/api/analytics/summary?${qs.toString()}`, { cache: "no-store" });
           if (!r.ok) {
             let body: { error?: string } | null = null;
             try { body = await r.json(); } catch {}
@@ -162,6 +172,9 @@ export function AnalyticsPageClient() {
             const j = await r.json();
             if (!cancelled) {
               setData(j?.data ?? null);
+              if (Array.isArray(j?.data?.clients) && j.data.clients.length) {
+                setClientOptions(j.data.clients);
+              }
               setLoading(false);
             }
             return;
@@ -177,7 +190,7 @@ export function AnalyticsPageClient() {
       }
     })();
     return () => { cancelled = true; };
-  }, [days, attempt]);
+  }, [days, clientId, attempt]);
 
   const displayData: Summary | null = useMemo(
     () => (demoMode ? buildDemoSummary(data) : data),
@@ -192,17 +205,34 @@ export function AnalyticsPageClient() {
     <div className="space-y-8">
       <Header
         title="Analytics"
-        subtitle="Cross-client posting volume, engagement, and category breakdown"
+        subtitle={
+          clientId
+            ? `Content analysis for ${displayData?.selectedClientName ?? "this client"}`
+            : "Cross-client posting volume, engagement, and category breakdown"
+        }
         actions={
-          <select
-            value={days}
-            onChange={(e) => setDays(parseInt(e.target.value, 10))}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white"
-          >
-            {RANGE_OPTIONS.map((r) => (
-              <option key={r.value} value={r.value}>{r.label}</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <select
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white max-w-[220px]"
+              title="Analyse a single client, or all clients"
+            >
+              <option value="">All clients</option>
+              {clientOptions.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <select
+              value={days}
+              onChange={(e) => setDays(parseInt(e.target.value, 10))}
+              className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white"
+            >
+              {RANGE_OPTIONS.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
+          </div>
         }
       />
 
@@ -266,7 +296,7 @@ export function AnalyticsPageClient() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className={`grid grid-cols-1 gap-6 ${clientId ? "" : "lg:grid-cols-2"}`}>
             {/* By platform */}
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="text-sm font-semibold text-gray-900 mb-4">By platform</h2>
@@ -296,7 +326,8 @@ export function AnalyticsPageClient() {
               )}
             </div>
 
-            {/* By category */}
+            {/* By category — portfolio-level only; hidden when scoped to one client */}
+            {!clientId && (
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="text-sm font-semibold text-gray-900 mb-4">Companies by category</h2>
               {Object.keys(displayData.byCategory).length === 0 ? (
@@ -314,6 +345,7 @@ export function AnalyticsPageClient() {
                 </div>
               )}
             </div>
+            )}
           </div>
 
           {/* Top posts */}

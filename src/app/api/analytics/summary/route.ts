@@ -20,14 +20,17 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const daysRaw = parseInt(url.searchParams.get("days") || "30", 10);
     const days = Number.isFinite(daysRaw) && daysRaw > 0 && daysRaw <= 365 ? daysRaw : 30;
+    // Optional per-client scope — when set, every aggregate below is for this
+    // client only. Empty / missing = cross-client (portfolio) view.
+    const clientId = url.searchParams.get("clientId") || null;
 
     const since = new Date();
     since.setDate(since.getDate() - days);
     since.setHours(0, 0, 0, 0);
 
-    // Pull all posts in window. Keep select small.
+    // Pull posts in window (optionally scoped to one client). Keep select small.
     const posts = await prisma.socialPost.findMany({
-      where: { publishedAtUtc: { gte: since } },
+      where: { publishedAtUtc: { gte: since }, ...(clientId ? { clientId } : {}) },
       select: {
         id: true,
         clientId: true,
@@ -101,21 +104,31 @@ export async function GET(req: Request) {
       .sort((a, b) => b.totalEngagement - a.totalEngagement)
       .slice(0, 10);
 
-    // Companies by category — pull active clients, count by clientType
+    // Active clients — used both for the category breakdown and to populate
+    // the Analytics client selector (id + name, sorted).
     const clients = await prisma.client.findMany({
       where: { status: { not: ClientStatus.ARCHIVED } },
-      select: { clientType: true },
+      select: { id: true, name: true, clientType: true },
+      orderBy: { name: "asc" },
     });
     const byCategory: Record<string, number> = {};
     for (const c of clients) {
       const k = c.clientType || "UNKNOWN";
       byCategory[k] = (byCategory[k] || 0) + 1;
     }
+    const clientList = clients.map((c) => ({ id: c.id, name: c.name }));
+    // Name of the scoped client (if any) for the header.
+    const selectedClientName = clientId
+      ? clients.find((c) => c.id === clientId)?.name ?? null
+      : null;
 
     return NextResponse.json({
       success: true,
       data: {
         days,
+        clientId,
+        selectedClientName,
+        clients: clientList,
         since: since.toISOString(),
         totals: {
           posts: totalPosts,
