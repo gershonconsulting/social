@@ -503,6 +503,7 @@ export default function AdminPage() {
                       <option value="PARTNER">Partner</option>
                       <option value="COMPETITION">Competition</option>
                       <option value="INTERNAL">Internal</option>
+                      <option value="RECYCLED">Recycled</option>
                     </select>
                   </div>
                   <div>
@@ -594,6 +595,7 @@ export default function AdminPage() {
             { key: "PARTNER", label: "Partners" },
             { key: "COMPETITION", label: "Competition" },
             { key: "INTERNAL", label: "Internal" },
+            { key: "RECYCLED", label: "Recycled" },
           ].map((tab) => {
             const count = tab.key === "ALL"
               ? clients.length

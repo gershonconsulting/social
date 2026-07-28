@@ -257,6 +257,7 @@ export function DashboardClient({
           { key: "PARTNER", label: "Partner" },
           { key: "COMPETITION", label: "Competition" },
           { key: "INTERNAL", label: "Internal" },
+          { key: "RECYCLED", label: "Recycled" },
         ].map((t) => {
           const count = t.key === "ALL"
             ? clients.length

@@ -42,6 +42,7 @@ const CATEGORY_BADGE: Record<string, string> = {
   COMPETITION: "bg-orange-50 text-orange-700",
   COMPANY: "bg-emerald-50 text-emerald-700",
   INTERNAL: "bg-gray-100 text-gray-600",
+  RECYCLED: "bg-slate-200 text-slate-600",
 };
 
 export function ClientsPageClient() {
@@ -175,6 +176,7 @@ export function ClientsPageClient() {
               { key: "PARTNER", label: "Partner" },
               { key: "COMPETITION", label: "Competition" },
               { key: "INTERNAL", label: "Internal" },
+              { key: "RECYCLED", label: "Recycled" },
             ].map((t) => {
               const count = t.key === "ALL"
                 ? clients.length

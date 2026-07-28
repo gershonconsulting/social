@@ -73,7 +73,13 @@ export async function GET(_req: NextRequest) {
       let overallStatus: ComplianceStatus;
       if (clientMissing) overallStatus = ComplianceStatus.RED;
       else if (clientUnknown) overallStatus = ComplianceStatus.YELLOW;
-      else if (Object.values(platformStatuses).every((s) => s === ComplianceStatus.GREEN))
+      // GREEN requires at least one platform actually verified today. Without this
+      // guard, [].every() returns true, so clients with no compliance record for
+      // today falsely showed GREEN ("all good") instead of GRAY ("no data / not expected").
+      else if (
+        Object.keys(platformStatuses).length > 0 &&
+        Object.values(platformStatuses).every((s) => s === ComplianceStatus.GREEN)
+      )
         overallStatus = ComplianceStatus.GREEN;
       else overallStatus = ComplianceStatus.GRAY;
 

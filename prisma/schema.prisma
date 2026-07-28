@@ -32,6 +32,7 @@ enum ClientType {
   COMPETITION
   COMPANY
   CAMPAIGN
+  RECYCLED
 }
 
 enum Platform {

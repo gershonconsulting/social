@@ -9,6 +9,7 @@ const CATEGORY_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "PARTNER", label: "Partner" },
   { value: "COMPETITION", label: "Competition" },
   { value: "INTERNAL", label: "Internal" },
+  { value: "RECYCLED", label: "Recycled" },
 ];
 
 const BADGE_STYLES: Record<string, string> = {
@@ -19,6 +20,7 @@ const BADGE_STYLES: Record<string, string> = {
   COMPETITION: "bg-red-50 text-red-700 border-red-200 hover:bg-red-100",
   COMPANY: "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100",
   INTERNAL: "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100",
+  RECYCLED: "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200",
 };
 
 export function ClientCategoryEditor({
