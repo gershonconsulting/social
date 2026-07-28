@@ -7,6 +7,7 @@ import {
   BarChart3,
   Building2,
   LayoutDashboard,
+  LayoutList,
   Settings,
   Shield,
   LogOut,
@@ -20,16 +21,18 @@ import { useDemoMode, setDemoMode } from "@/lib/use-demo-mode";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  // Single-user app (Olivier-only). No role gating. Reports removed
-  // per request 2026-05-18; bring back if monthly export becomes useful again.
+  // Menu aligned with the other platform dashboards:
+  // Dashboard (dynamic insights + charts) → Summary (company-by-company view)
+  // → Companies → Networks → Analytics → Logs → Errors → Admin → Settings.
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/summary", icon: LayoutList, label: "Summary" },
   {
     href: "/clients",
     icon: Building2,
     label: "Companies",
     children: [{ href: "/clients/by-cloudcampaign", label: "By Cloud Campaign" }, { href: "/clients/by-heropost", label: "By HeroPost" }],
   },
-  { href: "/admin/coverage", icon: Network, label: "Networks" },
+  { href: "/networks", icon: Network, label: "Networks" },
   { href: "/analytics", icon: BarChart3, label: "Analytics" },
   { href: "/logs", icon: ScrollText, label: "Logs" },
   { href: "/errors", icon: AlertOctagon, label: "Errors" },

@@ -118,12 +118,16 @@ export function DashboardClient({
   totalFollowers,
   activeClients,
   collectionStatus,
+  heading = "Dashboard",
+  subheading = "Social media performance overview",
 }: {
   clients: DashboardClientData[];
   totalPosts: number;
   totalFollowers: number;
   activeClients: number;
   collectionStatus: CollectionStatus;
+  heading?: string;
+  subheading?: string;
 }) {
   const demoMode = useDemoMode();
   const [compliance, setCompliance] = useState<Record<string, ComplianceData>>({});
@@ -221,8 +225,8 @@ export function DashboardClient({
       {/* Header */}
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-1">Social media performance overview</p>
+          <h1 className="text-2xl font-bold text-gray-900">{heading}</h1>
+          <p className="text-sm text-gray-500 mt-1">{subheading}</p>
         </div>
         <div className="flex items-center gap-2">
           <select

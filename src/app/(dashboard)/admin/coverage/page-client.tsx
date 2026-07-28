@@ -127,6 +127,7 @@ export function CoveragePageClient() {
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [filter, setFilter] = useState<"all" | "issues" | "perfect">("all");
+  const [catFilter, setCatFilter] = useState<string>("ALL");
   // In demo mode, force every cell to tier-3 (✓✓✓): hasLink + hasData + upToDate.
   // Synthetic post counts so the hover tooltip still looks plausible.
   const clients: ClientRow[] | null = demoMode && rawClients
@@ -170,7 +171,38 @@ export function CoveragePageClient() {
 
   const loading = clients === null && !error;
 
-  // Summary: count each tier × platform
+  // Category tabs — built from the data so only non-empty categories show.
+  const categoryCounts = (() => {
+    const m: Record<string, number> = {};
+    for (const c of clients ?? []) {
+      const k = (c.clientType ?? "").toUpperCase() || "UNKNOWN";
+      m[k] = (m[k] ?? 0) + 1;
+    }
+    return m;
+  })();
+  // Preferred display order, mirroring the Dashboard category tabs.
+  const CATEGORY_ORDER = ["CAMPAIGN", "CLIENT", "PROSPECT", "PARTNER", "COMPETITION", "COMPANY", "INTERNAL"];
+  const categoryTabs = [
+    { key: "ALL", label: "All", count: clients?.length ?? 0 },
+    ...CATEGORY_ORDER.filter((k) => categoryCounts[k] > 0).map((k) => ({
+      key: k,
+      label: k.charAt(0) + k.slice(1).toLowerCase(),
+      count: categoryCounts[k],
+    })),
+    // Any leftover categories not in the preferred order.
+    ...Object.keys(categoryCounts)
+      .filter((k) => !CATEGORY_ORDER.includes(k))
+      .map((k) => ({ key: k, label: k.charAt(0) + k.slice(1).toLowerCase(), count: categoryCounts[k] })),
+  ];
+
+  // Scope everything (summary tiles + table) to the selected category.
+  const scoped: ClientRow[] = !clients
+    ? []
+    : catFilter === "ALL"
+      ? clients
+      : clients.filter((c) => (c.clientType ?? "").toUpperCase() === catFilter);
+
+  // Summary: count each tier × platform (within the selected category)
   const summary = (() => {
     if (!clients) return null;
     const s = {
@@ -179,7 +211,7 @@ export function CoveragePageClient() {
       perPlatform: {} as Record<string, { none: number; one: number; two: number; three: number }>,
     };
     for (const col of COLUMNS) s.perPlatform[col.platform] = { none: 0, one: 0, two: 0, three: 0 };
-    for (const c of clients) {
+    for (const c of scoped) {
       for (const col of COLUMNS) {
         const p = c.platforms[col.platform];
         s.totalCells++;
@@ -196,16 +228,16 @@ export function CoveragePageClient() {
   const visible = !clients
     ? []
     : filter === "all"
-      ? clients
+      ? scoped
       : filter === "perfect"
-        ? clients.filter((c) =>
+        ? scoped.filter((c) =>
             // Every column has 3 checks: has link + has data + up to date.
             COLUMNS.every((col) => {
               const p = c.platforms[col.platform];
               return !!p && p.hasLink && p.hasData && p.upToDate;
             })
           )
-        : clients.filter((c) => {
+        : scoped.filter((c) => {
             // Less than 3 checks on at least one column.
             return COLUMNS.some((col) => {
               const p = c.platforms[col.platform];
@@ -275,6 +307,29 @@ export function CoveragePageClient() {
         </div>
       )}
 
+      {/* Category tabs — view the 3-check coverage by company category */}
+      {clients && categoryTabs.length > 1 && (
+        <div className="flex flex-wrap gap-1.5">
+          {categoryTabs.map((t) => {
+            const active = catFilter === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setCatFilter(t.key)}
+                className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
+                  active
+                    ? "bg-red-600 text-white"
+                    : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                {t.label}
+                <span className={`ml-1.5 text-xs ${active ? "text-red-100" : "text-gray-400"}`}>{t.count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {summary && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
@@ -314,7 +369,7 @@ export function CoveragePageClient() {
           onClick={() => setFilter("all")}
           className={`px-3 py-1.5 rounded-lg font-medium ${filter === "all" ? "bg-gray-900 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"}`}
         >
-          All ({clients?.length ?? 0})
+          All ({scoped.length})
         </button>
         <button
           onClick={() => setFilter("perfect")}

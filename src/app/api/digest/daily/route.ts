@@ -283,7 +283,7 @@ function renderHtml(d: DigestData): string {
       </tr>
     </table>
     <div style="margin-top:12px;text-align:center;">
-      <a href="https://social.gershoncrm.com/admin/coverage" style="display:inline-block;padding:10px 18px;background:#FE1B04;color:white;font-weight:600;font-size:13px;text-decoration:none;border-radius:8px;">Open Networks page →</a>
+      <a href="https://social.gershoncrm.com/networks" style="display:inline-block;padding:10px 18px;background:#FE1B04;color:white;font-weight:600;font-size:13px;text-decoration:none;border-radius:8px;">Open Networks page →</a>
     </div>
   </div>
   <div style="padding:14px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:11px;color:#999;">

@@ -12,7 +12,7 @@ import type {
 // missed run of slack before we flag it.
 const STALE_MS = 48 * 60 * 60 * 1000;
 
-async function getCollectionStatus(): Promise<CollectionStatus> {
+export async function getCollectionStatus(): Promise<CollectionStatus> {
   const now = Date.now();
   const recentWindow = new Date(now - STALE_MS);
 
@@ -94,7 +94,7 @@ async function getCollectionStatus(): Promise<CollectionStatus> {
   };
 }
 
-async function getDashboardData() {
+export async function getDashboardData() {
   const clients = await prisma.client.findMany({
     where: { status: ClientStatus.ACTIVE },
     include: {
@@ -250,7 +250,13 @@ async function getDashboardData() {
   });
 }
 
-export async function DashboardContent() {
+export async function DashboardContent({
+  heading = "Dashboard",
+  subheading = "Social media performance overview",
+}: {
+  heading?: string;
+  subheading?: string;
+} = {}) {
   const [clients, collectionStatus] = await Promise.all([
     getDashboardData(),
     getCollectionStatus(),
@@ -266,6 +272,8 @@ export async function DashboardContent() {
       totalFollowers={totalFollowers}
       activeClients={activeClients}
       collectionStatus={collectionStatus}
+      heading={heading}
+      subheading={subheading}
     />
   );
 }
