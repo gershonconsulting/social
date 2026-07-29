@@ -26,26 +26,40 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const client = await prisma.client.findUnique({
-      where: { id },
-      include: {
-        platformConnections: {
-          include: {
-            followerSnapshots: {
-              orderBy: { snapshotDateLocal: "desc" },
-              take: 2,
-            },
-          },
-          orderBy: { platform: "asc" },
+    // Keep this LIGHT for the Cloudflare edge worker (was intermittently 500ing
+    // with error 1102 "exceeded resource limits"): the detail page does not use
+    // followerSnapshots, so we no longer eagerly load them, and we run the client
+    // lookup and the post aggregate in parallel instead of sequentially.
+    const [client, agg] = await Promise.all([
+      prisma.client.findUnique({
+        where: { id },
+        include: {
+          platformConnections: { orderBy: { platform: "asc" } },
         },
-      },
-    });
+      }),
+      // "Last content collected" — last time we wrote post data for this company
+      // (same signal the dashboard collection panel uses), plus newest post date
+      // and total post count.
+      prisma.socialPost.aggregate({
+        where: { clientId: id },
+        _max: { updatedAt: true, publishedDateLocal: true },
+        _count: { _all: true },
+      }),
+    ]);
 
     if (!client) {
       return NextResponse.json({ success: false, error: "Client not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, data: client });
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...client,
+        lastCollectedAt: agg._max.updatedAt ? agg._max.updatedAt.toISOString() : null,
+        latestPostDate: agg._max.publishedDateLocal ?? null,
+        postCount: agg._count._all,
+      },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to load client";
     return NextResponse.json({ success: false, error: message }, { status: 500 });

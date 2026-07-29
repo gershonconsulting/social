@@ -1,7 +1,7 @@
 export const runtime = 'edge';
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { ClientStatus } from "@prisma/client";
+import { ClientStatus, ClientType } from "@prisma/client";
 
 /**
  * GET /api/analytics/summary?days=30
@@ -23,14 +23,24 @@ export async function GET(req: Request) {
     // Optional per-client scope — when set, every aggregate below is for this
     // client only. Empty / missing = cross-client (portfolio) view.
     const clientId = url.searchParams.get("clientId") || null;
+    // Optional category/group scope (e.g. CAMPAIGN). Ignored when a specific
+    // clientId is given. Only applied if it's a valid ClientType.
+    const clientTypeRaw = (url.searchParams.get("clientType") || "").toUpperCase();
+    const clientType = (Object.values(ClientType) as string[]).includes(clientTypeRaw)
+      ? (clientTypeRaw as ClientType)
+      : null;
 
     const since = new Date();
     since.setDate(since.getDate() - days);
     since.setHours(0, 0, 0, 0);
 
-    // Pull posts in window (optionally scoped to one client). Keep select small.
+    // Pull posts in window (optionally scoped to one client or one category).
     const posts = await prisma.socialPost.findMany({
-      where: { publishedAtUtc: { gte: since }, ...(clientId ? { clientId } : {}) },
+      where: {
+        publishedAtUtc: { gte: since },
+        ...(clientId ? { clientId } : {}),
+        ...(!clientId && clientType ? { client: { clientType } } : {}),
+      },
       select: {
         id: true,
         clientId: true,

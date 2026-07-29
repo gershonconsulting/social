@@ -140,6 +140,9 @@ interface ClientData {
   clientType: string;
   campaignStartDate: string | null;
   platformConnections: Connection[];
+  lastCollectedAt: string | null;
+  latestPostDate: string | null;
+  postCount: number;
 }
 
 
@@ -153,7 +156,7 @@ export function ClientDetailPageClient({ clientId }: { clientId: string }) {
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetchWithRetry("/api/clients/" + clientId);
+        const r = await fetchWithRetry("/api/clients/" + clientId, undefined, 5);
         if (!r.ok) {
           if (r.status === 404) { router.replace("/clients"); return; }
           throw new Error("HTTP " + r.status);
@@ -235,11 +238,18 @@ export function ClientDetailPageClient({ clientId }: { clientId: string }) {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            {lastSync && (
-              <div className="text-xs text-gray-400">
-                Last sync {formatRelative(lastSync)}
+            <div className="text-right">
+              <div className="text-xs font-medium text-gray-700">
+                {client.lastCollectedAt
+                  ? <>Last content collected {formatRelative(client.lastCollectedAt)}</>
+                  : "No content collected yet"}
               </div>
-            )}
+              <div className="text-[11px] text-gray-400">
+                {client.latestPostDate && <>latest post {client.latestPostDate} · </>}
+                {client.postCount} post{client.postCount === 1 ? "" : "s"} on file
+                {lastSync && <> · last sync {formatRelative(lastSync)}</>}
+              </div>
+            </div>
             <ClientSyncButton clientId={client.id} />
           </div>
         </div>
