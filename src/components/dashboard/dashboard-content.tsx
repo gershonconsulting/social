@@ -95,125 +95,124 @@ export async function getCollectionStatus(): Promise<CollectionStatus> {
 }
 
 export async function getDashboardData() {
+  // IMPORTANT (Cloudflare edge — error 1102 "Worker exceeded resource limits"):
+  // this used to load EVERY post for EVERY company into the worker and sum in JS,
+  // which blew the CPU limit as the dataset grew and made /summary and /dashboard
+  // fail to render. We now aggregate in the database (groupBy) so each query
+  // returns one row per company instead of thousands of posts.
+  const now = new Date();
+  const y = now.getFullYear();
+  const mo = now.getMonth(); // 0-based
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const thisMonthStart = `${y}-${pad(mo + 1)}-01`;
+  const nextMonthStart = mo === 11 ? `${y + 1}-01-01` : `${y}-${pad(mo + 2)}-01`;
+  const lastMonthStart = mo === 0 ? `${y - 1}-12-01` : `${y}-${pad(mo)}-01`;
+  const thisYearStart = `${y}-01-01`;
+  const today = new Date(now); today.setHours(0, 0, 0, 0);
+  const todayStr = today.toISOString().slice(0, 10);
+  const lw = new Date(today); lw.setDate(today.getDate() - 7);
+  const lastWeekStart = lw.toISOString().slice(0, 10);
+  const w30 = new Date(today); w30.setDate(today.getDate() - 30);
+  const win30Start = w30.toISOString().slice(0, 10);
+  const fw = new Date(today); fw.setDate(today.getDate() - 21);
+  const followerSince = fw.toISOString().slice(0, 10);
+
   const clients = await prisma.client.findMany({
     where: { status: ClientStatus.ACTIVE },
-    include: {
-      platformConnections: {
-        where: { isEnabled: true },
-        select: {
-          id: true,
-          platform: true,
-          connectionStatus: true,
-          lastSyncAt: true,
-        },
-      },
-      socialPosts: {
-        select: {
-          platform: true,
-          publishedDateLocal: true,
-          likeCount: true,
-          commentCount: true,
-          shareCount: true,
-          viewCount: true,
-        },
-      },
-      followerSnapshots: {
-        orderBy: { snapshotDateLocal: "desc" },
-        take: 50,
-        select: {
-          platform: true,
-          followerCount: true,
-          snapshotDateLocal: true,
-        },
-      },
-    },
+    select: { id: true, name: true, logoUrl: true, clientType: true },
     orderBy: { name: "asc" },
   });
+  if (clients.length === 0) return [];
+  const ids = clients.map((c) => c.id);
 
-  const now = new Date();
-  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const lastMonth = now.getMonth() === 0
-    ? `${now.getFullYear() - 1}-12`
-    : `${now.getFullYear()}-${String(now.getMonth()).padStart(2, "0")}`;
+  const sumWindow = (extra: Record<string, unknown>) =>
+    prisma.socialPost.groupBy({
+      by: ["clientId"],
+      where: { clientId: { in: ids }, ...extra },
+      _count: { _all: true },
+      _sum: { likeCount: true, commentCount: true, shareCount: true, viewCount: true },
+    });
 
-  // Window boundaries — used so the dashboard can re-aggregate by Last week,
-  // Last Month, This month, This year, All time without each company card
-  // having to re-filter the raw post stream.
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-  const lastWeekStart = new Date(today);
-  lastWeekStart.setDate(today.getDate() - 7);
-  const thisYearStr = String(now.getFullYear());
+  const [allTimeA, thisMonthA, lastMonthA, thisYearA, lastWeekA, platA, lastPostA, posts30A, conns, snaps] =
+    await Promise.all([
+      sumWindow({}),
+      sumWindow({ publishedDateLocal: { gte: thisMonthStart, lt: nextMonthStart } }),
+      sumWindow({ publishedDateLocal: { gte: lastMonthStart, lt: thisMonthStart } }),
+      sumWindow({ publishedDateLocal: { gte: thisYearStart } }),
+      sumWindow({ publishedDateLocal: { gte: lastWeekStart, lte: todayStr } }),
+      prisma.socialPost.groupBy({ by: ["clientId", "platform"], where: { clientId: { in: ids } }, _count: { _all: true } }),
+      prisma.socialPost.groupBy({ by: ["clientId"], where: { clientId: { in: ids } }, _max: { publishedDateLocal: true } }),
+      prisma.socialPost.groupBy({ by: ["clientId"], where: { clientId: { in: ids }, publishedDateLocal: { gte: win30Start, lte: todayStr } }, _count: { _all: true } }),
+      prisma.platformConnection.findMany({ where: { clientId: { in: ids }, isEnabled: true }, select: { clientId: true, id: true, platform: true, connectionStatus: true, lastSyncAt: true } }),
+      prisma.followerSnapshot.findMany({ where: { clientId: { in: ids }, snapshotDateLocal: { gte: followerSince } }, orderBy: { snapshotDateLocal: "desc" }, select: { clientId: true, platform: true, followerCount: true } }),
+    ]);
+
+  type Bucket = { posts: number; likes: number; comments: number; shares: number; views: number };
+  const emptyBucket = (): Bucket => ({ posts: 0, likes: 0, comments: 0, shares: 0, views: 0 });
+  const bucketMap = (rows: typeof allTimeA) => {
+    const mp = new Map<string, Bucket>();
+    for (const r of rows) {
+      mp.set(r.clientId, {
+        posts: r._count._all,
+        likes: r._sum.likeCount ?? 0,
+        comments: r._sum.commentCount ?? 0,
+        shares: r._sum.shareCount ?? 0,
+        views: r._sum.viewCount ?? 0,
+      });
+    }
+    return mp;
+  };
+  const allTimeM = bucketMap(allTimeA);
+  const thisMonthM = bucketMap(thisMonthA);
+  const lastMonthM = bucketMap(lastMonthA);
+  const thisYearM = bucketMap(thisYearA);
+  const lastWeekM = bucketMap(lastWeekA);
+
+  const postCountsM = new Map<string, Record<string, number>>();
+  for (const r of platA) {
+    const rec = postCountsM.get(r.clientId) ?? {};
+    rec[r.platform as string] = r._count._all;
+    postCountsM.set(r.clientId, rec);
+  }
+  const lastPostM = new Map<string, string | null>();
+  for (const r of lastPostA) lastPostM.set(r.clientId, r._max.publishedDateLocal ?? null);
+  const posts30M = new Map<string, number>();
+  for (const r of posts30A) posts30M.set(r.clientId, r._count._all);
+
+  const connM = new Map<string, Array<{ id: string; platform: string; connectionStatus: string; lastSyncAt: string | null }>>();
+  for (const c of conns) {
+    const arr = connM.get(c.clientId) ?? [];
+    arr.push({ id: c.id, platform: c.platform as string, connectionStatus: c.connectionStatus as string, lastSyncAt: c.lastSyncAt?.toISOString() ?? null });
+    connM.set(c.clientId, arr);
+  }
+
+  // Followers — snaps come ordered desc, so first per (client, platform) is the
+  // latest and the second is the previous. Use 'in' so a legit 0 isn't skipped.
+  const latestM = new Map<string, Record<string, number>>();
+  const prevM = new Map<string, Record<string, number>>();
+  for (const s of snaps) {
+    const latest = latestM.get(s.clientId) ?? {}; latestM.set(s.clientId, latest);
+    const prev = prevM.get(s.clientId) ?? {}; prevM.set(s.clientId, prev);
+    const p = s.platform as string;
+    if (!(p in latest)) latest[p] = s.followerCount;
+    else if (!(p in prev)) prev[p] = s.followerCount;
+  }
 
   return clients.map((client) => {
-    const postCounts: Record<string, number> = {};
     const buckets = {
-      lastWeek:   { posts: 0, likes: 0, comments: 0, shares: 0, views: 0 },
-      lastMonth:  { posts: 0, likes: 0, comments: 0, shares: 0, views: 0 },
-      thisMonth:  { posts: 0, likes: 0, comments: 0, shares: 0, views: 0 },
-      thisYear:   { posts: 0, likes: 0, comments: 0, shares: 0, views: 0 },
-      allTime:    { posts: 0, likes: 0, comments: 0, shares: 0, views: 0 },
+      lastWeek: lastWeekM.get(client.id) ?? emptyBucket(),
+      lastMonth: lastMonthM.get(client.id) ?? emptyBucket(),
+      thisMonth: thisMonthM.get(client.id) ?? emptyBucket(),
+      thisYear: thisYearM.get(client.id) ?? emptyBucket(),
+      allTime: allTimeM.get(client.id) ?? emptyBucket(),
     };
-    for (const post of client.socialPosts) {
-      postCounts[post.platform] = (postCounts[post.platform] || 0) + 1;
-      const ds = post.publishedDateLocal;
-      const d = new Date(ds + "T00:00:00Z");
-      const likes = post.likeCount || 0;
-      const comments = post.commentCount || 0;
-      const shares = post.shareCount || 0;
-      const views = post.viewCount || 0;
-
-      const bump = (b: typeof buckets.lastWeek) => {
-        b.posts++; b.likes += likes; b.comments += comments; b.shares += shares; b.views += views;
-      };
-      bump(buckets.allTime);
-      if (ds.startsWith(thisYearStr)) bump(buckets.thisYear);
-      if (ds.startsWith(thisMonth)) bump(buckets.thisMonth);
-      if (ds.startsWith(lastMonth)) bump(buckets.lastMonth);
-      if (d >= lastWeekStart && d <= today) bump(buckets.lastWeek);
-    }
-    // Posting cadence — for the "is this company posting regularly?" view
-    // 1. lastPostDateLocal: most recent post across all platforms (or null if never)
-    // 2. posts30d: number of posts in the last 30 days
-    let lastPostDateLocal: string | null = null;
-    const today30 = new Date(now);
-    today30.setHours(0, 0, 0, 0);
-    const window30Start = new Date(today30);
-    window30Start.setDate(today30.getDate() - 30);
-    let posts30d = 0;
-    for (const post of client.socialPosts) {
-      if (!lastPostDateLocal || post.publishedDateLocal > lastPostDateLocal) {
-        lastPostDateLocal = post.publishedDateLocal;
-      }
-      const d = new Date(post.publishedDateLocal + "T00:00:00Z");
-      if (d >= window30Start && d <= today30) posts30d++;
-    }
-    const totalPosts = buckets.allTime.posts;
-    const postsThisMonth = buckets.thisMonth.posts;
-    const postsLastMonth = buckets.lastMonth.posts;
-    const totalLikes = buckets.allTime.likes;
-    const totalComments = buckets.allTime.comments;
-    const totalShares = buckets.allTime.shares;
-    const totalViews = buckets.allTime.views;
-
-    // Compute follower totals and growth
-    const latestFollowers: Record<string, number> = {};
-    const previousFollowers: Record<string, number> = {};
-    // Snapshots are ordered desc — first snap per platform is latest, second is previous.
-    // Use 'in' instead of falsy check so a legit 0-follower snapshot isn't ignored.
-    for (const snap of client.followerSnapshots) {
-      if (!(snap.platform in latestFollowers)) {
-        latestFollowers[snap.platform] = snap.followerCount;
-      } else if (!(snap.platform in previousFollowers)) {
-        previousFollowers[snap.platform] = snap.followerCount;
-      }
-    }
+    const latestFollowers = latestM.get(client.id) ?? {};
+    const previousFollowers = prevM.get(client.id) ?? {};
     const totalFollowers = Object.values(latestFollowers).reduce((s, c) => s + c, 0);
     const totalPrevFollowers = Object.values(previousFollowers).reduce((s, c) => s + c, 0);
     const followerGrowth = totalPrevFollowers > 0
       ? Math.round(((totalFollowers - totalPrevFollowers) / totalPrevFollowers) * 100)
       : 0;
-
     const platformFollowers: Array<{ platform: string; current: number; previous: number; growth: number }> = [];
     for (const [plat, current] of Object.entries(latestFollowers)) {
       const prev = previousFollowers[plat] || 0;
@@ -226,26 +225,21 @@ export async function getDashboardData() {
       name: client.name,
       logoUrl: client.logoUrl,
       clientType: client.clientType as string,
-      platformConnections: client.platformConnections.map((c) => ({
-        id: c.id,
-        platform: c.platform as string,
-        connectionStatus: c.connectionStatus as string,
-        lastSyncAt: c.lastSyncAt?.toISOString() ?? null,
-      })),
-      postCounts,
-      totalPosts,
-      postsThisMonth,
-      postsLastMonth,
+      platformConnections: connM.get(client.id) ?? [],
+      postCounts: postCountsM.get(client.id) ?? {},
+      totalPosts: buckets.allTime.posts,
+      postsThisMonth: buckets.thisMonth.posts,
+      postsLastMonth: buckets.lastMonth.posts,
       totalFollowers,
       followerGrowth,
       platformFollowers,
-      totalLikes,
-      totalComments,
-      totalShares,
-      totalViews,
+      totalLikes: buckets.allTime.likes,
+      totalComments: buckets.allTime.comments,
+      totalShares: buckets.allTime.shares,
+      totalViews: buckets.allTime.views,
       buckets,
-      lastPostDateLocal,
-      posts30d,
+      lastPostDateLocal: lastPostM.get(client.id) ?? null,
+      posts30d: posts30M.get(client.id) ?? 0,
     };
   });
 }
