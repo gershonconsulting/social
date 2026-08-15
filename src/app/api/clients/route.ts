@@ -234,84 +234,155 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// POST /api/clients — create a company.
+//
+// Reliability contract (added v2.9.1 after Olivier reported "I get an error
+// every time even though the company IS created"):
+//
+//   Once prisma.client.create() succeeds, this handler MUST return 201.
+//   Every step after the insert is best-effort and can only degrade the
+//   response payload — never turn it into an error. Previously an unguarded
+//   throw in any post-insert step (connection insert, token propagation,
+//   audit log, re-read with nested include) escaped the handler, so the edge
+//   worker returned a raw non-JSON 500 while the row sat committed in Neon.
+//   That is exactly the "error but it worked" symptom.
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => null);
-  const parsed = createClientSchema.safeParse(body);
+  // `warnings` collects non-fatal post-insert failures so the UI can show
+  // "created, but X didn't run" instead of a bare error.
+  const warnings: string[] = [];
 
-  if (!parsed.success) {
-    return NextResponse.json(
-      { success: false, error: "Validation failed", details: parsed.error.flatten() },
-      { status: 400 }
-    );
-  }
+  try {
+    const body = await req.json().catch(() => null);
+    const parsed = createClientSchema.safeParse(body);
 
-  // Check slug uniqueness
-  const existing = await prisma.client.findUnique({ where: { slug: parsed.data.slug } });
-  if (existing) {
-    return NextResponse.json({ success: false, error: "Slug already taken" }, { status: 409 });
-  }
+    if (!parsed.success) {
+      return NextResponse.json(
+        { success: false, error: "Validation failed", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
 
-  const { platformConnections: connections, ...clientData } = parsed.data;
+    // Check slug uniqueness
+    const existing = await prisma.client.findUnique({ where: { slug: parsed.data.slug } });
+    if (existing) {
+      return NextResponse.json({ success: false, error: "Slug already taken" }, { status: 409 });
+    }
 
-  const client = await prisma.client.create({
-    data: {
-      ...clientData,
-      campaignStartDate: clientData.campaignStartDate ? new Date(clientData.campaignStartDate) : null,
-      reportingStartDate: clientData.reportingStartDate ? new Date(clientData.reportingStartDate) : null,
-    },
-  });
+    const { platformConnections: connections, ...clientData } = parsed.data;
 
-  // Create platform connections if provided
-  if (connections && connections.length > 0) {
-    for (const conn of connections) {
-      await prisma.platformConnection.create({
+    // ---- The only step that is allowed to fail the request ----------------
+    let client: Awaited<ReturnType<typeof prisma.client.create>>;
+    try {
+      client = await prisma.client.create({
         data: {
-          clientId: client.id,
-          platform: conn.platform as Platform,
-          externalAccountUrl: conn.externalAccountUrl || null,
-          connectionStatus: ConnectionStatus.PENDING,
-          isMandatory: true,
-          isEnabled: true,
+          ...clientData,
+          campaignStartDate: clientData.campaignStartDate ? new Date(clientData.campaignStartDate) : null,
+          reportingStartDate: clientData.reportingStartDate ? new Date(clientData.reportingStartDate) : null,
         },
       });
+    } catch (createErr) {
+      const m = createErr instanceof Error ? createErr.message : String(createErr);
+      // Lost the race against a concurrent create with the same slug.
+      if (m.includes("P2002") || m.toLowerCase().includes("unique constraint")) {
+        return NextResponse.json(
+          { success: false, error: "Slug already taken" },
+          { status: 409 }
+        );
+      }
+      console.error("POST /api/clients: client.create failed:", m);
+      return NextResponse.json(
+        { success: false, error: `Could not create company: ${m}` },
+        { status: 500 }
+      );
+    }
+    // ---- From here on, we are committed to returning 201 ------------------
+
+    // Platform connections. Each insert is independent — one bad platform
+    // string must not cost us the other connections or the whole response.
+    if (connections && connections.length > 0) {
+      for (const conn of connections) {
+        try {
+          await prisma.platformConnection.create({
+            data: {
+              clientId: client.id,
+              platform: conn.platform as Platform,
+              externalAccountUrl: conn.externalAccountUrl || null,
+              connectionStatus: ConnectionStatus.PENDING,
+              isMandatory: true,
+              isEnabled: true,
+            },
+          });
+        } catch (connErr) {
+          const m = connErr instanceof Error ? connErr.message : String(connErr);
+          console.error(`POST /api/clients: connection ${conn.platform} failed:`, m);
+          warnings.push(`Could not add the ${conn.platform} connection — add it from the company page.`);
+        }
+      }
+
+      // Olivier's UX rule: a brand-new company should NOT sit in PENDING just
+      // because we already authorized that platform on a different company.
+      // Copy any existing valid OAuth token from a sibling connection of the
+      // same platform onto these freshly-created PENDING rows. Best-effort.
+      try {
+        await propagateTokensForAllPlatforms();
+      } catch {
+        // Non-fatal — the client + connections still exist either way.
+        warnings.push("Platform connections were left PENDING — reconnect them from the company page.");
+      }
     }
 
-    // Olivier's UX rule: a brand-new company should NOT sit in PENDING just
-    // because we already authorized that platform on a different company.
-    // Copy any existing valid OAuth token from a sibling connection of the
-    // same platform onto these freshly-created PENDING rows. Best-effort.
+    // Audit log — nice to have, never worth failing a create over.
     try {
-      await propagateTokensForAllPlatforms();
+      await prisma.auditLog.create({
+        data: {
+          actorUserId: null,
+          actionType: "CLIENT_CREATED",
+          entityType: "Client",
+          entityId: client.id,
+          afterJson: JSON.stringify(client),
+        },
+      });
+    } catch (auditErr) {
+      console.error(
+        "POST /api/clients: audit log failed:",
+        auditErr instanceof Error ? auditErr.message : String(auditErr)
+      );
+    }
+
+    // Re-read with connections. Nested `include` is the query shape that has
+    // repeatedly blown edge-worker CPU on this project (see GET above), so if
+    // it fails we stitch the response together from two flat queries, and if
+    // THAT fails we return the freshly-created row on its own.
+    let fullClient: unknown = null;
+    try {
+      fullClient = await prisma.client.findUnique({
+        where: { id: client.id },
+        include: { platformConnections: true },
+      });
     } catch {
-      // Non-fatal — the client + connections still exist either way.
+      try {
+        const conns = await prisma.platformConnection.findMany({ where: { clientId: client.id } });
+        fullClient = { ...client, platformConnections: conns };
+      } catch {
+        fullClient = { ...client, platformConnections: [] };
+      }
     }
+    if (!fullClient) fullClient = { ...client, platformConnections: [] };
+
+    // NOTE: the Phantombuster spreadsheet re-sync used to be kicked off here as
+    // an un-awaited self-fetch to /api/admin/sheets-sync. On the Cloudflare edge
+    // runtime a pending fetch that outlives its request has no waitUntil() to
+    // keep it alive — the runtime tears down the I/O context and can abort the
+    // response body mid-flight, which surfaces in the browser as a failed
+    // fetch on a create that actually succeeded. The browser now fires that
+    // sync itself after a successful create (see admin/page-client.tsx).
+    return NextResponse.json(
+      { success: true, data: fullClient, warnings: warnings.length ? warnings : undefined },
+      { status: 201 }
+    );
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Unexpected error creating company";
+    console.error("POST /api/clients unhandled error:", msg);
+    return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
-
-  // Audit log
-  await prisma.auditLog.create({
-    data: {
-      actorUserId: null,
-      actionType: "CLIENT_CREATED",
-      entityType: "Client",
-      entityId: client.id,
-      afterJson: JSON.stringify(client),
-    },
-  });
-
-  // Return client with connections
-  const fullClient = await prisma.client.findUnique({
-    where: { id: client.id },
-    include: { platformConnections: true },
-  });
-
-  // Fire-and-forget: keep the Phantombuster source spreadsheet in sync.
-  // Doesn't block the response — if it fails the client is still created.
-  void (async () => {
-    try {
-      const url = new URL(req.url);
-      await fetch(`${url.protocol}//${url.host}/api/admin/sheets-sync`, { method: "POST" });
-    } catch { /* swallow — non-fatal */ }
-  })();
-
-  return NextResponse.json({ success: true, data: fullClient }, { status: 201 });
 }

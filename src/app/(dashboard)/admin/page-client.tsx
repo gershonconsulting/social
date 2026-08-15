@@ -206,10 +206,43 @@ export default function AdminPage() {
     }
   }
 
+  // Did a company with this slug land in the DB? Used to tell a genuine
+  // failure apart from "the request blew up on the way back but the row was
+  // committed" — the case that made every create look like an error.
+  async function clientExists(slug: string): Promise<boolean> {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await fetch(`/api/clients?light=1&includeArchived=true`, { cache: "no-store" });
+        if (res.ok) {
+          const d = await res.json();
+          if (d?.success && Array.isArray(d.data)) {
+            return d.data.some((c: { slug: string }) => c.slug === slug);
+          }
+        }
+      } catch { /* fall through to retry */ }
+      await new Promise((r) => setTimeout(r, 400 * attempt));
+    }
+    return false;
+  }
+
+  function resetCreateForm() {
+    setShowCreateForm(false);
+    setDiscovery(null);
+    setWebsiteInput("");
+    setEditName("");
+    setEditSlug("");
+    setSelectedPlatforms({});
+    setNewClientType("CLIENT");
+    setNewCampaignStartDate(new Date().toISOString().slice(0, 10));
+  }
+
   async function handleCreate() {
     if (!discovery) return;
     setCreating(true);
     setFormError("");
+
+    const slug = editSlug;
+    const name = editName;
 
     try {
       const connections = discovery.discovered
@@ -221,7 +254,7 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: editName,
-          slug: editSlug,
+          slug,
           website: discovery.website,
           clientType: newClientType,
           status: "ACTIVE",
@@ -232,26 +265,65 @@ export default function AdminPage() {
         }),
       });
 
-      const data = await res.json();
+      // The edge worker can return a non-JSON body (Cloudflare 1101/1102 error
+      // page) on a request whose DB write already committed. Never let a parse
+      // failure alone decide that the create failed.
+      const data = await res.json().catch(() => null);
 
-      if (data.success) {
-        setShowCreateForm(false);
-        setDiscovery(null);
-        setWebsiteInput("");
-        setEditName("");
-        setEditSlug("");
-        setSelectedPlatforms({});
-        setNewClientType("CLIENT");
-        setNewCampaignStartDate(new Date().toISOString().slice(0, 10));
+      if (data?.success) {
+        const warnings: string[] | undefined = data.warnings;
+        resetCreateForm();
         loadClients();
-      } else {
-        setFormError(data.error ?? "Failed to create company");
+        setSyncMsg(
+          warnings?.length
+            ? `“${name}” was created, but: ${warnings.join(" ")}`
+            : `“${name}” was created.`
+        );
+        void syncPhantombusterSheet();
+        return;
       }
+
+      // A clean 4xx from our own API is a real, actionable rejection
+      // (validation, duplicate slug) — nothing was written, so report it.
+      if (data && data.success === false && res.status >= 400 && res.status < 500) {
+        setFormError(data.error ?? "Failed to create company");
+        return;
+      }
+
+      // Anything else (5xx, unparseable body, aborted response): the row may
+      // well be in the database. Check before crying wolf.
+      if (await clientExists(slug)) {
+        resetCreateForm();
+        loadClients();
+        setSyncMsg(`“${name}” was created. (The server hiccuped on the way back, but the company is saved.)`);
+        void syncPhantombusterSheet();
+        return;
+      }
+
+      setFormError(data?.error ?? `Failed to create company (server returned ${res.status}).`);
     } catch {
+      // fetch() itself rejected — same reasoning as above.
+      if (await clientExists(slug)) {
+        resetCreateForm();
+        loadClients();
+        setSyncMsg(`“${name}” was created. (The connection dropped on the way back, but the company is saved.)`);
+        void syncPhantombusterSheet();
+        return;
+      }
       setFormError("Network error creating company. Please try again.");
     } finally {
       setCreating(false);
     }
+  }
+
+  // Rebuild the Phantombuster source spreadsheet after a create. Fired from the
+  // browser rather than as an un-awaited self-fetch inside the API route: on the
+  // Cloudflare edge runtime that dangling fetch could abort the create response
+  // itself. Failure here is invisible and harmless — the nightly job re-syncs.
+  async function syncPhantombusterSheet() {
+    try {
+      await fetch("/api/admin/sheets-sync", { method: "POST" });
+    } catch { /* non-fatal */ }
   }
 
   function handleCancel() {
