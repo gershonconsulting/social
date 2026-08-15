@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
-import { CheckCircle2, AlertCircle, XCircle, Download, RefreshCw, KeyRound, Eye, EyeOff, Loader2 } from "lucide-react";
+import { CheckCircle2, AlertCircle, XCircle, Download, RefreshCw, KeyRound, Eye, EyeOff, Loader2, Sparkles } from "lucide-react";
 
 interface Probe {
   hasCookies: boolean;
@@ -127,6 +127,8 @@ export function SettingsPageClient() {
         {row("LinkedIn", "#0A66C2", li)}
         {row("X / Twitter", "#000", tw)}
       </div>
+
+      <AnthropicCard />
 
       <PhantombusterCard />
 
@@ -690,6 +692,218 @@ function StreakCard() {
             </div>
           </div>
         )}
+      </form>
+    </div>
+  );
+}
+
+
+// ─── Content Intelligence (AI) ───────────────────────────────────────────────
+// The key lives in the `settings` table rather than an env var so it can be
+// rotated from this page without a redeploy — the deploy PAT can't touch
+// .github/workflows anyway. An ANTHROPIC_API_KEY env var still works as a
+// fallback if one is ever set on the Pages project.
+
+function AnthropicCard() {
+  const [configured, setConfigured] = useState(false);
+  const [source, setSource] = useState<string>("none");
+  const [masked, setMasked] = useState<string | null>(null);
+  const [model, setModel] = useState("");
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [newKey, setNewKey] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [models, setModels] = useState<Array<{ id: string; display_name?: string }>>([]);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  async function load() {
+    try {
+      const r = await fetch("/api/settings/anthropic", { cache: "no-store" });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (j?.success && j.data) {
+        setConfigured(!!j.data.configured);
+        setSource(j.data.source ?? "none");
+        setMasked(j.data.apiKeyMasked ?? null);
+        setModel(j.data.model ?? "");
+        setUpdatedAt(j.data.updatedAt ?? null);
+      }
+    } catch {}
+  }
+  useEffect(() => { load(); }, []);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+    if (!configured && !newKey.trim()) {
+      setMsg({ kind: "err", text: "Paste your Anthropic API key to save." });
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await fetch("/api/settings/anthropic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: newKey.trim() || undefined, model: model.trim() || undefined }),
+      });
+      const j = await r.json().catch(() => ({} as { error?: string }));
+      if (!r.ok || !j?.success) {
+        setMsg({ kind: "err", text: j.error || `HTTP ${r.status}` });
+      } else {
+        setMsg({ kind: "ok", text: j.message || "Saved." });
+        setNewKey("");
+        await load();
+      }
+    } catch (e) {
+      setMsg({ kind: "err", text: e instanceof Error ? e.message : "Network error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function fetchModels() {
+    setLoadingModels(true);
+    setMsg(null);
+    try {
+      const r = await fetch("/api/settings/anthropic?models=1", { cache: "no-store" });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.success) {
+        setMsg({ kind: "err", text: j?.error || `HTTP ${r.status}` });
+      } else {
+        setModels(j.data.models ?? []);
+        if (!model && j.data.models?.length) setModel(j.data.models[0].id);
+      }
+    } catch (e) {
+      setMsg({ kind: "err", text: e instanceof Error ? e.message : "Network error" });
+    } finally {
+      setLoadingModels(false);
+    }
+  }
+
+  async function removeKey() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await fetch("/api/settings/anthropic", { method: "DELETE" });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.success) setMsg({ kind: "err", text: j?.error || `HTTP ${r.status}` });
+      else { setMsg({ kind: "ok", text: "Key removed." }); setModels([]); await load(); }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
+      <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Sparkles size={15} className="text-[#FE1B04]" />
+          <div>
+            <div className="text-sm font-semibold text-gray-900">Content Intelligence (AI)</div>
+            <div className="text-xs text-gray-500 mt-0.5">
+              Powers the Content Intelligence tab on every company page. Without a key the Signals tab still works; the AI read does not.
+            </div>
+          </div>
+        </div>
+        <span
+          className={
+            "text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded border " +
+            (configured ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200")
+          }
+        >
+          {configured ? "Configured" : "Not configured"}
+        </span>
+      </div>
+
+      <form onSubmit={save} className="p-4 space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Anthropic API key</label>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <input
+                type={showKey ? "text" : "password"}
+                value={newKey}
+                onChange={(e) => setNewKey(e.target.value)}
+                placeholder={masked ? `Saved: ${masked} — paste a new key to replace` : "sk-ant-api03-…"}
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 pr-9"
+                autoComplete="off"
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                tabIndex={-1}
+              >
+                {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
+          </div>
+          <div className="text-[11px] text-gray-400 mt-1">
+            Create one at console.anthropic.com → API keys. The key is verified against Anthropic before it is saved.
+            {source === "env" && " Currently falling back to the ANTHROPIC_API_KEY environment variable."}
+            {updatedAt && ` Last updated ${relTime(updatedAt)}.`}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Model</label>
+          <div className="flex gap-2">
+            {models.length > 0 ? (
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white"
+              >
+                {models.map((m) => (
+                  <option key={m.id} value={m.id}>{m.display_name ? `${m.display_name} — ${m.id}` : m.id}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="claude-sonnet-4-5"
+                className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2"
+              />
+            )}
+            <button
+              type="button"
+              onClick={fetchModels}
+              disabled={loadingModels || !configured}
+              className="px-3 py-2 text-xs font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 inline-flex items-center gap-1.5"
+              title={configured ? "Ask Anthropic which models this key can use" : "Save a key first"}
+            >
+              {loadingModels ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+              List models
+            </button>
+          </div>
+        </div>
+
+        {msg && (
+          <div className={"text-xs " + (msg.kind === "ok" ? "text-emerald-700" : "text-red-600")}>{msg.text}</div>
+        )}
+
+        <div className="flex items-center gap-2">
+          <button
+            type="submit"
+            disabled={busy}
+            className="px-3 py-1.5 text-sm font-medium text-white bg-[#FE1B04] rounded-lg hover:opacity-90 disabled:opacity-40 inline-flex items-center gap-1.5"
+          >
+            {busy && <Loader2 size={13} className="animate-spin" />}
+            Save
+          </button>
+          {source === "settings" && (
+            <button
+              type="button"
+              onClick={removeKey}
+              disabled={busy}
+              className="px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40"
+            >
+              Remove key
+            </button>
+          )}
+        </div>
       </form>
     </div>
   );

@@ -10,7 +10,7 @@ import { ClientSyncButton } from "@/components/clients/client-sync-button";
 import { ClientNameEditor } from "@/components/clients/client-name-editor";
 import { ClientCategoryEditor } from "@/components/clients/client-category-editor";
 import { ComplianceDashboard } from "@/components/clients/compliance-dashboard";
-import { PostsListing } from "@/components/clients/posts-listing";
+import { ClientContentTabs } from "@/components/clients/client-content-tabs";
 import { CampaignDateEditor } from "@/components/clients/campaign-date-editor";
 import { ConnectionUrlEditor } from "@/components/clients/connection-url-editor";
 import { PlatformIcon } from "@/components/ui/platform-icon";
@@ -257,7 +257,7 @@ export function ClientDetailPageClient({ clientId }: { clientId: string }) {
 
       <ComplianceDashboard clientId={client.id} platforms={allPlatforms as never[]} />
 
-      <PostsListing clientId={client.id} />
+      <ClientContentTabs clientId={client.id} clientName={client.name} />
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">

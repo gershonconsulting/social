@@ -88,6 +88,7 @@ enum SyncJobType {
   BACKFILL
   TOKEN_HEALTH_CHECK
   MONTHLY_REPORT
+  CONTENT_ANALYSIS
 }
 
 enum SyncScopeType {
@@ -165,6 +166,7 @@ model Client {
   dailyCompliance     DailyCompliance[]
   followerSnapshots   FollowerSnapshot[]
   syncJobs            SyncJob[]
+  contentAnalyses     ContentAnalysis[]
 
   @@map("clients")
 }
@@ -303,6 +305,35 @@ model FollowerSnapshot {
   @@unique([clientId, platformConnectionId, snapshotDateLocal])
   @@index([clientId, platform])
   @@map("follower_snapshots")
+}
+
+// ─── ContentAnalysis ─────────────────────────────────────────────────────────
+// Cached output of the Content Intelligence engine. One row per
+// (client, windowDays) so the 90d and 365d views can coexist. The heavy
+// AI call runs on demand; every read after that is a single indexed lookup.
+
+model ContentAnalysis {
+  id            String   @id @default(cuid())
+  clientId      String
+  windowDays    Int      @default(365)
+  postCount     Int      @default(0)
+  platformsJson String?
+  statsJson     String?  @db.Text
+  resultJson    String   @db.Text
+  model         String?
+  inputTokens   Int      @default(0)
+  outputTokens  Int      @default(0)
+  durationMs    Int      @default(0)
+  generatedAt   DateTime @default(now())
+  generatedBy   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  @@unique([clientId, windowDays])
+  @@index([clientId, generatedAt])
+  @@map("content_analyses")
 }
 
 // ─── SyncJob ─────────────────────────────────────────────────────────────────
