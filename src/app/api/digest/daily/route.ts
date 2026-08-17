@@ -2,6 +2,7 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { ClientStatus, Platform } from "@prisma/client";
+import { sendCampaignMonthlyReport } from "@/lib/campaigns/send";
 
 /**
  * GET  /api/digest/daily            — render the digest as JSON (preview).
@@ -343,11 +344,38 @@ export async function POST(req: NextRequest) {
     const companyWord = d.totals.clientsWithActivity === 1 ? "company" : "companies";
     const subject = `Report social.gershonCRM.com ${dateStr} — ${d.totals.newPosts} posts collected from ${d.totals.clientsWithActivity} ${companyWord}`;
     const send = await sendViaResend(html, subject);
+
+    // Month-end campaign report piggyback.
+    //
+    // The deploy PAT has no GitHub `workflow` scope, so a dedicated monthly
+    // workflow file can't be pushed from a session (the health-check feature
+    // is still waiting on exactly that manual step). This workflow already
+    // runs every morning, so on the 1st we also fire the campaign monthly
+    // report for the month that just closed. sendCampaignMonthlyReport is
+    // idempotent — it records the month in settings.campaign_report_sent and
+    // no-ops on every later call — so a retry, a manual dispatch, or a second
+    // run on the same day cannot double-send.
+    //
+    // Wrapped so a failure here can never fail the daily digest: the digest
+    // has already gone out by this point and the HTTP status must keep
+    // reflecting the digest, not this.
+    let campaignReport: unknown = null;
+    try {
+      const dayOfMonth = new Date().getUTCDate();
+      const forced = new URL(req.url).searchParams.get("campaignReport") === "1";
+      if (dayOfMonth === 1 || forced) {
+        campaignReport = await sendCampaignMonthlyReport({});
+      }
+    } catch (e) {
+      campaignReport = { error: e instanceof Error ? e.message : String(e) };
+    }
+
     return NextResponse.json({
       success: send.ok,
       data: {
         digest: { totals: d.totals, perCompany: d.perCompany.map((c) => ({ name: c.name, newPosts: c.newPosts })) },
         send,
+        campaignReport,
       },
     }, { status: send.ok ? 200 : 502 });
   } catch (e) {
