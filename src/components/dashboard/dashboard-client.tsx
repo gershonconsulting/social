@@ -19,10 +19,13 @@ import {
   MessageCircle,
   Share2,
   Eye,
+  AlertTriangle,
+  Clock,
 } from "lucide-react";
 import { ExtensionHealthBanner } from "./extension-health-banner";
 import { CollectionStatusPanel, type CollectionStatus } from "./collection-status-panel";
 import { useDemoMode } from "@/lib/use-demo-mode";
+import { matchesCategory, matchesNetwork, monthRange, useViewFilters } from "@/lib/view-filters";
 
 interface PlatformFollower {
   platform: string;
@@ -97,6 +100,37 @@ function progressBarColor(pct: number): string {
   return "bg-red-500";
 }
 
+/** Card frame colour — mirrors the goal badge so the whole card reads at a glance. */
+function cardFrameColor(pct: number, hasData: boolean): string {
+  if (!hasData) return "border-gray-200";
+  if (pct >= 80) return "border-green-500";
+  if (pct >= 50) return "border-amber-500";
+  return "border-red-500";
+}
+
+/** Whole days between an ISO timestamp and now. null when the input is null. */
+function daysSince(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  return Math.max(0, Math.floor((Date.now() - t) / 86400000));
+}
+
+/** "today" / "yesterday" / "3 days ago" — for freshness labels. */
+function agoLabel(days: number | null): string {
+  if (days === null) return "never";
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
+  return `${days} days ago`;
+}
+
+/** Freshness severity: fresh <2d, ageing 2-6d, stale 7d+ (or never). */
+function freshnessTone(days: number | null): "fresh" | "ageing" | "stale" {
+  if (days === null || days >= 7) return "stale";
+  if (days >= 2) return "ageing";
+  return "fresh";
+}
+
 const PLATFORM_LABELS: Record<string, string> = {
   LINKEDIN: "LinkedIn",
   TWITTER: "X / Twitter",
@@ -134,15 +168,21 @@ export function DashboardClient({
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState("");
   const [windowKey, setWindowKey] = useState<WindowKey>("thisMonth");
-  const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
-  const [platformFilter, setPlatformFilter] = useState<string>("ALL");
+  // Category / month / network now live in the left menu (see FilterPanel) —
+  // one shared state instead of a tab strip on every page. Default view is
+  // CAMPAIGN companies, current month, all networks.
+  const { categories, networks, month, ready: filtersReady } = useViewFilters();
+  const categoryLabel =
+    categories.length === 0 ? "all categories"
+    : categories.length === 1 ? categories[0].charAt(0) + categories[0].slice(1).toLowerCase()
+    : `${categories.length} categories`;
 
   const fetchCompliance = useCallback(async () => {
     setLoading(true);
     try {
-      const now = new Date();
-      const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-      const to = now.toISOString().split("T")[0];
+      // The goal read follows the month picked in the left menu, so the cards
+      // answer "how did they do in <month>", not only "this month".
+      const { from, to } = monthRange(month);
       const res = await fetch(`/api/compliance/batch?from=${from}&to=${to}`);
       const json = await res.json();
       if (json.success) {
@@ -158,21 +198,19 @@ export function DashboardClient({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [month]);
 
   useEffect(() => {
+    if (!filtersReady) return;
     fetchCompliance();
-  }, [fetchCompliance]);
+  }, [fetchCompliance, filtersReady]);
 
-  // Filter by category AND platform tabs
-  const filtered = clients.filter((c) => {
-    if (categoryFilter !== "ALL" && (c.clientType ?? "").toUpperCase() !== categoryFilter) return false;
-    if (platformFilter !== "ALL") {
-      const has = c.platformConnections.some((p) => p.platform === platformFilter);
-      if (!has) return false;
-    }
-    return true;
-  });
+  // Filter by the shared sidebar filters (empty selection = no filter).
+  const filtered = clients.filter(
+    (c) =>
+      matchesCategory(c.clientType, categories) &&
+      matchesNetwork(c.platformConnections.map((p) => p.platform), networks),
+  );
 
   // Aggregate KPIs across the *visible* clients for the *selected window*
   const windowedTotals = filtered.reduce(
@@ -221,6 +259,7 @@ export function DashboardClient({
   return (
     <div>
       <ExtensionHealthBanner />
+      <DataFreshnessBanner lastUpdate={collectionStatus.lastUpdate} />
       <CollectionStatusPanel data={collectionStatus} />
       {/* Header */}
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
@@ -251,79 +290,175 @@ export function DashboardClient({
         </div>
       </div>
 
-      {/* Category tabs */}
-      <div className="flex flex-wrap gap-1.5 mb-6 border-b border-gray-200 pb-3">
-        {[
-          { key: "ALL", label: "All" },
-          { key: "CAMPAIGN", label: "Campaign" },
-          { key: "CLIENT", label: "Client" },
-          { key: "PROSPECT", label: "Prospect" },
-          { key: "PARTNER", label: "Partner" },
-          { key: "COMPETITION", label: "Competition" },
-          { key: "INTERNAL", label: "Internal" },
-          { key: "RECYCLED", label: "Recycled" },
-        ].map((t) => {
-          const count = t.key === "ALL"
-            ? clients.length
-            : clients.filter((c) => (c.clientType ?? "").toUpperCase() === t.key).length;
-          const active = categoryFilter === t.key;
+      {/* Category / month / network now live in the left menu — this strip of
+          tabs was the main source of on-page clutter. A compact read-out of the
+          active filters replaces it. */}
+      <ActiveFilterSummary
+        categoryLabel={categoryLabel}
+        month={month}
+        networks={networks}
+        shown={filtered.length}
+        total={clients.length}
+      />
+
+      {/* Company Cards Grid — moved above the KPI row: the per-company goal
+          read is the primary view, the aggregate numbers are context. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {sorted.map((client) => {
+          const comp = compliance[client.id];
+          const pct = comp?.overall?.percentage ?? 0;
+          const hasGoalData = !loading && (comp?.overall?.totalWorkingDays ?? 0) > 0;
+          // Freshness — the most recent successful collection across this
+          // company's platform connections. Answers "is what I'm looking at
+          // current, and if not how stale is it?" without opening the company.
+          const lastSync = client.platformConnections
+            .map((p) => p.lastSyncAt)
+            .filter((d): d is string => !!d)
+            .sort()
+            .pop() ?? null;
+          const syncAge = daysSince(lastSync);
+          const syncTone = freshnessTone(syncAge);
+          const postGrowth = client.postsLastMonth > 0
+            ? Math.round(((client.postsThisMonth - client.postsLastMonth) / client.postsLastMonth) * 100)
+            : client.postsThisMonth > 0 ? 100 : 0;
+
           return (
-            <button
-              key={t.key}
-              onClick={() => setCategoryFilter(t.key)}
-              className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
-                active
-                  ? "bg-red-600 text-white"
-                  : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50"
-              }`}
+            <div
+              key={client.id}
+              className={`bg-white rounded-xl border-2 ${cardFrameColor(pct, hasGoalData)} overflow-hidden hover:shadow-md transition-shadow`}
             >
-              {t.label}
-              <span className={`ml-1.5 text-xs ${active ? "text-red-100" : "text-gray-400"}`}>
-                {count}
-              </span>
-            </button>
+              {/* Card Header */}
+              <div className="px-5 pt-5 pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {client.logoUrl ? (
+                      <img src={client.logoUrl} alt={client.name} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
+                    ) : (
+                      <span className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-500 border border-gray-200">
+                        {client.name.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    <h3 className="font-semibold text-gray-900 text-sm">{client.name}</h3>
+                  </div>
+                  {!loading && (comp?.overall?.totalWorkingDays ?? 0) > 0 && (
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${complianceBadgeBg(pct)}`}>
+                      {pct}% of goal
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* KPI Section */}
+              <div className="px-5 pb-3">
+                {(comp?.overall?.totalWorkingDays ?? 0) > 0 ? (
+                  <>
+                    <div className="text-4xl font-bold text-gray-900">{comp?.overall?.daysWithPosts ?? 0}<span className="text-lg text-gray-400 font-normal">/{comp?.overall?.totalWorkingDays}</span></div>
+                    <div className="text-xs text-gray-500 mt-0.5">days posted · {monthLabelOf(month)}</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-4xl font-bold text-gray-300">—</div>
+                    <div className="text-xs text-gray-400 mt-0.5">no compliance data yet · run sync</div>
+                  </>
+                )}
+                <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                  <span className="flex items-center gap-1">
+                    <Activity size={12} className="text-indigo-500" />
+                    {client.totalPosts} total all time
+                  </span>
+                </div>
+                <div
+                  className={`flex items-center gap-1.5 mt-2 text-xs font-medium ${
+                    syncTone === "fresh" ? "text-green-600" : syncTone === "ageing" ? "text-amber-600" : "text-red-600"
+                  }`}
+                  title={lastSync ? `Last collection run: ${new Date(lastSync).toLocaleString()}` : "This company has never been collected"}
+                >
+                  {syncTone === "fresh" ? <Clock size={12} /> : <AlertTriangle size={12} />}
+                  {syncAge === null ? "Never collected" : `Data updated ${agoLabel(syncAge)}`}
+                  {syncAge !== null && syncAge > 0 && <span className="font-normal text-gray-400">· {syncAge}d old</span>}
+                </div>
+                <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                  <span className="flex items-center gap-1" title="Likes">
+                    <Heart size={12} className="text-red-400" />
+                    {formatNumber(client.totalLikes)}
+                  </span>
+                  <span className="flex items-center gap-1" title="Comments">
+                    <MessageCircle size={12} className="text-blue-400" />
+                    {formatNumber(client.totalComments)}
+                  </span>
+                  <span className="flex items-center gap-1" title="Shares">
+                    <Share2 size={12} className="text-green-400" />
+                    {formatNumber(client.totalShares)}
+                  </span>
+                  <span className="flex items-center gap-1" title="Views">
+                    <Eye size={12} className="text-purple-400" />
+                    {formatNumber(client.totalViews)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Followers */}
+              {client.totalFollowers > 0 && (
+                <div className="px-5 pb-3">
+                  <div className="flex items-center gap-2 text-xs">
+                    <Users size={12} className="text-gray-400" />
+                    <span className="font-medium text-gray-700">{formatNumber(client.totalFollowers)} followers</span>
+                    {client.followerGrowth !== 0 && (
+                      <span className={`flex items-center gap-0.5 ${client.followerGrowth > 0 ? "text-green-600" : "text-red-600"}`}>
+                        {client.followerGrowth > 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                        {client.followerGrowth > 0 ? "+" : ""}{client.followerGrowth}%
+                      </span>
+                    )}
+                  </div>
+                  {client.platformFollowers.length > 0 && (
+                    <div className="flex gap-3 mt-1.5">
+                      {client.platformFollowers.map((pf) => (
+                        <span key={pf.platform} className="text-xs text-gray-400">
+                          {PLATFORM_LABELS[pf.platform] || pf.platform}: {formatNumber(pf.current)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Progress Bar — hidden when no compliance data computed */}
+              {(comp?.overall?.totalWorkingDays ?? 0) > 0 && (
+                <div className="px-5 pb-3">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-gray-500">Goal progress</span>
+                    <span className={`font-bold ${complianceColor(pct)}`}>{loading ? "..." : `${pct}%`}</span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full transition-all duration-500 ${progressBarColor(pct)}`}
+                      style={{ width: `${Math.min(pct, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* View Dashboard Button */}
+              <div className="px-5 pb-5 pt-2">
+                <Link
+                  href={`/clients/${client.id}`}
+                  className="flex items-center justify-center gap-2 w-full py-2.5 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  <BarChart3 size={14} />
+                  View Dashboard
+                </Link>
+              </div>
+            </div>
           );
         })}
       </div>
-
-      {/* Platform filter — shown alongside the time-window selector for fast slicing */}
-      <div className="flex flex-wrap gap-1.5 mb-6 -mt-2">
-        {[
-          { key: "ALL", label: "All platforms" },
-          { key: "LINKEDIN", label: "LinkedIn" },
-          { key: "TWITTER", label: "X / Twitter" },
-          { key: "GOOGLE_BUSINESS", label: "Google Business" },
-        ].map((p) => {
-          const count = p.key === "ALL"
-            ? clients.length
-            : clients.filter((c) => c.platformConnections.some((pc) => pc.platform === p.key)).length;
-          const active = platformFilter === p.key;
-          return (
-            <button
-              key={p.key}
-              onClick={() => setPlatformFilter(p.key)}
-              className={`px-3 py-1.5 text-xs rounded-full transition-colors ${
-                active
-                  ? "bg-gray-800 text-white"
-                  : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50"
-              }`}
-            >
-              {p.label}
-              <span className={`ml-1.5 ${active ? "text-gray-300" : "text-gray-400"}`}>
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
       {/* Summary KPI row — windowed; Total Followers removed (per Olivier:
           aggregating followers across companies is meaningless). */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">{WINDOW_LABEL[windowKey]} Posts</div>
           <div className="text-3xl font-bold text-gray-900 mt-1">{windowedTotals.posts.toLocaleString()}</div>
-          <div className="text-xs text-gray-400 mt-1">{categoryFilter === "ALL" ? "across all categories" : `in ${categoryFilter.charAt(0) + categoryFilter.slice(1).toLowerCase()}`}</div>
+          <div className="text-xs text-gray-400 mt-1">in {categoryLabel}</div>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">{WINDOW_LABEL[windowKey]} Likes</div>
@@ -333,7 +468,7 @@ export function DashboardClient({
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Companies</div>
           <div className="text-3xl font-bold text-gray-900 mt-1">{filtered.length}</div>
-          <div className="text-xs text-gray-400 mt-1">in the selected category</div>
+          <div className="text-xs text-gray-400 mt-1">matching the current filter</div>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Platforms Connected</div>
@@ -450,132 +585,77 @@ export function DashboardClient({
         </div>
       )}
 
-      {/* Company Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {sorted.map((client) => {
-          const comp = compliance[client.id];
-          const pct = comp?.overall?.percentage ?? 0;
-          const postGrowth = client.postsLastMonth > 0
-            ? Math.round(((client.postsThisMonth - client.postsLastMonth) / client.postsLastMonth) * 100)
-            : client.postsThisMonth > 0 ? 100 : 0;
-
-          return (
-            <div key={client.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-              {/* Card Header */}
-              <div className="px-5 pt-5 pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {client.logoUrl ? (
-                      <img src={client.logoUrl} alt={client.name} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
-                    ) : (
-                      <span className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-500 border border-gray-200">
-                        {client.name.charAt(0).toUpperCase()}
-                      </span>
-                    )}
-                    <h3 className="font-semibold text-gray-900 text-sm">{client.name}</h3>
-                  </div>
-                  {!loading && (comp?.overall?.totalWorkingDays ?? 0) > 0 && (
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${complianceBadgeBg(pct)}`}>
-                      {pct}% of goal
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* KPI Section */}
-              <div className="px-5 pb-3">
-                {(comp?.overall?.totalWorkingDays ?? 0) > 0 ? (
-                  <>
-                    <div className="text-4xl font-bold text-gray-900">{comp?.overall?.daysWithPosts ?? 0}<span className="text-lg text-gray-400 font-normal">/{comp?.overall?.totalWorkingDays}</span></div>
-                    <div className="text-xs text-gray-500 mt-0.5">days posted this month</div>
-                  </>
-                ) : (
-                  <>
-                    <div className="text-4xl font-bold text-gray-300">—</div>
-                    <div className="text-xs text-gray-400 mt-0.5">no compliance data yet · run sync</div>
-                  </>
-                )}
-                <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                  <span className="flex items-center gap-1">
-                    <Activity size={12} className="text-indigo-500" />
-                    {client.totalPosts} total all time
-                  </span>
-                </div>
-                <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                  <span className="flex items-center gap-1" title="Likes">
-                    <Heart size={12} className="text-red-400" />
-                    {formatNumber(client.totalLikes)}
-                  </span>
-                  <span className="flex items-center gap-1" title="Comments">
-                    <MessageCircle size={12} className="text-blue-400" />
-                    {formatNumber(client.totalComments)}
-                  </span>
-                  <span className="flex items-center gap-1" title="Shares">
-                    <Share2 size={12} className="text-green-400" />
-                    {formatNumber(client.totalShares)}
-                  </span>
-                  <span className="flex items-center gap-1" title="Views">
-                    <Eye size={12} className="text-purple-400" />
-                    {formatNumber(client.totalViews)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Followers */}
-              {client.totalFollowers > 0 && (
-                <div className="px-5 pb-3">
-                  <div className="flex items-center gap-2 text-xs">
-                    <Users size={12} className="text-gray-400" />
-                    <span className="font-medium text-gray-700">{formatNumber(client.totalFollowers)} followers</span>
-                    {client.followerGrowth !== 0 && (
-                      <span className={`flex items-center gap-0.5 ${client.followerGrowth > 0 ? "text-green-600" : "text-red-600"}`}>
-                        {client.followerGrowth > 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                        {client.followerGrowth > 0 ? "+" : ""}{client.followerGrowth}%
-                      </span>
-                    )}
-                  </div>
-                  {client.platformFollowers.length > 0 && (
-                    <div className="flex gap-3 mt-1.5">
-                      {client.platformFollowers.map((pf) => (
-                        <span key={pf.platform} className="text-xs text-gray-400">
-                          {PLATFORM_LABELS[pf.platform] || pf.platform}: {formatNumber(pf.current)}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Progress Bar — hidden when no compliance data computed */}
-              {(comp?.overall?.totalWorkingDays ?? 0) > 0 && (
-                <div className="px-5 pb-3">
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="text-gray-500">Goal progress</span>
-                    <span className={`font-bold ${complianceColor(pct)}`}>{loading ? "..." : `${pct}%`}</span>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full transition-all duration-500 ${progressBarColor(pct)}`}
-                      style={{ width: `${Math.min(pct, 100)}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* View Dashboard Button */}
-              <div className="px-5 pb-5 pt-2">
-                <Link
-                  href={`/clients/${client.id}`}
-                  className="flex items-center justify-center gap-2 w-full py-2.5 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  <BarChart3 size={14} />
-                  View Dashboard
-                </Link>
-              </div>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
             }
+
+
+/**
+ * DataFreshnessBanner — answers "is this data current, and how old is it?"
+ * before anything else on the page. Green when collection ran inside 24h,
+ * amber at 2-6 days, red at 7+ days or never.
+ */
+function DataFreshnessBanner({ lastUpdate }: { lastUpdate: string | null }) {
+  const days = daysSince(lastUpdate);
+  const tone = freshnessTone(days);
+  const style =
+    tone === "fresh"
+      ? "bg-green-50 border-green-200 text-green-800"
+      : tone === "ageing"
+      ? "bg-amber-50 border-amber-200 text-amber-900"
+      : "bg-red-50 border-red-300 text-red-800";
+  const stamp = lastUpdate
+    ? new Date(lastUpdate).toLocaleString("en-US", {
+        month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+      })
+    : null;
+
+  return (
+    <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 border rounded-lg px-4 py-2.5 mb-4 text-sm ${style}`}>
+      {tone === "fresh" ? <Clock size={15} /> : <AlertTriangle size={15} />}
+      <span className="font-semibold">
+        {days === null
+          ? "No collection has ever run"
+          : `Data updated ${agoLabel(days)}`}
+      </span>
+      {stamp && <span className="opacity-80">· last collection {stamp}</span>}
+      {days !== null && days > 0 && (
+        <span className="font-semibold">· {days} day{days === 1 ? "" : "s"} old</span>
+      )}
+      {tone === "stale" && (
+        <span className="font-semibold">— figures below are out of date, run a sync.</span>
+      )}
+    </div>
+  );
+}
+
+/** "Aug 2026" for a month key, or "all time". */
+function monthLabelOf(month: string): string {
+  if (month === "ALL") return "all time";
+  const [y, m] = month.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+}
+
+/**
+ * ActiveFilterSummary — one line saying what the page is currently showing.
+ * The controls themselves are in the left menu; this is the read-out, so a
+ * narrowed view is never mistaken for the whole picture.
+ */
+function ActiveFilterSummary({
+  categoryLabel, month, networks, shown, total,
+}: { categoryLabel: string; month: string; networks: string[]; shown: number; total: number }) {
+  const NET: Record<string, string> = {
+    LINKEDIN: "LinkedIn", TWITTER: "X / Twitter", GOOGLE_BUSINESS: "Google Business", TIKTOK: "TikTok",
+  };
+  const netLabel = networks.length === 0 ? "all networks" : networks.map((n) => NET[n] ?? n).join(", ");
+  return (
+    <div className="flex flex-wrap items-center gap-2 mb-6 text-xs text-gray-500">
+      <span className="font-semibold text-gray-700">Showing {shown} of {total} companies</span>
+      <span className="text-gray-300">·</span>
+      <span className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded-full px-2.5 py-1 font-medium text-gray-700">{categoryLabel}</span>
+      <span className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded-full px-2.5 py-1 font-medium text-gray-700">{monthLabelOf(month)}</span>
+      <span className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded-full px-2.5 py-1 font-medium text-gray-700">{netLabel}</span>
+      <span className="text-gray-400">— change these in the left menu under <b className="font-semibold text-gray-500">Filter view</b>.</span>
+    </div>
+  );
+}

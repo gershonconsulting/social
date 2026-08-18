@@ -12,12 +12,14 @@ export interface OverviewRow {
   postsLastMonth: number;
   postsLastWeek: number;
   engThisMonth: number;     // likes + comments + shares, this month
+  platforms: string[];      // networks this company has a connection on
 }
 
 // One row per enabled platform connection — for the collection-health card,
 // filterable by category.
 export interface OverviewConn {
   clientType: string;
+  platform: string;
   state: "collected" | "empty" | "failed" | "stale";
 }
 
@@ -53,6 +55,7 @@ export async function DashboardOverview() {
       postsLastMonth: c.postsLastMonth,
       postsLastWeek: c.buckets?.lastWeek?.posts ?? 0,
       engThisMonth: tm ? tm.likes + tm.comments + tm.shares : 0,
+      platforms: c.platformConnections.map((p) => p.platform),
     };
   });
 
@@ -61,6 +64,7 @@ export async function DashboardOverview() {
   const typeById = new Map(rows.map((r) => [r.id, r.clientType]));
   const conns: OverviewConn[] = collection.connections.map((c) => ({
     clientType: typeById.get(c.clientId) ?? "",
+    platform: c.platform,
     state: c.state,
   }));
 

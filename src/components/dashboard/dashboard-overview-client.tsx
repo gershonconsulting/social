@@ -18,6 +18,7 @@ import {
   XCircle,
 } from "lucide-react";
 import type { OverviewData, OverviewRow } from "./dashboard-overview";
+import { matchesCategory, matchesNetwork, useViewFilters } from "@/lib/view-filters";
 
 interface CompanyRef { id: string; name: string; value: number; sub?: string; }
 
@@ -40,8 +41,6 @@ const RANGE_OPTIONS = [
   { value: 30, label: "Last 30 days" },
   { value: 90, label: "Last 90 days" },
 ];
-// Campaign is the priority group, so it leads the tab row.
-const CATEGORY_ORDER = ["CAMPAIGN", "CLIENT", "PROSPECT", "PARTNER", "COMPETITION", "COMPANY", "INTERNAL", "RECYCLED"];
 
 function fmt(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
@@ -105,39 +104,36 @@ function computeInsights(rows: OverviewRow[]) {
 
 export function DashboardOverviewClient({ data }: { data: OverviewData }) {
   const [days, setDays] = useState(30);
-  const [category, setCategory] = useState("ALL");
+  // Category / network come from the left menu (see FilterPanel) — one shared
+  // filter state across the dashboard views instead of a per-page tab strip.
+  const { categories, networks } = useViewFilters();
   const [chart, setChart] = useState<AnalyticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
 
-  // Category tabs — built from the data, Campaign first.
-  const categoryTabs = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const r of data.rows) counts[r.clientType || "UNKNOWN"] = (counts[r.clientType || "UNKNOWN"] || 0) + 1;
-    const ordered = [
-      ...CATEGORY_ORDER.filter((k) => counts[k] > 0),
-      ...Object.keys(counts).filter((k) => !CATEGORY_ORDER.includes(k)),
-    ];
-    return [
-      { key: "ALL", label: "All", count: data.rows.length },
-      ...ordered.map((k) => ({ key: k, label: k.charAt(0) + k.slice(1).toLowerCase(), count: counts[k] })),
-    ];
-  }, [data.rows]);
+  // Human label for whatever the sidebar filter currently selects.
+  const categoryLabel = useMemo(() => {
+    if (categories.length === 0) return "All";
+    if (categories.length === 1) return categories[0].charAt(0) + categories[0].slice(1).toLowerCase();
+    return `${categories.length} categories`;
+  }, [categories]);
 
   const rows = useMemo(
-    () => (category === "ALL" ? data.rows : data.rows.filter((r) => r.clientType === category)),
-    [data.rows, category]
+    () => data.rows.filter((r) => matchesCategory(r.clientType, categories) && matchesNetwork(r.platforms, networks)),
+    [data.rows, categories, networks]
   );
   const insights = useMemo(() => computeInsights(rows), [rows]);
 
-  // Collection health, scoped to the selected category.
+  // Collection health, scoped to the same filters.
   const coll = useMemo(() => {
-    const conns = category === "ALL" ? data.conns : data.conns.filter((c) => c.clientType === category);
+    const conns = data.conns.filter(
+      (c) => matchesCategory(c.clientType, categories) && matchesNetwork([c.platform], networks),
+    );
     const c = { collected: 0, empty: 0, failed: 0, stale: 0, total: conns.length };
     for (const cn of conns) c[cn.state]++;
     return c;
-  }, [data.conns, category]);
+  }, [data.conns, categories, networks]);
   const collPct = coll.total > 0 ? Math.round((100 * coll.collected) / coll.total) : 0;
   const collectionHealthy = coll.failed === 0 && coll.stale === 0;
 
@@ -150,7 +146,9 @@ export function DashboardOverviewClient({ data }: { data: OverviewData }) {
       for (let i = 0; i < 3; i++) {
         try {
           const qs = new URLSearchParams({ days: String(days) });
-          if (category !== "ALL") qs.set("clientType", category);
+          // The trends API filters by a single clientType; pass it only when the
+          // selection is unambiguous, otherwise the chart stays portfolio-wide.
+          if (categories.length === 1) qs.set("clientType", categories[0]);
           const r = await fetch(`/api/analytics/summary?${qs.toString()}`, { cache: "no-store" });
           if (!r.ok) {
             let body: { error?: string } | null = null;
@@ -169,15 +167,47 @@ export function DashboardOverviewClient({ data }: { data: OverviewData }) {
       if (!cancelled) { setError(lastErr || "Could not load trends"); setLoading(false); }
     })();
     return () => { cancelled = true; };
-  }, [days, category, attempt]);
+  }, [days, categories, attempt]);
 
   const maxDay = useMemo(() => {
     if (!chart) return 1;
     return Math.max(1, ...chart.postsByDay.map((d) => d.total));
   }, [chart]);
 
+  const freshDays = data.lastUpdate
+    ? Math.max(0, Math.floor((Date.now() - new Date(data.lastUpdate).getTime()) / 86400000))
+    : null;
+  const freshTone = freshDays === null || freshDays >= 7 ? "stale" : freshDays >= 2 ? "ageing" : "fresh";
+
   return (
     <div className="space-y-8">
+      {/* Data freshness — first thing on the page: is what follows current? */}
+      <div
+        className={`flex flex-wrap items-center gap-x-2 gap-y-1 border rounded-lg px-4 py-2.5 text-sm ${
+          freshTone === "fresh"
+            ? "bg-green-50 border-green-200 text-green-800"
+            : freshTone === "ageing"
+            ? "bg-amber-50 border-amber-200 text-amber-900"
+            : "bg-red-50 border-red-300 text-red-800"
+        }`}
+      >
+        {freshTone === "fresh" ? <Clock size={15} /> : <AlertTriangle size={15} />}
+        <span className="font-semibold">
+          {data.lastUpdate ? `Data updated ${relTime(data.lastUpdate)}` : "No collection has ever run"}
+        </span>
+        {data.lastUpdate && (
+          <span className="opacity-80">
+            · last collection {new Date(data.lastUpdate).toLocaleString("en-US", {
+              month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+            })}
+          </span>
+        )}
+        {freshDays !== null && freshDays > 0 && (
+          <span className="font-semibold">· {freshDays} day{freshDays === 1 ? "" : "s"} old</span>
+        )}
+        {freshTone === "stale" && <span className="font-semibold">— figures below are out of date, run a sync.</span>}
+      </div>
+
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -205,23 +235,16 @@ export function DashboardOverviewClient({ data }: { data: OverviewData }) {
         </div>
       </div>
 
-      {/* Group filter — Campaign first */}
-      <div className="flex flex-wrap gap-1.5 border-b border-gray-200 pb-3">
-        {categoryTabs.map((t) => {
-          const activeTab = category === t.key;
-          return (
-            <button
-              key={t.key}
-              onClick={() => setCategory(t.key)}
-              className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
-                activeTab ? "bg-red-600 text-white" : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50"
-              }`}
-            >
-              {t.label}
-              <span className={`ml-1.5 text-xs ${activeTab ? "text-red-100" : "text-gray-400"}`}>{t.count}</span>
-            </button>
-          );
-        })}
+      {/* Category / month / network moved to the left menu (FilterPanel) —
+          the page was carrying too many controls. */}
+      <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 border-b border-gray-200 pb-3">
+        <span className="font-semibold text-gray-700">Showing {rows.length} of {data.rows.length} companies</span>
+        <span className="text-gray-300">·</span>
+        <span className="inline-flex items-center bg-white border border-gray-200 rounded-full px-2.5 py-1 font-medium text-gray-700">{categoryLabel}</span>
+        <span className="inline-flex items-center bg-white border border-gray-200 rounded-full px-2.5 py-1 font-medium text-gray-700">
+          {networks.length === 0 ? "all networks" : `${networks.length} network${networks.length === 1 ? "" : "s"}`}
+        </span>
+        <span className="text-gray-400">— change these in the left menu under <b className="font-semibold text-gray-500">Filter view</b>.</span>
       </div>
 
       {/* ===== INSIGHTS / ATTENTION FEED ===== */}
@@ -294,7 +317,7 @@ export function DashboardOverviewClient({ data }: { data: OverviewData }) {
             <span className="text-xs font-semibold uppercase tracking-wide text-gray-600">Posting cadence</span>
           </div>
           <div className="mt-2 text-3xl font-bold text-gray-900">{insights.total}</div>
-          <div className="text-xs text-gray-500 mt-0.5">companies {category === "ALL" ? "tracked" : "in this group"}</div>
+          <div className="text-xs text-gray-500 mt-0.5">companies {categories.length === 0 ? "tracked" : "in this group"}</div>
           <div className="mt-3 space-y-2">
             <CadenceBar label="Active (≤14d)" value={insights.activeCount} total={insights.total} color="bg-green-500" />
             <CadenceBar label="Quiet (15–30d)" value={insights.quietCount} total={insights.total} color="bg-amber-500" />
@@ -324,7 +347,7 @@ export function DashboardOverviewClient({ data }: { data: OverviewData }) {
       <div>
         <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
           <BarChart3 size={16} className="text-gray-500" />
-          {category === "ALL" ? "Portfolio trends" : `${categoryTabs.find((t) => t.key === category)?.label} trends`} · {RANGE_OPTIONS.find((r) => r.value === days)?.label}
+          {categories.length === 0 ? "Portfolio trends" : `${categoryLabel} trends`} · {RANGE_OPTIONS.find((r) => r.value === days)?.label}
         </h2>
 
         {loading && (

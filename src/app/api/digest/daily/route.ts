@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { ClientStatus, Platform } from "@prisma/client";
 import { sendCampaignMonthlyReport } from "@/lib/campaigns/send";
+import { sendPostingAlert, dueAlerts } from "@/lib/alerts/send";
 
 /**
  * GET  /api/digest/daily            — render the digest as JSON (preview).
@@ -370,12 +371,36 @@ export async function POST(req: NextRequest) {
       campaignReport = { error: e instanceof Error ? e.message : String(e) };
     }
 
+    // Posting-alert fallback.
+    //
+    // The alert has its own workflow (posting-alert.yml, Fri 21:00 UTC and the
+    // 1st) but that file has to be added by hand — the deploy PAT has no
+    // GitHub `workflow` scope. Until it is installed, this daily run catches
+    // the same two moments: the weekend digest sends the week alert, the 1st
+    // sends the month alert. sendPostingAlert is idempotent on the period key,
+    // so once the dedicated workflow exists this path simply no-ops.
+    //
+    // Wrapped so a failure can never fail the daily digest.
+    let postingAlert: unknown = null;
+    try {
+      const forcedAlert = new URL(req.url).searchParams.get("postingAlert");
+      const kinds = forcedAlert === "week" || forcedAlert === "month" ? [forcedAlert] : dueAlerts();
+      if (kinds.length > 0) {
+        const out = [];
+        for (const kind of kinds) out.push(await sendPostingAlert({ kind: kind as "week" | "month" }));
+        postingAlert = out.map((r) => ({ kind: r.kind, periodKey: r.periodKey, sent: r.sent, skipped: r.skipped }));
+      }
+    } catch (e) {
+      postingAlert = { error: e instanceof Error ? e.message : String(e) };
+    }
+
     return NextResponse.json({
       success: send.ok,
       data: {
         digest: { totals: d.totals, perCompany: d.perCompany.map((c) => ({ name: c.name, newPosts: c.newPosts })) },
         send,
         campaignReport,
+        postingAlert,
       },
     }, { status: send.ok ? 200 : 502 });
   } catch (e) {

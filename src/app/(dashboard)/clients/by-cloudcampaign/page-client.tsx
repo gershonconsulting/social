@@ -7,8 +7,10 @@ import {
 } from "recharts";
 import {
   MONTHLY, LAG, APPROVAL_SRC, SNAPSHOT_AT, PARTIAL_MONTHS, FUNNEL_COLORS,
-  overallByMonth, fmtMonth, clientMonth, workingDays, postTarget, cadenceLabel, focusMonths, isFutureMonth, type Funnel,
+  overallByMonth, fmtMonth, clientMonth, workingDays, postTarget, cadenceLabel, focusMonths, isFutureMonth,
+  snapshotAgeDays, snapshotMonth, beyondSnapshot, SNAPSHOT_STALE_DAYS, type Funnel,
 } from "@/lib/cloudcampaign-data";
+import { AlertTriangle, Clock } from "lucide-react";
 
 const C = FUNNEL_COLORS;
 const METRICS = [
@@ -17,14 +19,6 @@ const METRICS = [
   { k: "created" as const, idx: 0, label: "Created", color: C.created },
 ];
 
-function snapshotMonths() {
-  const d = new Date(SNAPSHOT_AT);
-  const thisM = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-  const prev = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1));
-  const lastM = `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, "0")}`;
-  return { thisM, lastM };
-}
-
 export function ByCloudCampaignClient() {
   const [tab, setTab] = useState<"target" | "clients" | "months">("target");
   const subtitle = `Snapshot ${new Date(SNAPSHOT_AT).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })} · created → validated → published`;
@@ -32,6 +26,8 @@ export function ByCloudCampaignClient() {
   return (
     <div>
       <Header title="By Cloud Campaign" subtitle={subtitle} />
+
+      <SnapshotFreshness />
 
       <div className="flex gap-1 mb-6 border-b border-gray-200">
         <TabBtn on={tab === "target"} onClick={() => setTab("target")}>Output vs target</TabBtn>
@@ -42,9 +38,48 @@ export function ByCloudCampaignClient() {
       {tab === "target" ? <TargetTab /> : tab === "clients" ? <ClientsTab /> : <MonthsTab />}
 
       <p className="text-xs text-gray-400 mt-8">
-        Source: Cloud Campaign REST API. Periodic snapshot — June is month-to-date. Two workspaces
-        (PhiTech, ACG Cybersecurity) have no recent tracked content.
+        Source: Cloud Campaign REST API, committed as a periodic snapshot (the CRM origin can&apos;t
+        call Cloud Campaign directly — cookie auth + CORS). Months shown are always last / this /
+        next relative to today; any month starting after the snapshot date has no data yet, which is
+        not the same as zero posts. Two workspaces (PhiTech, ACG Cybersecurity) have no recent
+        tracked content.
       </p>
+    </div>
+  );
+}
+
+
+/**
+ * SnapshotFreshness — says out loud how old the committed Cloud Campaign
+ * snapshot is. Since the months on this page are anchored to today, a stale
+ * snapshot shows as empty blocks; without this banner that reads as "nobody
+ * posted", which would be wrong.
+ */
+function SnapshotFreshness() {
+  const age = snapshotAgeDays();
+  const stale = age >= SNAPSHOT_STALE_DAYS;
+  const stamp = new Date(SNAPSHOT_AT).toLocaleString("en-US", {
+    month: "short", day: "numeric", year: "numeric", timeZone: "UTC",
+  });
+  return (
+    <div
+      className={
+        "flex flex-wrap items-center gap-x-2 gap-y-1 border rounded-lg px-4 py-2.5 mb-5 text-sm " +
+        (stale ? "bg-red-50 border-red-300 text-red-800" : "bg-green-50 border-green-200 text-green-800")
+      }
+    >
+      {stale ? <AlertTriangle size={15} /> : <Clock size={15} />}
+      <span className="font-semibold">
+        Data updated {age === 0 ? "today" : age === 1 ? "yesterday" : `${age} days ago`}
+      </span>
+      <span className="opacity-80">· snapshot taken {stamp}</span>
+      <span className="font-semibold">· {age} day{age === 1 ? "" : "s"} old</span>
+      {stale && (
+        <span className="font-semibold">
+          — nothing after {fmtMonth(snapshotMonth())} is in this snapshot. Re-pull from Cloud Campaign
+          before trusting empty months.
+        </span>
+      )}
     </div>
   );
 }
@@ -97,8 +132,22 @@ function TargetTab() {
   );
 }
 
+/** Frame colour for a month block: green on/above target, orange 50-79%, red below. */
+function blockFrame(counts: Funnel, target: number, future: boolean): string {
+  if (!target) return "border-gray-200";
+  // A future month is judged on what is scheduled, a past/current one on what published.
+  const value = future ? counts[3] : counts[2];
+  const pct = (value / target) * 100;
+  if (pct >= 80) return "border-green-500";
+  if (pct >= 50) return "border-amber-500";
+  return "border-red-500";
+}
+
 function TargetBlock({ counts, month, t, future = false }: { counts: Funnel; month: string; t: { target: number; current: boolean }; future?: boolean }) {
   const idle = !counts.some(Boolean);
+  // "No data in the snapshot" is a different statement from "zero posts" —
+  // never let an un-refreshed snapshot read as a missed target.
+  const noData = idle && beyondSnapshot(month);
   const rows: [string, number, keyof typeof C][] = [
     ["Created", counts[0], "created"],
     ["Validated", counts[1], "validated"],
@@ -106,9 +155,22 @@ function TargetBlock({ counts, month, t, future = false }: { counts: Funnel; mon
     ["Published", counts[2], "published"],
   ];
   return (
-    <div className={"bg-white border border-gray-200 rounded-2xl p-4 shadow-sm " + (idle ? "opacity-60" : "")}>
+    <div
+      className={
+        "bg-white border-2 rounded-2xl p-4 shadow-sm " +
+        (noData
+          ? "border-dashed border-red-300 opacity-70"
+          : idle
+          ? "border-gray-200 opacity-60"
+          : blockFrame(counts, t.target, future)) 
+      }
+    >
       <div className="flex items-baseline justify-between mb-3">
-        <div className="text-sm font-bold text-gray-900">{fmtMonth(month)}{future && <span className="ml-2 text-[10px] font-semibold text-sky-600 bg-sky-50 rounded-full px-2 py-0.5 align-middle">planned</span>}</div>
+        <div className="text-sm font-bold text-gray-900">
+          {fmtMonth(month)}
+          {future && !noData && <span className="ml-2 text-[10px] font-semibold text-sky-600 bg-sky-50 rounded-full px-2 py-0.5 align-middle">planned</span>}
+          {noData && <span className="ml-2 text-[10px] font-semibold text-red-700 bg-red-50 rounded-full px-2 py-0.5 align-middle">not in snapshot</span>}
+        </div>
         <div className="text-[11px] text-gray-500">target {t.target} post{t.target === 1 ? "" : "s"}{t.current ? " · to-date" : ""}</div>
       </div>
       {rows.map(([label, val, key]) => {
@@ -135,7 +197,7 @@ function TargetBlock({ counts, month, t, future = false }: { counts: Funnel; mon
 
 /* ---------------- Tab 1: by client, last vs this month ---------------- */
 function ClientsTab() {
-  const { thisM, lastM } = snapshotMonths();
+  const { thisM, lastM } = focusMonths();
   const [metric, setMetric] = useState<(typeof METRICS)[number]>(METRICS[0]);
 
   const names = useMemo(

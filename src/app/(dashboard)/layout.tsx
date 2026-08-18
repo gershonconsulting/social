@@ -2,6 +2,7 @@ export const runtime = 'edge';
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { Sidebar } from "@/components/layout/sidebar";
+import { ViewFiltersProvider } from "@/lib/view-filters";
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
 const BUILD_DATE = process.env.NEXT_PUBLIC_BUILD_DATE || new Date().toISOString();
@@ -37,16 +38,19 @@ export default async function DashboardLayout({
   const buildLabel = BUILD_NUMBER ? `Build #${BUILD_NUMBER}` : "";
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#fafafa]">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-7xl mx-auto px-6 py-8">
-          <div className="text-[11px] text-gray-400 mb-4 font-mono">
-            {buildLabel && <>{buildLabel} &middot; </>}v{shortVersion} &middot; {buildDate}
+    // One filter state shared by the sidebar controls and the page content.
+    <ViewFiltersProvider>
+      <div className="flex h-screen overflow-hidden bg-[#fafafa]">
+        <Sidebar />
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-7xl mx-auto px-6 py-8">
+            <div className="text-[11px] text-gray-400 mb-4 font-mono">
+              {buildLabel && <>{buildLabel} &middot; </>}v{shortVersion} &middot; {buildDate}
+            </div>
+            {children}
           </div>
-          {children}
-        </div>
-      </main>
-    </div>
+        </main>
+      </div>
+    </ViewFiltersProvider>
   );
 }

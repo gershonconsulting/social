@@ -18,6 +18,7 @@ import {
   StopCircle,
 } from "lucide-react";
 import { useDemoMode, setDemoMode } from "@/lib/use-demo-mode";
+import { FilterPanel } from "./filter-panel";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -100,6 +101,10 @@ export function Sidebar() {
             </div>
           );
         })}
+
+        {/* View filters — category / month / network, applied across the
+            dashboard views. Hidden on pages the filters don't drive. */}
+        <FilterPanel />
       </nav>
 
       {/* User footer */}

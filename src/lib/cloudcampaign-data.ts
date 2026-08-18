@@ -88,17 +88,18 @@ export function fmtMonth(ym: string): string {
 
 // ---- Output vs target (1 post per working day) ----
 
-// Working days (Mon–Fri) in a month. For the current month (the snapshot month)
-// only days up to the snapshot date are counted, giving a fair pace-to-date read.
-export function workingDays(ym: string): { target: number; current: boolean } {
-  const snap = new Date(SNAPSHOT_AT);
+// Working days (Mon–Fri) in a month. For the month we are actually in right
+// now, only days up to today are counted, giving a fair pace-to-date read.
+// Everything here works in UTC so a server render and a client render of the
+// same instant agree (no hydration mismatch across timezones).
+export function workingDays(ym: string, now: Date = new Date()): { target: number; current: boolean } {
   const [y, m] = ym.split("-").map(Number);
-  const current = y === snap.getUTCFullYear() && m - 1 === snap.getUTCMonth();
+  const current = y === now.getUTCFullYear() && m - 1 === now.getUTCMonth();
   let n = 0;
   const d = new Date(Date.UTC(y, m - 1, 1));
   while (d.getUTCMonth() === m - 1) {
     const dow = d.getUTCDay();
-    const elapsed = !current || d.getUTCDate() <= snap.getUTCDate();
+    const elapsed = !current || d.getUTCDate() <= now.getUTCDate();
     if (dow >= 1 && dow <= 5 && elapsed) n++;
     d.setUTCDate(d.getUTCDate() + 1);
   }
@@ -124,15 +125,19 @@ export function cadenceLabel(workspace: string): string {
 // Target number of POSTS for a client in a month, derived from its weekly cadence
 // scaled by working days (so a 5/week client's target equals the working days,
 // preserving the original one-a-day behaviour). Current month uses days elapsed.
-export function postTarget(workspace: string, ym: string): { target: number; current: boolean } {
-  const { target: wd, current } = workingDays(ym);
+export function postTarget(workspace: string, ym: string, now: Date = new Date()): { target: number; current: boolean } {
+  const { target: wd, current } = workingDays(ym, now);
   const t = Math.round((cadence(workspace) / 5) * wd);
   return { target: Math.max(t, 0), current };
 }
 
-// "last month" / "this month" / "next month" relative to the snapshot.
-export function focusMonths(): { lastM: string; thisM: string; nextM: string } {
-  const d = new Date(SNAPSHOT_AT);
+// "last month" / "this month" / "next month" relative to TODAY (not to the
+// snapshot). The page is read as a live operating view, so the three blocks
+// must always mean the real last / current / next calendar month; if the
+// snapshot hasn't been refreshed, the blocks come up empty and the staleness
+// banner (see snapshotAgeDays) says why.
+export function focusMonths(now: Date = new Date()): { lastM: string; thisM: string; nextM: string } {
+  const d = now;
   const key = (yy: number, mm: number) => {
     const dt = new Date(Date.UTC(yy, mm, 1));
     return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -144,10 +149,34 @@ export function focusMonths(): { lastM: string; thisM: string; nextM: string } {
   };
 }
 
-// A month entirely in the future relative to the snapshot.
-export function isFutureMonth(ym: string): boolean {
-  const d = new Date(SNAPSHOT_AT);
-  const cur = d.getUTCFullYear() * 12 + d.getUTCMonth();
+// A month entirely in the future relative to today.
+export function isFutureMonth(ym: string, now: Date = new Date()): boolean {
+  const cur = now.getUTCFullYear() * 12 + now.getUTCMonth();
   const [y, m] = ym.split("-").map(Number);
   return (y * 12 + (m - 1)) > cur;
 }
+
+// ---- Snapshot freshness ----
+
+/** Whole days between the committed snapshot and now. */
+export function snapshotAgeDays(now: Date = new Date()): number {
+  return Math.max(0, Math.floor((now.getTime() - new Date(SNAPSHOT_AT).getTime()) / 86400000));
+}
+
+/** The last month the snapshot can actually speak for ("YYYY-MM"). */
+export function snapshotMonth(): string {
+  const d = new Date(SNAPSHOT_AT);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/** True when a focus month starts after the snapshot was taken — i.e. the
+ *  snapshot simply has no data for it, which is different from "zero posts". */
+export function beyondSnapshot(ym: string): boolean {
+  const d = new Date(SNAPSHOT_AT);
+  const snap = d.getUTCFullYear() * 12 + d.getUTCMonth();
+  const [y, m] = ym.split("-").map(Number);
+  return (y * 12 + (m - 1)) > snap;
+}
+
+/** Anything older than this and the page shouts. */
+export const SNAPSHOT_STALE_DAYS = 10;
