@@ -1,5 +1,6 @@
 export const runtime = 'edge';
 import { NextResponse } from "next/server";
+import { EXTENSION_LATEST } from "@/lib/extension-version";
 
 /**
  * GET /api/extension/version
@@ -12,7 +13,7 @@ import { NextResponse } from "next/server";
  * to public/gershonai-extension.zip. Keep semver — popup does a numeric
  * dot-segment compare.
  */
-const LATEST = "0.10.7";
+const LATEST = EXTENSION_LATEST;
 
 const RELEASE_NOTES: Record<string, string> = {
   "0.10.7": "Fix: posts are now scraped from the real profile pages — linkedin.com/company/<vanity>/posts/ and x.com/<handle> — by reading the rendered DOM. Drops the deprecated voyager + v1.1 user_timeline endpoints that started failing in 2026 (LinkedIn rejected our csrf because JSESSIONID is HttpOnly; X v1.1 user_timeline is locked behind the paid API plan). The Sync via extension popover now also surfaces the per-platform error instead of just \"N failed\".",
