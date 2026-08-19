@@ -1,0 +1,41 @@
+name: Posting Alert (weekly + monthly)
+
+# "Tell me when the content did not go out as planned."
+#
+#   Fridays 21:00 UTC = 17:00 ET  -> the working week that just closed
+#   1st of the month 21:00 UTC    -> the month that just closed
+#
+# The endpoint is silent when every campaign company hit every planned day,
+# and idempotent on the period key, so extra runs are harmless.
+on:
+  schedule:
+    - cron: '0 21 * * 5'
+    - cron: '0 21 1 * *'
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: 'Which alert to run (week | month). Leave blank for whatever is due.'
+        required: false
+        default: ''
+
+jobs:
+  posting-alert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send posting alert
+        run: |
+          URL="https://social.gershoncrm.com/api/cron/posting-alert"
+          if [ -n "${{ github.event.inputs.kind }}" ]; then
+            URL="$URL?kind=${{ github.event.inputs.kind }}"
+          fi
+          response=$(curl -s -o /tmp/alert.json -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.CF_CRON_SECRET }}" \
+            "$URL")
+          echo "HTTP $response"
+          cat /tmp/alert.json | head -c 2000
+          echo ""
+          if [ "$response" != "200" ]; then
+            echo "Posting alert returned non-200"
+            exit 1
+          fi
