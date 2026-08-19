@@ -1,0 +1,26 @@
+name: Collection Health Check
+on:
+  schedule:
+    # 14:00 UTC = 10:00 ET — one hour after the daily digest (13:00 UTC), so the
+    # day's collection has had all morning to land before we judge staleness.
+    - cron: '0 14 * * *'
+  workflow_dispatch:
+    # Allow manual trigger from the GitHub Actions UI (use this to test the send path).
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run collection health check
+        run: |
+          response=$(curl -s -o /tmp/health.json -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.CF_CRON_SECRET }}" \
+            "https://social.gershoncrm.com/api/cron/health-check")
+          echo "HTTP $response"
+          cat /tmp/health.json | head -c 2000
+          echo ""
+          if [ "$response" != "200" ]; then
+            echo "Health check returned non-200"; exit 1
+          fi
+          echo "Health check completed (sent:0 means healthy — that's the good outcome)."
