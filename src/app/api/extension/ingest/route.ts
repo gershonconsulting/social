@@ -2,6 +2,8 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { Platform } from "@prisma/client";
+import { recordIngestRun } from "@/lib/extension/heartbeat";
+import { recordExtSeen } from "@/lib/extension/seen";
 
 /**
  * POST /api/extension/ingest
@@ -59,7 +61,11 @@ interface IncomingResult {
   posts?: IncomingPost[];
   error?: string;
 }
-interface IncomingBody { results?: IncomingResult[]; }
+interface IncomingBody {
+  results?: IncomingResult[];
+  /** Optional: extension build that produced this batch (0.10.8+). */
+  extVersion?: string;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -205,6 +211,21 @@ export async function POST(req: NextRequest) {
         upserted,
       });
     }
+
+    // Post-commit bookkeeping. The posts are already written; nothing below
+    // may fail this response (see the v2.9.1 create-company lesson).
+    //
+    // 1. Heartbeat: proves the collector ran today even when it upserted
+    //    nothing, so the daily report can tell "quiet day" from "job dead".
+    // 2. Extension version, when the build sends one — a stronger signal than
+    //    the page bridge, which only fires when a dashboard tab is open.
+    try {
+      await recordIngestRun({ attempted: totalAttempts, upserted: totalUpserted, failed });
+    } catch {}
+    try {
+      const v = (body.extVersion ?? "").trim();
+      if (/^\d+(\.\d+){0,3}$/.test(v)) await recordExtSeen(v);
+    } catch {}
 
     return NextResponse.json({
       success: true,

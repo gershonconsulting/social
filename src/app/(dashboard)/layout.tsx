@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { Sidebar } from "@/components/layout/sidebar";
 import { ViewFiltersProvider } from "@/lib/view-filters";
+import { ExtensionSeenReporter } from "@/components/layout/extension-seen-reporter";
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
 const BUILD_DATE = process.env.NEXT_PUBLIC_BUILD_DATE || new Date().toISOString();
@@ -40,6 +41,9 @@ export default async function DashboardLayout({
   return (
     // One filter state shared by the sidebar controls and the page content.
     <ViewFiltersProvider>
+      {/* Invisible: reports the installed Chrome-extension version to the
+          server so the daily progress report can warn about a stale build. */}
+      <ExtensionSeenReporter />
       <div className="flex h-screen overflow-hidden bg-[#fafafa]">
         <Sidebar />
         <main className="flex-1 overflow-y-auto">

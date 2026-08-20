@@ -4,6 +4,7 @@ import prisma from "@/lib/db";
 import { ClientStatus, Platform } from "@prisma/client";
 import { sendCampaignMonthlyReport } from "@/lib/campaigns/send";
 import { sendPostingAlert, dueAlerts } from "@/lib/alerts/send";
+import { sendDailyReport } from "@/lib/reports/daily-report-send";
 
 /**
  * GET  /api/digest/daily            — render the digest as JSON (preview).
@@ -394,6 +395,26 @@ export async function POST(req: NextRequest) {
       postingAlert = { error: e instanceof Error ? e.message : String(e) };
     }
 
+    // Daily progress-report fallback.
+    //
+    // The report has its own workflow (daily-report.yml, 12:00 UTC) but that
+    // file has to be installed by hand — the deploy PAT has no GitHub
+    // `workflow` scope. Until it exists, this run sends it an hour later
+    // instead of not at all. sendDailyReport is idempotent on the ET day it
+    // reports, so once the dedicated workflow is installed this path finds the
+    // day already sent and no-ops.
+    //
+    // Wrapped so a failure here can never fail the digest, which has already
+    // gone out by this point.
+    let dailyReport: unknown = null;
+    try {
+      const forcedReport = new URL(req.url).searchParams.get("dailyReport") === "1";
+      const r = await sendDailyReport({ force: forcedReport });
+      dailyReport = { day: r.dayKey, sent: r.sent, skipped: r.skipped, to: r.to, error: r.error };
+    } catch (e) {
+      dailyReport = { error: e instanceof Error ? e.message : String(e) };
+    }
+
     return NextResponse.json({
       success: send.ok,
       data: {
@@ -401,6 +422,7 @@ export async function POST(req: NextRequest) {
         send,
         campaignReport,
         postingAlert,
+        dailyReport,
       },
     }, { status: send.ok ? 200 : 502 });
   } catch (e) {
