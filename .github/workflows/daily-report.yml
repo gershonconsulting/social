@@ -1,0 +1,28 @@
+name: Daily progress report
+
+# "What happened yesterday, did we make progress, and is anything broken?"
+# Sent by the app itself (Next.js route + Resend) to
+# report@gershonconsulting.com. 12:00 UTC = 08:00 America/New_York, so it is
+# waiting before the day starts and an hour before the daily digest (13:00).
+#
+# The route is idempotent on the ET day it reports, so a manual dispatch, a
+# retry, or the daily-digest fallback path cannot double-send.
+
+on:
+  schedule:
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /api/report/daily
+        run: |
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
+            -X POST 'https://social.gershoncrm.com/api/report/daily' \
+            -H "Authorization: Bearer ${{ secrets.CF_CRON_SECRET }}")
+          echo "HTTP $code"
+          cat /tmp/out.json
+          echo
+          test "$code" = "200"
