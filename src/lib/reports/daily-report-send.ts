@@ -64,7 +64,13 @@ async function sendViaResend(
 ): Promise<{ ok: boolean; status?: number; error?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { ok: false, error: "RESEND_API_KEY not set in environment" };
-  const from = process.env.DIGEST_FROM || "onboarding@resend.dev";
+  // Must be on a Resend-VERIFIED domain. The shared DIGEST_FROM still falls
+  // back to onboarding@resend.dev, and Resend refuses that sender for any
+  // recipient other than the account owner (403 validation_error) — which is
+  // exactly the case here, since this report goes to
+  // report@gershonconsulting.com. gershon.ai is verified and sending-enabled,
+  // so the report uses it and leaves the digest's sender untouched.
+  const from = process.env.REPORT_FROM || "Social GershonCRM <reports@gershon.ai>";
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
