@@ -257,7 +257,7 @@ export function ClientDetailPageClient({ clientId }: { clientId: string }) {
 
       <ComplianceDashboard clientId={client.id} platforms={allPlatforms as never[]} />
 
-      <ClientContentTabs clientId={client.id} clientName={client.name} />
+      <ClientContentTabs clientId={client.id} clientName={client.name} clientType={client.clientType} />
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">

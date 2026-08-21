@@ -167,6 +167,7 @@ model Client {
   followerSnapshots   FollowerSnapshot[]
   syncJobs            SyncJob[]
   contentAnalyses     ContentAnalysis[]
+  postPrompts         PostPrompt[]
 
   @@map("clients")
 }
@@ -334,6 +335,37 @@ model ContentAnalysis {
   @@unique([clientId, windowDays])
   @@index([clientId, generatedAt])
   @@map("content_analyses")
+}
+
+// ─── PostPrompt (Post Studio) ────────────────────────────────────────────────
+//
+// The generated writing brief for ONE company: a paste-ready prompt for future
+// posts plus a hashtag strategy, both derived from the content we already
+// collected. Cached per (clientId, windowDays) exactly like ContentAnalysis so
+// the expensive model call only runs when someone presses the button.
+// Campaign-only by product rule — the API refuses non-CAMPAIGN companies.
+
+model PostPrompt {
+  id           String   @id @default(cuid())
+  clientId     String
+  windowDays   Int      @default(365)
+  postCount    Int      @default(0)
+  promptText   String   @db.Text
+  resultJson   String   @db.Text
+  model        String?
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  durationMs   Int      @default(0)
+  generatedAt  DateTime @default(now())
+  generatedBy  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  @@unique([clientId, windowDays])
+  @@index([clientId, generatedAt])
+  @@map("post_prompts")
 }
 
 // ─── SyncJob ─────────────────────────────────────────────────────────────────
