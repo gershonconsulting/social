@@ -15,6 +15,7 @@
 import prisma from "@/lib/db";
 import { buildPostingAlert, SENT_KEY, DEFAULT_TO, type PeriodKind, type PostingAlert } from "./posting-alerts";
 import { alertSubject, renderAlertBody, wrapAlertEmail } from "./render";
+import { resolveFrom } from "@/lib/email/sender";
 
 export async function readSent(): Promise<Record<string, string>> {
   const row = await prisma.setting.findUnique({ where: { key: SENT_KEY } });
@@ -41,7 +42,7 @@ async function markSent(key: string, note: string): Promise<void> {
 async function sendViaResend(html: string, subject: string, to: string) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { ok: false, error: "RESEND_API_KEY not set in environment" };
-  const from = process.env.DIGEST_FROM || "onboarding@resend.dev";
+  const from = resolveFrom();
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",

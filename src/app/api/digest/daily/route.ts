@@ -5,6 +5,7 @@ import { ClientStatus, Platform } from "@prisma/client";
 import { sendCampaignMonthlyReport } from "@/lib/campaigns/send";
 import { sendPostingAlert, dueAlerts } from "@/lib/alerts/send";
 import { sendDailyReport } from "@/lib/reports/daily-report-send";
+import { resolveFrom, resolveDigestTo } from "@/lib/email/sender";
 
 /**
  * GET  /api/digest/daily            — render the digest as JSON (preview).
@@ -17,9 +18,10 @@ import { sendDailyReport } from "@/lib/reports/daily-report-send";
  *   - coverage snapshot
  *
  * Auth (POST only): Bearer CRON_SECRET or DIGEST_SECRET.
- * Recipient: process.env.DIGEST_TO (defaults to oattia@gmail.com).
- * Sender:    process.env.DIGEST_FROM (defaults to digest@notifications.gershoncrm.com,
- *            falls back to onboarding@resend.dev if RESEND_DOMAIN_VERIFIED isn't set).
+ * Recipients: report@gershonconsulting.com + aina.rama@gershonconsulting.com
+ *             (override with DIGEST_TO, comma-separated). See lib/email/sender.
+ * Sender:     Social GershonCRM <social@gershon.ai> — the only VERIFIED Resend
+ *             domain; anything else 403s for non-owner recipients.
  * Provider:  Resend — needs RESEND_API_KEY in env.
  */
 
@@ -300,8 +302,8 @@ function renderHtml(d: DigestData): string {
 async function sendViaResend(html: string, subject: string): Promise<{ ok: boolean; status?: number; error?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { ok: false, error: "RESEND_API_KEY not set in environment" };
-  const to = process.env.DIGEST_TO || "oattia@gmail.com";
-  const from = process.env.DIGEST_FROM || "onboarding@resend.dev";
+  const to = resolveDigestTo();
+  const from = resolveFrom();
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",

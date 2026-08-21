@@ -17,6 +17,7 @@
 import prisma from "@/lib/db";
 import { buildCampaignMonthlyReport, lastClosedMonth, monthLabel, type CampaignMonthlyReport } from "./monthly";
 import { renderCompanyBody, renderSummaryBody, wrapEmail } from "./render";
+import { resolveFrom } from "@/lib/email/sender";
 
 export const SENT_KEY = "campaign_report_sent";
 export const DEFAULT_TO = "sales@gershonconsulting.com";
@@ -50,7 +51,7 @@ async function sendViaResend(
 ): Promise<{ ok: boolean; status?: number; error?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { ok: false, error: "RESEND_API_KEY not set in environment" };
-  const from = process.env.DIGEST_FROM || "onboarding@resend.dev";
+  const from = resolveFrom();
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",

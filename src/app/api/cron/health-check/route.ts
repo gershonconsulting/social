@@ -2,6 +2,7 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { ClientStatus } from "@prisma/client";
+import { resolveFrom } from "@/lib/email/sender";
 
 /**
  * Collection health-check — a server-side "dead man's switch" for social.gershoncrm.com.
@@ -38,7 +39,7 @@ import { ClientStatus } from "@prisma/client";
  *   HEALTH_STALE_HOURS    default 36   — hours with no new post before "broken".
  *   HEALTH_REALERT_HOURS  default 20   — min gap between two alerts (anti-nag).
  *   HEALTH_ALERT_TO       default DIGEST_TO || "oattia@gmail.com" — comma-separated ok.
- *   HEALTH_ALERT_FROM     default DIGEST_FROM || "onboarding@resend.dev".
+ *   HEALTH_ALERT_FROM     default = the verified gershon.ai sender (lib/email/sender).
  *   RESEND_API_KEY        required to actually send.
  *
  * THROTTLE MEMORY: `settings` row key = "health_alert_at" (ISO timestamp of the
@@ -208,7 +209,7 @@ async function sendAlert(html: string, subject: string): Promise<{ ok: boolean; 
   if (!apiKey) return { ok: false, error: "RESEND_API_KEY not set in environment" };
   const to = (process.env.HEALTH_ALERT_TO || process.env.DIGEST_TO || "oattia@gmail.com")
     .split(",").map((s) => s.trim()).filter(Boolean);
-  const from = process.env.HEALTH_ALERT_FROM || process.env.DIGEST_FROM || "onboarding@resend.dev";
+  const from = resolveFrom(process.env.HEALTH_ALERT_FROM);
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
