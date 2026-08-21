@@ -1,16 +1,24 @@
+/**
+ * OpenAI credentials for the AI features (Content Intelligence + Post Studio).
+ *
+ * Mirrors /api/settings/anthropic exactly — same storage (the `settings` table,
+ * so the key is rotatable from the Settings page without a redeploy), same
+ * verify-before-save rule, same masking on read.
+ */
+
 export const runtime = "edge";
 
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { z } from "zod";
 import {
-  DEFAULT_ANTHROPIC_MODEL as DEFAULT_MODEL,
+  DEFAULT_OPENAI_MODEL,
   getProviderSettings,
   listModels,
   verifyKey,
 } from "@/lib/content/provider";
 
-const KEY_NAME = "anthropic";
+const KEY_NAME = "openai";
 
 const schema = z.object({
   apiKey: z.string().min(20).max(300).optional(),
@@ -19,31 +27,27 @@ const schema = z.object({
 
 export async function GET(req: NextRequest) {
   try {
-    // ?models=1 asks Anthropic which models this key can actually use, so the
-    // UI never has to hard-code an id that may be retired later.
     if (req.nextUrl.searchParams.get("models") === "1") {
-      const settings = await getProviderSettings("anthropic");
+      const settings = await getProviderSettings("openai");
       if (!settings.apiKey) {
         return NextResponse.json({ success: false, error: "No API key saved yet." }, { status: 428 });
       }
-      const models = await listModels("anthropic", settings.apiKey);
+      const models = await listModels("openai", settings.apiKey);
       return NextResponse.json({ success: true, data: { models } });
     }
 
     const row = await prisma.setting.findUnique({ where: { key: KEY_NAME } });
-    const envKey = !!process.env.ANTHROPIC_API_KEY;
+    const envKey = !!process.env.OPENAI_API_KEY;
 
     if (!row) {
       return NextResponse.json({
         success: true,
-        data: { configured: envKey, source: envKey ? "env" : "none", model: DEFAULT_MODEL },
+        data: { configured: envKey, source: envKey ? "env" : "none", model: DEFAULT_OPENAI_MODEL },
       });
     }
 
     const parsed = JSON.parse(row.value) as { apiKey?: string; model?: string };
-    const masked = parsed.apiKey
-      ? `${parsed.apiKey.slice(0, 8)}…${parsed.apiKey.slice(-4)}`
-      : null;
+    const masked = parsed.apiKey ? `${parsed.apiKey.slice(0, 8)}…${parsed.apiKey.slice(-4)}` : null;
 
     return NextResponse.json({
       success: true,
@@ -51,7 +55,7 @@ export async function GET(req: NextRequest) {
         configured: !!parsed.apiKey || envKey,
         source: parsed.apiKey ? "settings" : envKey ? "env" : "none",
         apiKeyMasked: masked,
-        model: parsed.model || DEFAULT_MODEL,
+        model: parsed.model || DEFAULT_OPENAI_MODEL,
         updatedAt: row.updatedAt.toISOString(),
       },
     });
@@ -80,25 +84,25 @@ export async function POST(req: NextRequest) {
     const apiKey = parsed.data.apiKey?.trim() || existing.apiKey;
     if (!apiKey) {
       return NextResponse.json(
-        { success: false, error: "Paste your Anthropic API key to save." },
+        { success: false, error: "Paste your OpenAI API key to save." },
         { status: 400 }
       );
     }
 
     // Validate before storing — a bad key saved silently is worse than an error.
     try {
-      await verifyKey("anthropic", apiKey);
+      await verifyKey("openai", apiKey);
     } catch (e) {
       const detail = e instanceof Error ? e.message : "unknown error";
       return NextResponse.json(
-        { success: false, error: `Anthropic rejected that key. ${detail}` },
+        { success: false, error: `OpenAI rejected that key. ${detail}` },
         { status: 400 }
       );
     }
 
     const value = JSON.stringify({
       apiKey,
-      model: parsed.data.model?.trim() || existing.model || DEFAULT_MODEL,
+      model: parsed.data.model?.trim() || existing.model || DEFAULT_OPENAI_MODEL,
     });
 
     await prisma.setting.upsert({
@@ -107,7 +111,7 @@ export async function POST(req: NextRequest) {
       create: { key: KEY_NAME, value },
     });
 
-    return NextResponse.json({ success: true, message: "Anthropic settings saved and verified." });
+    return NextResponse.json({ success: true, message: "OpenAI settings saved and verified." });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to save settings";
     return NextResponse.json({ success: false, error: message }, { status: 500 });
@@ -117,7 +121,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE() {
   try {
     await prisma.setting.deleteMany({ where: { key: KEY_NAME } });
-    return NextResponse.json({ success: true, message: "Anthropic key removed." });
+    return NextResponse.json({ success: true, message: "OpenAI key removed." });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to remove key";
     return NextResponse.json({ success: false, error: message }, { status: 500 });

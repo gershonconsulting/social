@@ -19,19 +19,15 @@
  */
 
 import type { Corpus, CorpusPost, ContentStats, HashtagStat } from "./corpus";
-import {
-  getAnthropicSettings,
-  listModels,
-  DEFAULT_MODEL,
-  type AnthropicSettings,
-  type AnalysisResult,
-} from "./analyze";
+import type { AnalysisResult } from "./analyze";
+import { getAISettings, runChat, type AISettings } from "./provider";
 
-const API_BASE = "https://api.anthropic.com/v1";
-const API_VERSION = "2023-06-01";
+export { getAISettings };
+export type { AISettings };
 
-export { getAnthropicSettings };
-export type { AnthropicSettings };
+/** @deprecated old name, same call. */
+export const getAnthropicSettings = getAISettings;
+export type AnthropicSettings = AISettings;
 
 // ─── Result shape ────────────────────────────────────────────────────────────
 
@@ -325,81 +321,24 @@ function coerce(raw: unknown, stats: ContentStats): PostPromptResult {
 export async function runPostPrompt(
   client: { name: string; industry: string | null; website: string | null },
   corpus: Corpus,
-  settings: AnthropicSettings,
+  settings: AISettings,
   priorAnalysis: AnalysisResult | null = null
 ): Promise<PostPromptOutcome> {
-  if (!settings.apiKey) {
-    throw new Error("No Anthropic API key configured. Add one in Settings → Content Intelligence (AI).");
-  }
-
-  const input = buildInput(client, corpus, priorAnalysis);
   const started = Date.now();
+  const input = buildInput(client, corpus, priorAnalysis);
 
-  async function call(model: string) {
-    return fetch(`${API_BASE}/messages`, {
-      method: "POST",
-      headers: {
-        "x-api-key": settings.apiKey as string,
-        "anthropic-version": API_VERSION,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 6000,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: input }],
-      }),
-    });
-  }
+  const chat = await runChat(settings, SYSTEM_PROMPT, input, 6000);
 
-  let model = settings.model || DEFAULT_MODEL;
-  let res = await call(model);
-
-  // A stale model id in settings shouldn't take the feature down.
-  if (res.status === 404) {
-    const models = await listModels(settings.apiKey).catch(() => []);
-    const fallback = models.find((m) => /sonnet/i.test(m.id))?.id || models[0]?.id;
-    if (fallback && fallback !== model) {
-      model = fallback;
-      res = await call(model);
-    }
-  }
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    let detail = body.slice(0, 400);
-    try {
-      const j = JSON.parse(body) as { error?: { message?: string } };
-      if (j.error?.message) detail = j.error.message;
-    } catch {
-      /* keep raw */
-    }
-    throw new Error(`Anthropic API error ${res.status}: ${detail}`);
-  }
-
-  const payload = (await res.json()) as {
-    content?: Array<{ type: string; text?: string }>;
-    usage?: { input_tokens?: number; output_tokens?: number };
-    model?: string;
-  };
-
-  const text = (payload.content ?? [])
-    .filter((b) => b.type === "text" && typeof b.text === "string")
-    .map((b) => b.text as string)
-    .join("");
-
-  if (!text.trim()) throw new Error("Anthropic returned an empty response.");
-
-  const result = coerce(extractJson(text), corpus.stats);
+  const result = coerce(extractJson(chat.text), corpus.stats);
   if (!result.promptText) {
     throw new Error("The model returned no prompt text. Try regenerating.");
   }
 
   return {
     result,
-    model: payload.model || model,
-    inputTokens: payload.usage?.input_tokens ?? 0,
-    outputTokens: payload.usage?.output_tokens ?? 0,
+    model: chat.model,
+    inputTokens: chat.inputTokens,
+    outputTokens: chat.outputTokens,
     durationMs: Date.now() - started,
   };
 }

@@ -1,55 +1,31 @@
 /**
  * Content Intelligence — AI analysis engine.
  *
- * Calls the Anthropic Messages API directly over fetch (no SDK) so the whole
- * thing stays edge-runtime safe on Cloudflare Pages. The key is read from the
- * `settings` table first (so it can be pasted in the Settings page without a
- * redeploy) and falls back to the ANTHROPIC_API_KEY env var.
+ * The prompt lives here; which vendor answers it lives in ./provider.ts. That
+ * split is why adding OpenAI (v3.6.0) touched no prompt text.
  */
 
-import prisma from "@/lib/db";
 import type { Corpus, CorpusPost, ContentStats } from "./corpus";
+import {
+  getAISettings,
+  runChat,
+  listModels,
+  defaultModelFor,
+  DEFAULT_ANTHROPIC_MODEL,
+  type AISettings,
+  type AIProvider,
+} from "./provider";
 
-const SETTING_KEY = "anthropic";
-export const DEFAULT_MODEL = "claude-sonnet-4-5";
-const API_BASE = "https://api.anthropic.com/v1";
-const API_VERSION = "2023-06-01";
+/** @deprecated kept as a re-export so older call sites keep compiling. */
+export const DEFAULT_MODEL = DEFAULT_ANTHROPIC_MODEL;
 
-export type AnthropicSettings = {
-  apiKey: string | null;
-  model: string;
-  source: "settings" | "env" | "none";
-};
+export type AnthropicSettings = AISettings;
 
-export async function getAnthropicSettings(): Promise<AnthropicSettings> {
-  try {
-    const row = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });
-    if (row) {
-      const parsed = JSON.parse(row.value) as { apiKey?: string; model?: string };
-      if (parsed.apiKey) {
-        return { apiKey: parsed.apiKey, model: parsed.model || DEFAULT_MODEL, source: "settings" };
-      }
-    }
-  } catch {
-    // fall through to env
-  }
-  const env = process.env.ANTHROPIC_API_KEY;
-  if (env) return { apiKey: env, model: DEFAULT_MODEL, source: "env" };
-  return { apiKey: null, model: DEFAULT_MODEL, source: "none" };
-}
+/** @deprecated use getAISettings(); this is the same call under the old name. */
+export const getAnthropicSettings = getAISettings;
 
-/** Live model list, so the Settings page never hard-codes a stale model id. */
-export async function listModels(apiKey: string): Promise<Array<{ id: string; display_name?: string }>> {
-  const r = await fetch(`${API_BASE}/models?limit=40`, {
-    headers: { "x-api-key": apiKey, "anthropic-version": API_VERSION },
-  });
-  if (!r.ok) {
-    const body = await r.text().catch(() => "");
-    throw new Error(`Anthropic /models returned ${r.status}. ${body.slice(0, 300)}`);
-  }
-  const j = (await r.json()) as { data?: Array<{ id: string; display_name?: string }> };
-  return j.data ?? [];
-}
+export { getAISettings, listModels, defaultModelFor };
+export type { AISettings, AIProvider };
 
 // ─── Result shape ────────────────────────────────────────────────────────────
 
@@ -268,78 +244,18 @@ function coerce(raw: unknown): AnalysisResult {
 export async function runAnalysis(
   client: { name: string; industry: string | null; website: string | null; clientType: string },
   corpus: Corpus,
-  settings: AnthropicSettings
+  settings: AISettings
 ): Promise<AnalyzeOutcome> {
-  if (!settings.apiKey) {
-    throw new Error(
-      "No Anthropic API key configured. Add one in Settings → Content Intelligence (AI)."
-    );
-  }
-
-  const prompt = buildPrompt(client, corpus);
   const started = Date.now();
+  const prompt = buildPrompt(client, corpus);
 
-  async function call(model: string) {
-    return fetch(`${API_BASE}/messages`, {
-      method: "POST",
-      headers: {
-        "x-api-key": settings.apiKey as string,
-        "anthropic-version": API_VERSION,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 6000,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-  }
-
-  let model = settings.model || DEFAULT_MODEL;
-  let res = await call(model);
-
-  // A stale model id in settings shouldn't take the feature down — fall back to
-  // whatever the account actually has access to.
-  if (res.status === 404) {
-    const models = await listModels(settings.apiKey).catch(() => []);
-    const fallback = models.find((m) => /sonnet/i.test(m.id))?.id || models[0]?.id;
-    if (fallback && fallback !== model) {
-      model = fallback;
-      res = await call(model);
-    }
-  }
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    let detail = body.slice(0, 400);
-    try {
-      const j = JSON.parse(body) as { error?: { message?: string } };
-      if (j.error?.message) detail = j.error.message;
-    } catch {
-      /* keep raw */
-    }
-    throw new Error(`Anthropic API error ${res.status}: ${detail}`);
-  }
-
-  const payload = (await res.json()) as {
-    content?: Array<{ type: string; text?: string }>;
-    usage?: { input_tokens?: number; output_tokens?: number };
-    model?: string;
-  };
-
-  const text = (payload.content ?? [])
-    .filter((b) => b.type === "text" && typeof b.text === "string")
-    .map((b) => b.text as string)
-    .join("");
-
-  if (!text.trim()) throw new Error("Anthropic returned an empty response.");
+  const chat = await runChat(settings, SYSTEM_PROMPT, prompt, 6000);
 
   return {
-    result: coerce(extractJson(text)),
-    model: payload.model || model,
-    inputTokens: payload.usage?.input_tokens ?? 0,
-    outputTokens: payload.usage?.output_tokens ?? 0,
+    result: coerce(extractJson(chat.text)),
+    model: chat.model,
+    inputTokens: chat.inputTokens,
+    outputTokens: chat.outputTokens,
     durationMs: Date.now() - started,
   };
 }

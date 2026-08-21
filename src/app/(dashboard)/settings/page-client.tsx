@@ -128,7 +128,7 @@ export function SettingsPageClient() {
         {row("X / Twitter", "#000", tw)}
       </div>
 
-      <AnthropicCard />
+      <AICard />
 
       <PhantombusterCard />
 
@@ -699,12 +699,162 @@ function StreakCard() {
 
 
 // ─── Content Intelligence (AI) ───────────────────────────────────────────────
-// The key lives in the `settings` table rather than an env var so it can be
-// rotated from this page without a redeploy — the deploy PAT can't touch
-// .github/workflows anyway. An ANTHROPIC_API_KEY env var still works as a
-// fallback if one is ever set on the Pages project.
+// Keys live in the `settings` table rather than env vars so they can be rotated
+// from this page without a redeploy — the deploy PAT can't touch
+// .github/workflows anyway. ANTHROPIC_API_KEY / OPENAI_API_KEY env vars still
+// work as a fallback if either is ever set on the Pages project.
+//
+// Two vendors are supported. With one key saved the engines just use it; the
+// Active-provider row only decides the tie when both are configured.
 
-function AnthropicCard() {
+type AIVendor = "anthropic" | "openai";
+
+const VENDOR_META: Record<
+  AIVendor,
+  { label: string; endpoint: string; placeholder: string; defaultModel: string; where: string; envVar: string }
+> = {
+  anthropic: {
+    label: "Anthropic (Claude)",
+    endpoint: "/api/settings/anthropic",
+    placeholder: "sk-ant-api03-…",
+    defaultModel: "claude-sonnet-4-5",
+    where: "console.anthropic.com → API keys",
+    envVar: "ANTHROPIC_API_KEY",
+  },
+  openai: {
+    label: "OpenAI (GPT)",
+    endpoint: "/api/settings/openai",
+    placeholder: "sk-…",
+    defaultModel: "gpt-4o",
+    where: "platform.openai.com → API keys",
+    envVar: "OPENAI_API_KEY",
+  },
+};
+
+function AICard() {
+  const [active, setActive] = useState<AIVendor | null>(null);
+  const [activeModel, setActiveModel] = useState<string | null>(null);
+  const [configured, setConfigured] = useState<{ anthropic: boolean; openai: boolean }>({
+    anthropic: false,
+    openai: false,
+  });
+  const [switching, setSwitching] = useState(false);
+  const [switchMsg, setSwitchMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  async function loadProvider() {
+    try {
+      const r = await fetch("/api/settings/ai-provider", { cache: "no-store" });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (j?.success && j.data) {
+        setActive(j.data.active ?? null);
+        setActiveModel(j.data.activeModel ?? null);
+        setConfigured(j.data.configured ?? { anthropic: false, openai: false });
+      }
+    } catch {}
+  }
+  useEffect(() => {
+    loadProvider();
+  }, [reloadToken]);
+
+  async function chooseProvider(provider: AIVendor) {
+    setSwitching(true);
+    setSwitchMsg(null);
+    try {
+      const r = await fetch("/api/settings/ai-provider", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider }),
+      });
+      const j = await r.json().catch(() => ({} as { error?: string; message?: string }));
+      if (!r.ok || !j?.success) setSwitchMsg({ kind: "err", text: j.error || `HTTP ${r.status}` });
+      else setSwitchMsg({ kind: "ok", text: j.message || "Saved." });
+      await loadProvider();
+    } catch (e) {
+      setSwitchMsg({ kind: "err", text: e instanceof Error ? e.message : "Network error" });
+    } finally {
+      setSwitching(false);
+    }
+  }
+
+  const anyConfigured = configured.anthropic || configured.openai;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
+      <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Sparkles size={15} className="text-[#FE1B04]" />
+          <div>
+            <div className="text-sm font-semibold text-gray-900">Content Intelligence (AI)</div>
+            <div className="text-xs text-gray-500 mt-0.5">
+              Powers the Content Intelligence tab on every company page and Post Studio on campaign
+              companies. Add a key from either vendor — one is enough.
+            </div>
+          </div>
+        </div>
+        <span
+          className={
+            "text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded border " +
+            (anyConfigured
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+              : "bg-amber-50 text-amber-700 border-amber-200")
+          }
+        >
+          {anyConfigured ? "Configured" : "Not configured"}
+        </span>
+      </div>
+
+      {/* Which vendor answers the call */}
+      <div className="px-4 py-3 border-b border-gray-100 bg-white">
+        <div className="text-xs font-medium text-gray-700 mb-2">Active provider</div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {(["anthropic", "openai"] as const).map((v) => {
+            const isActive = active === v;
+            const has = configured[v];
+            return (
+              <button
+                key={v}
+                type="button"
+                onClick={() => chooseProvider(v)}
+                disabled={switching || !has}
+                title={has ? `Use ${VENDOR_META[v].label}` : "Save a key for this provider first"}
+                className={
+                  "px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors disabled:opacity-40 disabled:cursor-not-allowed " +
+                  (isActive
+                    ? "bg-red-50 text-[#FE1B04] border-red-200"
+                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50")
+                }
+              >
+                {isActive && "✓ "}
+                {VENDOR_META[v].label}
+              </button>
+            );
+          })}
+          {switching && <Loader2 size={13} className="animate-spin text-gray-400" />}
+        </div>
+        <div className="text-[11px] text-gray-400 mt-2">
+          {active
+            ? `Analyses and prompts currently run on ${VENDOR_META[active].label}${activeModel ? ` · ${activeModel}` : ""}.`
+            : "No key saved yet — the AI tabs will show a “not configured” banner until you add one below."}
+        </div>
+        {switchMsg && (
+          <div className={"text-xs mt-1.5 " + (switchMsg.kind === "ok" ? "text-emerald-700" : "text-red-600")}>
+            {switchMsg.text}
+          </div>
+        )}
+      </div>
+
+      <AIKeyForm vendor="openai" onChanged={() => setReloadToken((n) => n + 1)} />
+      <AIKeyForm vendor="anthropic" onChanged={() => setReloadToken((n) => n + 1)} />
+    </div>
+  );
+}
+
+/** One vendor's key + model, saved only after the vendor itself accepts the key. */
+function AIKeyForm({ vendor, onChanged }: { vendor: AIVendor; onChanged: () => void }) {
+  const meta = VENDOR_META[vendor];
+
   const [configured, setConfigured] = useState(false);
   const [source, setSource] = useState<string>("none");
   const [masked, setMasked] = useState<string | null>(null);
@@ -719,7 +869,7 @@ function AnthropicCard() {
 
   async function load() {
     try {
-      const r = await fetch("/api/settings/anthropic", { cache: "no-store" });
+      const r = await fetch(meta.endpoint, { cache: "no-store" });
       if (!r.ok) return;
       const j = await r.json();
       if (j?.success && j.data) {
@@ -731,29 +881,33 @@ function AnthropicCard() {
       }
     } catch {}
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendor]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
     if (!configured && !newKey.trim()) {
-      setMsg({ kind: "err", text: "Paste your Anthropic API key to save." });
+      setMsg({ kind: "err", text: `Paste your ${meta.label} API key to save.` });
       return;
     }
     setBusy(true);
     try {
-      const r = await fetch("/api/settings/anthropic", {
+      const r = await fetch(meta.endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ apiKey: newKey.trim() || undefined, model: model.trim() || undefined }),
       });
-      const j = await r.json().catch(() => ({} as { error?: string }));
+      const j = await r.json().catch(() => ({} as { error?: string; message?: string }));
       if (!r.ok || !j?.success) {
         setMsg({ kind: "err", text: j.error || `HTTP ${r.status}` });
       } else {
         setMsg({ kind: "ok", text: j.message || "Saved." });
         setNewKey("");
         await load();
+        onChanged();
       }
     } catch (e) {
       setMsg({ kind: "err", text: e instanceof Error ? e.message : "Network error" });
@@ -766,7 +920,7 @@ function AnthropicCard() {
     setLoadingModels(true);
     setMsg(null);
     try {
-      const r = await fetch("/api/settings/anthropic?models=1", { cache: "no-store" });
+      const r = await fetch(`${meta.endpoint}?models=1`, { cache: "no-store" });
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.success) {
         setMsg({ kind: "err", text: j?.error || `HTTP ${r.status}` });
@@ -785,126 +939,121 @@ function AnthropicCard() {
     setBusy(true);
     setMsg(null);
     try {
-      const r = await fetch("/api/settings/anthropic", { method: "DELETE" });
+      const r = await fetch(meta.endpoint, { method: "DELETE" });
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.success) setMsg({ kind: "err", text: j?.error || `HTTP ${r.status}` });
-      else { setMsg({ kind: "ok", text: "Key removed." }); setModels([]); await load(); }
+      else {
+        setMsg({ kind: "ok", text: "Key removed." });
+        setModels([]);
+        await load();
+        onChanged();
+      }
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
-      <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Sparkles size={15} className="text-[#FE1B04]" />
-          <div>
-            <div className="text-sm font-semibold text-gray-900">Content Intelligence (AI)</div>
-            <div className="text-xs text-gray-500 mt-0.5">
-              Powers the Content Intelligence tab on every company page. Without a key the Signals tab still works; the AI read does not.
-            </div>
-          </div>
-        </div>
+    <form onSubmit={save} className="p-4 space-y-3 border-b border-gray-100 last:border-b-0">
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-semibold text-gray-800">{meta.label}</div>
         <span
           className={
             "text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded border " +
-            (configured ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200")
+            (configured
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+              : "bg-gray-50 text-gray-500 border-gray-200")
           }
         >
-          {configured ? "Configured" : "Not configured"}
+          {configured ? "Key saved" : "No key"}
         </span>
       </div>
 
-      <form onSubmit={save} className="p-4 space-y-3">
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Anthropic API key</label>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <input
-                type={showKey ? "text" : "password"}
-                value={newKey}
-                onChange={(e) => setNewKey(e.target.value)}
-                placeholder={masked ? `Saved: ${masked} — paste a new key to replace` : "sk-ant-api03-…"}
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 pr-9"
-                autoComplete="off"
-              />
-              <button
-                type="button"
-                onClick={() => setShowKey((v) => !v)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                tabIndex={-1}
-              >
-                {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
-            </div>
-          </div>
-          <div className="text-[11px] text-gray-400 mt-1">
-            Create one at console.anthropic.com → API keys. The key is verified against Anthropic before it is saved.
-            {source === "env" && " Currently falling back to the ANTHROPIC_API_KEY environment variable."}
-            {updatedAt && ` Last updated ${relTime(updatedAt)}.`}
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Model</label>
-          <div className="flex gap-2">
-            {models.length > 0 ? (
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white"
-              >
-                {models.map((m) => (
-                  <option key={m.id} value={m.id}>{m.display_name ? `${m.display_name} — ${m.id}` : m.id}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                placeholder="claude-sonnet-4-5"
-                className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2"
-              />
-            )}
-            <button
-              type="button"
-              onClick={fetchModels}
-              disabled={loadingModels || !configured}
-              className="px-3 py-2 text-xs font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 inline-flex items-center gap-1.5"
-              title={configured ? "Ask Anthropic which models this key can use" : "Save a key first"}
-            >
-              {loadingModels ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-              List models
-            </button>
-          </div>
-        </div>
-
-        {msg && (
-          <div className={"text-xs " + (msg.kind === "ok" ? "text-emerald-700" : "text-red-600")}>{msg.text}</div>
-        )}
-
-        <div className="flex items-center gap-2">
+      <div>
+        <label className="block text-xs font-medium text-gray-700 mb-1">API key</label>
+        <div className="relative">
+          <input
+            type={showKey ? "text" : "password"}
+            value={newKey}
+            onChange={(e) => setNewKey(e.target.value)}
+            placeholder={masked ? `Saved: ${masked} — paste a new key to replace` : meta.placeholder}
+            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 pr-9"
+            autoComplete="off"
+          />
           <button
-            type="submit"
-            disabled={busy}
-            className="px-3 py-1.5 text-sm font-medium text-white bg-[#FE1B04] rounded-lg hover:opacity-90 disabled:opacity-40 inline-flex items-center gap-1.5"
+            type="button"
+            onClick={() => setShowKey((v) => !v)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            tabIndex={-1}
           >
-            {busy && <Loader2 size={13} className="animate-spin" />}
-            Save
+            {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
-          {source === "settings" && (
-            <button
-              type="button"
-              onClick={removeKey}
-              disabled={busy}
-              className="px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40"
-            >
-              Remove key
-            </button>
-          )}
         </div>
-      </form>
-    </div>
+        <div className="text-[11px] text-gray-400 mt-1">
+          Create one at {meta.where}. The key is verified against {meta.label.split(" ")[0]} before it is saved.
+          {source === "env" && ` Currently falling back to the ${meta.envVar} environment variable.`}
+          {updatedAt && ` Last updated ${relTime(updatedAt)}.`}
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-gray-700 mb-1">Model</label>
+        <div className="flex gap-2">
+          {models.length > 0 ? (
+            <select
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white"
+            >
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.display_name ? `${m.display_name} — ${m.id}` : m.id}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder={meta.defaultModel}
+              className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2"
+            />
+          )}
+          <button
+            type="button"
+            onClick={fetchModels}
+            disabled={loadingModels || !configured}
+            className="px-3 py-2 text-xs font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 inline-flex items-center gap-1.5"
+            title={configured ? "Ask the provider which models this key can use" : "Save a key first"}
+          >
+            {loadingModels ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+            List models
+          </button>
+        </div>
+      </div>
+
+      {msg && <div className={"text-xs " + (msg.kind === "ok" ? "text-emerald-700" : "text-red-600")}>{msg.text}</div>}
+
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={busy}
+          className="px-3 py-1.5 text-sm font-medium text-white bg-[#FE1B04] rounded-lg hover:opacity-90 disabled:opacity-40 inline-flex items-center gap-1.5"
+        >
+          {busy && <Loader2 size={13} className="animate-spin" />}
+          Save
+        </button>
+        {source === "settings" && (
+          <button
+            type="button"
+            onClick={removeKey}
+            disabled={busy}
+            className="px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40"
+          >
+            Remove key
+          </button>
+        )}
+      </div>
+    </form>
   );
 }
