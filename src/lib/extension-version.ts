@@ -9,4 +9,4 @@
 export const EXTENSION_LATEST = "0.10.7";
 
 /** App version — keep in sync with package.json. Shown in the home-page footer. */
-export const APP_VERSION = "3.6.0";
+export const APP_VERSION = "3.6.1";

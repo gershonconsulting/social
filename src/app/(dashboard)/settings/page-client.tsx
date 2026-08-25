@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
-import { CheckCircle2, AlertCircle, XCircle, Download, RefreshCw, KeyRound, Eye, EyeOff, Loader2, Sparkles } from "lucide-react";
+import { CheckCircle2, AlertCircle, XCircle, Download, RefreshCw, KeyRound, Eye, EyeOff, Loader2, Sparkles, ExternalLink } from "lucide-react";
 
 interface Probe {
   hasCookies: boolean;
@@ -711,14 +711,24 @@ type AIVendor = "anthropic" | "openai";
 
 const VENDOR_META: Record<
   AIVendor,
-  { label: string; endpoint: string; placeholder: string; defaultModel: string; where: string; envVar: string }
+  {
+    label: string;
+    endpoint: string;
+    placeholder: string;
+    defaultModel: string;
+    /** Deep link straight to the vendor's API-keys page — one click, no hunting through the console. */
+    keysUrl: string;
+    where: string;
+    envVar: string;
+  }
 > = {
   anthropic: {
     label: "Anthropic (Claude)",
     endpoint: "/api/settings/anthropic",
     placeholder: "sk-ant-api03-…",
     defaultModel: "claude-sonnet-4-5",
-    where: "console.anthropic.com → API keys",
+    keysUrl: "https://console.anthropic.com/settings/keys",
+    where: "console.anthropic.com → Settings → API keys",
     envVar: "ANTHROPIC_API_KEY",
   },
   openai: {
@@ -726,6 +736,7 @@ const VENDOR_META: Record<
     endpoint: "/api/settings/openai",
     placeholder: "sk-…",
     defaultModel: "gpt-4o",
+    keysUrl: "https://platform.openai.com/api-keys",
     where: "platform.openai.com → API keys",
     envVar: "OPENAI_API_KEY",
   },
@@ -990,7 +1001,16 @@ function AIKeyForm({ vendor, onChanged }: { vendor: AIVendor; onChanged: () => v
           </button>
         </div>
         <div className="text-[11px] text-gray-400 mt-1">
-          Create one at {meta.where}. The key is verified against {meta.label.split(" ")[0]} before it is saved.
+          <a
+            href={meta.keysUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="font-medium text-[#FE1B04] hover:underline inline-flex items-center gap-0.5"
+          >
+            Get a key from {meta.where}
+            <ExternalLink size={10} />
+          </a>{" "}
+          — it is verified against {meta.label.split(" ")[0]} before it is saved.
           {source === "env" && ` Currently falling back to the ${meta.envVar} environment variable.`}
           {updatedAt && ` Last updated ${relTime(updatedAt)}.`}
         </div>
