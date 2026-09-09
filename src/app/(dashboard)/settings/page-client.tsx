@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { CheckCircle2, AlertCircle, XCircle, Download, RefreshCw, KeyRound, Eye, EyeOff, Loader2, Sparkles, ExternalLink } from "lucide-react";
+import { CollectingSessionCard } from "@/components/settings/collecting-session-card";
+import { useCollectingMode } from "@/lib/collecting-mode";
 
 interface Probe {
   hasCookies: boolean;
@@ -26,6 +28,7 @@ function relTime(iso: string | null): string {
 }
 
 export function SettingsPageClient() {
+  const [collecting] = useCollectingMode();
   const [li, setLi] = useState<Probe | null>(null);
   const [tw, setTw] = useState<Probe | null>(null);
   const [extLatest, setExtLatest] = useState<string>("");
@@ -62,7 +65,11 @@ export function SettingsPageClient() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-medium text-gray-900">{label}</div>
-              <div className="text-xs text-amber-700 mt-0.5">No session captured yet — open GershonAI → Sync Now.</div>
+              <div className="text-xs text-amber-700 mt-0.5">
+                {collecting
+                  ? "No session captured yet — open GershonAI → Sync Now."
+                  : "No session captured yet — capture it on the computer that runs the extension. This one is viewing only."}
+              </div>
             </div>
             <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full">
               <AlertCircle size={12} /> Needed
@@ -116,6 +123,8 @@ export function SettingsPageClient() {
         }
       />
 
+      <CollectingSessionCard />
+
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
         <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
           <div className="text-sm font-semibold text-gray-900">Captured sessions + live validation</div>
@@ -143,6 +152,7 @@ export function SettingsPageClient() {
             <div className="text-sm font-semibold text-gray-900">GershonAI Chrome extension</div>
             <div className="text-xs text-gray-500 mt-0.5">
               Latest published: <strong>v{extLatest || "…"}</strong>
+              {!collecting && <> · not required on this computer</>}
             </div>
           </div>
         </div>
