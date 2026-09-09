@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertOctagon } from "lucide-react";
+import { useCollectingMode } from "@/lib/collecting-mode";
 
 /**
  * ExtensionHealthBanner — single red warning shown at the top of /dashboard
@@ -22,6 +23,7 @@ interface CookieStatus {
 }
 
 export function ExtensionHealthBanner() {
+  const [collecting] = useCollectingMode();
   const [li, setLi] = useState<CookieStatus | null | "loading">("loading");
   const [tw, setTw] = useState<CookieStatus | null | "loading">("loading");
 
@@ -75,7 +77,11 @@ export function ExtensionHealthBanner() {
           .
           <br />
           The platform can&apos;t scrape new posts without fresh cookies.
-          Open the GershonAI Chrome extension and click <strong>Sync Now</strong> to refresh both sessions.
+          {collecting ? (
+            <> Open the GershonAI Chrome extension and click <strong>Sync Now</strong> to refresh both sessions.</>
+          ) : (
+            <> This computer is set to <strong>viewing only</strong>, so there is nothing to fix here &mdash; refresh the sessions on the computer that runs the extension.</>
+          )}
           {" "}<Link href="/settings" className="underline font-medium text-red-700 hover:text-red-900">View status</Link>
         </div>
       </div>
