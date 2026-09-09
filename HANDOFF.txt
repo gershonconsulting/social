@@ -1,0 +1,114 @@
+================================================================
+HANDOFF.txt  -  social
+Written by: Claude (Anthropic) - token-limit handoff protocol
+Date: 2026-09-09
+================================================================
+
+0. WHO YOU ARE READING THIS
+----------------------------------------------------------------
+You are an AI assistant taking over work on this repository for
+Olivier Attia, founder / CTO of Gershon Consulting LLC.
+
+Read the MASTER HANDOFF first:
+  github.com/gershonconsulting/memory -> HANDOFF.txt
+
+CRITICAL OPERATING RULES - do not break these:
+  * Olivier does NOT use a terminal, CLI, git or PowerShell. NEVER
+    give him commands, scripts, .bat files or 'just run this' steps.
+  * He does NOT upload, download, move or save files, and does not
+    click buttons an AI injected. If a file has to get somewhere,
+    YOU find the route and execute it.
+  * End every actionable reply with:
+      GREEN CHECK = ready for him to test (+ the link)
+      RED CROSS   = something still to do (+ exactly 3 options he
+                    can actually action - never a CLI step)
+  * Executors: Ariel = code and repo work. Charles = Chrome extension
+    and web admin panels. BOTH ARE AI, NOT HUMANS.
+
+1. WHAT THIS REPO IS
+----------------------------------------------------------------
+Product   : Social (social.gershoncrm.com)
+Live URL  : social.gershoncrm.com
+Does      : collects social posts from tracked companies via
+            Phantombuster and a Chrome extension, and produces a daily
+            data-collection digest.
+Users     : Gershon Consulting internally
+
+2. STACK AND DEPLOY ROUTE
+----------------------------------------------------------------
+Language      : TypeScript (Next.js app under src/)
+Database      : Prisma
+
+*** DEFAULT BRANCH IS NOT main. ***
+  It is:  claude/social-campaign-verification-jiG5E
+  That branch is the TRUNK and it is also the deploy branch.
+  DO NOT 'fix' this by creating or merging to main.
+
+Deploy        : GitHub Actions on push to that branch.
+Reporting     : the daily Phantombuster digest goes to
+                tools@gershonconsulting.com (NOT the generic
+                report@ mailbox other platforms use).
+
+3. RECENTLY DONE  [DONE]
+----------------------------------------------------------------
+- Per-computer 'Collecting session ON/OFF' viewer mode added
+  (2026-09-09), 5 files, shipped as a single PR to avoid five
+  production deploys. Card sits in Settings, above the captured-
+  sessions table.
+- The deploy run reported completed successfully. NOTE: it was never
+  VISUALLY confirmed, because the Chrome in use was signed out of
+  Social. Someone should actually look at social.gershoncrm.com/
+  settings and confirm the card renders.
+
+4. PENDING  [TODO]
+----------------------------------------------------------------
+- Visually verify the Collecting session card at
+  social.gershoncrm.com/settings. This is the one loose end.
+
+5. MISSING / NOT BUILT YET
+----------------------------------------------------------------
+- Confirm scope with Olivier before starting new work.
+
+6. KNOWN BUGS / NEEDS FIXING
+----------------------------------------------------------------
+- None recorded.
+
+7. NEXT ACTION - START HERE
+----------------------------------------------------------------
+  -> Sign in to social.gershoncrm.com and confirm the Collecting
+     session ON/OFF card renders in Settings and that flipping it
+     changes the extension warnings. That closes the last open item.
+
+8. GOTCHAS / HARD-WON LESSONS
+----------------------------------------------------------------
+- *** EVERY DEPLOY RUNS `prisma db push --accept-data-loss`. *** That
+  flag will drop columns and data to make the database match the
+  schema. Never push a schema change here casually, and never push a
+  half-finished schema. This is also why a multi-file change must be
+  ONE deploy, not several.
+- To make a multi-file change one deploy: on the FIRST upload choose
+  'Create a new branch for this commit and start a pull request',
+  name the branch, upload the remaining files to
+  /upload/<new-branch>/<dir> (those commits do not trigger the deploy
+  workflow), then compare -> Create pull request -> Merge. One deploy
+  for the whole change.
+- Branch names WITH SLASHES work in the upload URL. A path segment
+  with parentheses must be percent-encoded, e.g.
+  src/app/%28dashboard%29/settings
+- COLLECTING SESSION is PER COMPUTER, never per account. localStorage
+  key `social_collecting`, card in Settings. Default ON. Staleness is
+  still shown to viewers - only the instruction changes.
+- Writes go through the GitHub web UI in Chrome; `git push` is
+  proxy-refused and the API 403s on write. Upload ONE file per call
+  (multi-file calls get refused), retry once on a random refusal, and
+  verify every commit by reading raw.githubusercontent.com.
+
+9. CONTACT / ESCALATION
+----------------------------------------------------------------
+Olivier Attia - oattia@gmail.com
+Digest mailbox - tools@gershonconsulting.com
+Report mailbox - report@gershonconsulting.com
+
+================================================================
+END OF HANDOFF
+================================================================
