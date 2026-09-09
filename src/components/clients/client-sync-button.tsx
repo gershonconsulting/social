@@ -1,5 +1,7 @@
 "use client";
 
+import { useCollectingMode } from "@/lib/collecting-mode";
+
 import { useState, useEffect, useRef } from "react";
 import { RefreshCw, Loader2, CheckCircle2, AlertTriangle, Info, Chrome } from "lucide-react";
 
@@ -46,6 +48,7 @@ const PLATFORM_LABELS: Record<string, string> = {
  *   the extension path. Otherwise we render the Phantombuster path.
  */
 export function ClientSyncButton({ clientId }: { clientId: string }) {
+  const [collecting] = useCollectingMode();
   const [extensionVersion, setExtensionVersion] = useState<string | null>(null);
   const [extensionChecked, setExtensionChecked] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -174,12 +177,20 @@ export function ClientSyncButton({ clientId }: { clientId: string }) {
           title={
             hasExtension
               ? "Drive the GershonAI extension to scrape this client's LinkedIn + X in your browser"
-              : "Install the GershonAI Chrome extension to enable this"
+              : collecting
+              ? "Install the GershonAI Chrome extension to enable this"
+              : "This computer is viewing only — run this from the computer that has the extension"
           }
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60"
         >
           {loading ? <Loader2 size={14} className="animate-spin" /> : <Chrome size={14} />}
-          {loading ? "Scraping in your browser…" : hasExtension ? "Sync via extension" : extensionChecked ? "Install extension to sync" : "Detecting extension…"}
+          {loading
+            ? "Scraping in your browser…"
+            : hasExtension
+            ? "Sync via extension"
+            : extensionChecked
+            ? (collecting ? "Install extension to sync" : "Viewing only on this computer")
+            : "Detecting extension…"}
         </button>
       </div>
 
