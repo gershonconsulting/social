@@ -103,9 +103,11 @@ function authHeader(apiKey: string): string {
 }
 
 async function streakGet<T>(apiKey: string, path: string): Promise<T> {
+  // No `cache` option — the Cloudflare Workers runtime rejects it ("The 'cache'
+  // field on 'RequestInitializerDict' is not implemented"), and this module is
+  // imported by the edge route /api/admin/streak-sync.
   const res = await fetch(`${STREAK_BASE}${path}`, {
     headers: { Authorization: authHeader(apiKey) },
-    cache: "no-store",
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
