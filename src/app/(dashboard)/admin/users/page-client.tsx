@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
-import { UserPlus, Loader2, Trash2, ShieldCheck, Download, Linkedin, Mail } from "lucide-react";
+import { UserPlus, Loader2, Trash2, ShieldCheck, Download, Linkedin, Mail, KeyRound } from "lucide-react";
 
 type Role = "ADMIN" | "OPERATIONS" | "READ_ONLY";
 interface AppUser {
@@ -12,6 +12,7 @@ interface AppUser {
   role: Role;
   isActive: boolean;
   linkedinLinked?: boolean;
+  hasPassword?: boolean;
   createdAt: string;
 }
 
@@ -73,6 +74,29 @@ export default function UsersAdminClient() {
       setMsg({ kind: "err", text: e instanceof Error ? e.message : "Network error" });
     } finally {
       setInviting(false);
+    }
+  }
+
+  async function removePassword(u: AppUser) {
+    if (
+      !confirm(
+        `Remove the password on ${u.email}?\n\nThey will sign in with LinkedIn only from then on.`,
+      )
+    )
+      return;
+    setMsg(null);
+    try {
+      const r = await fetch(`/api/users/${u.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ removePassword: true }),
+      });
+      const j = await r.json().catch(() => ({} as { error?: string }));
+      if (!r.ok || !j?.success) setMsg({ kind: "err", text: j.error || `HTTP ${r.status}` });
+      else setMsg({ kind: "ok", text: `${u.email} is now LinkedIn-only.` });
+      await load();
+    } catch (e) {
+      setMsg({ kind: "err", text: e instanceof Error ? e.message : "Network error" });
     }
   }
 
@@ -189,6 +213,25 @@ export default function UsersAdminClient() {
                 >
                   {u.isActive ? "Active" : "Disabled"}
                 </button>
+                {u.hasPassword && (
+                  <button
+                    onClick={() => removePassword(u)}
+                    disabled={!u.linkedinLinked}
+                    className={
+                      "inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg border " +
+                      (u.linkedinLinked
+                        ? "border-gray-300 text-gray-600 hover:bg-gray-50"
+                        : "border-gray-200 text-gray-300 cursor-not-allowed")
+                    }
+                    title={
+                      u.linkedinLinked
+                        ? "Drop the password — this account signs in with LinkedIn only"
+                        : "Available once this account has signed in with LinkedIn at least once"
+                    }
+                  >
+                    <KeyRound size={12} /> Remove password
+                  </button>
+                )}
                 <button onClick={() => remove(u)} className="text-gray-300 hover:text-red-600" title="Remove user">
                   <Trash2 size={15} />
                 </button>
