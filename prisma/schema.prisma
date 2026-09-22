@@ -129,9 +129,40 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // --- v3.9.0: self-registration + who this person actually is -------------
+  // Anyone may sign up with LinkedIn. That makes it matter a great deal who
+  // just walked in, so everything LinkedIn tells us is kept, along with the
+  // request-side provenance Cloudflare gives us for free.
+
+  // Awaiting an admin's decision. Distinct from isActive=false, which means
+  // "was approved once and has since been switched off" — the two produce
+  // different sign-in messages and sit in different places in Admin > Users.
+  pendingApproval Boolean   @default(false)
+  approvedAt      DateTime?
+  approvedById    String?
+
+  // From the LinkedIn OIDC userinfo payload.
+  givenName     String?
+  familyName    String?
+  locale        String?
+  emailVerified Boolean @default(false)
+  profileJson   String? @db.Text // raw userinfo, so nothing is lost to schema drift
+
+  // How they arrived: "linkedin-self" | "linkedin-claim" | "invite" | "seed".
+  signupSource    String?
+  signupIp        String?
+  signupCountry   String?
+  signupUserAgent String?
+
+  // Activity.
+  lastLoginAt DateTime?
+  lastLoginIp String?
+  loginCount  Int       @default(0)
+
   auditLogs AuditLog[]
   syncJobs  SyncJob[]
 
+  @@index([pendingApproval])
   @@map("users")
 }
 
@@ -426,4 +457,3 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs")
 }
-
