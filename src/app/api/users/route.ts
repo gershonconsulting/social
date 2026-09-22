@@ -33,11 +33,17 @@ export async function GET(_req: NextRequest) {
     select: {
       id: true, name: true, email: true, role: true, isActive: true,
       linkedinSub: true, password: true, image: true, createdAt: true,
+      // v3.9.0 — everything we know about who this person is.
+      pendingApproval: true, approvedAt: true,
+      givenName: true, familyName: true, locale: true, emailVerified: true,
+      signupSource: true, signupIp: true, signupCountry: true, signupUserAgent: true,
+      lastLoginAt: true, lastLoginIp: true, loginCount: true,
     },
-    orderBy: [{ role: "asc" }, { name: "asc" }],
+    // Anyone waiting on a decision floats to the top.
+    orderBy: [{ pendingApproval: "desc" }, { createdAt: "desc" }],
   });
-  // Expose whether a user can sign in with LinkedIn, and whether a password is
-  // still set — never the sub or the hash itself.
+
+  // Never expose the LinkedIn sub or the password hash — only whether each exists.
   const data = users.map(({ linkedinSub, password, ...u }) => ({
     ...u,
     linkedinLinked: !!linkedinSub,
@@ -71,7 +77,14 @@ export async function POST(req: NextRequest) {
 
   const password = parsed.data.password ? await bcrypt.hash(parsed.data.password, 12) : null;
   const user = await prisma.user.create({
-    data: { name: parsed.data.name, email, password, role: parsed.data.role },
+    data: {
+      name: parsed.data.name,
+      email,
+      password,
+      role: parsed.data.role,
+      signupSource: "invite",
+      approvedAt: new Date(),
+    },
     select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
   });
 

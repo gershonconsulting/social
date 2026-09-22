@@ -13,6 +13,10 @@ const patchSchema = z.object({
   // account has already signed in with LinkedIn at least once, so this can
   // never lock anybody out.
   removePassword: z.literal(true).optional(),
+  // Let a self-registered account in (approve) or keep it out (reject).
+  // Approving clears pendingApproval and activates; rejecting just deactivates
+  // and leaves the row, so the same person can't silently re-register.
+  approve: z.boolean().optional(),
 });
 
 function authErr(e: unknown): NextResponse | null {
@@ -43,7 +47,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   // Guard: never let the last active admin be demoted or disabled (self-lockout).
   const removingAdminPower =
     (parsed.data.role && parsed.data.role !== UserRole.ADMIN && target.role === UserRole.ADMIN) ||
-    (parsed.data.isActive === false && target.role === UserRole.ADMIN);
+    ((parsed.data.isActive === false || parsed.data.approve === false) &&
+      target.role === UserRole.ADMIN);
   if (removingAdminPower) {
     const activeAdmins = await prisma.user.count({ where: { role: UserRole.ADMIN, isActive: true } });
     if (activeAdmins <= 1) {
@@ -54,7 +59,15 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     }
   }
 
-  const { removePassword, ...fields } = parsed.data;
+  const { removePassword, approve, ...fields } = parsed.data;
+
+  // Approval decision on a self-registered account.
+  const approvalData =
+    approve === undefined
+      ? {}
+      : approve
+        ? { pendingApproval: false, isActive: true, approvedAt: new Date(), approvedById: actor.id ?? null }
+        : { pendingApproval: false, isActive: false, approvedAt: null, approvedById: actor.id ?? null };
 
   if (removePassword) {
     if (!target.linkedinSub) {
@@ -77,8 +90,12 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
   const updated = await prisma.user.update({
     where: { id },
-    data: removePassword ? { ...fields, password: null } : fields,
-    select: { id: true, name: true, email: true, role: true, isActive: true },
+    data: {
+      ...fields,
+      ...approvalData,
+      ...(removePassword ? { password: null } : {}),
+    },
+    select: { id: true, name: true, email: true, role: true, isActive: true, pendingApproval: true },
   });
 
   await prisma.auditLog.create({

@@ -7,7 +7,7 @@ import {
   sessionCookieName,
   SESSION_MAX_AGE_SECONDS,
 } from "@/lib/linkedin-auth";
-import { completeLinkedInLogin } from "@/lib/linkedin-login-flow";
+import { completeLinkedInLogin, readRequestContext } from "@/lib/linkedin-login-flow";
 
 /**
  * GET /api/auth/linkedin/login/callback
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const outcome = await completeLinkedInLogin(code, legacyLoginRedirectUri());
+    const outcome = await completeLinkedInLogin(code, legacyLoginRedirectUri(), readRequestContext(req));
     if (!outcome.ok) {
       return NextResponse.redirect(`${base}/login?error=${encodeURIComponent(outcome.error)}`);
     }

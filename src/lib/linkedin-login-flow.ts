@@ -5,19 +5,35 @@
  * redirect URL, so /api/auth/linkedin/callback has to be able to finish a
  * sign-in as well as a client connection. See linkedin-auth.ts.
  *
- * The important behaviour here is the CLAIM. Production is seeded with an ADMIN
- * row that has no linkedinSub. If a first LinkedIn sign-in simply created a new
- * user, the operator would land in a second account and the existing account's
- * history (AuditLog.actorUserId, SyncJob.triggeredById) would be orphaned.
- * Instead, an allow-listed first sign-in ADOPTS that existing admin row — same
- * user id, nothing stranded.
+ * Two behaviours matter here.
+ *
+ * THE CLAIM. Production was seeded with an ADMIN row that had no linkedinSub.
+ * If a first LinkedIn sign-in had simply created a new user, the operator would
+ * have landed in a second account and the original's history
+ * (AuditLog.actorUserId, SyncJob.triggeredById) would have been orphaned. So an
+ * allow-listed first sign-in ADOPTS that row — same user id, nothing stranded.
+ * Only allow-listed addresses can do this; it is how you become an admin, so it
+ * is deliberately not open to the world.
+ *
+ * SELF-REGISTRATION (v3.9.0). Everyone else may now sign up too, rather than
+ * being turned away with "isn't invited yet". They are created at the LOWEST
+ * role, and whether they are usable immediately depends on the registration
+ * mode — see src/lib/registration.ts. Signing up never grants a role above
+ * READ_ONLY and never grants admin.
+ *
+ * Because the door is open, we keep everything LinkedIn tells us about the
+ * person plus the request-side provenance Cloudflare attaches, so the Users
+ * screen can answer "who is this and where did they come from".
  *
  * (Client / Post / PlatformConnection are not user-scoped, so the collected
- * social data itself was never at risk — only the per-user history.)
+ * social data itself is global — which is exactly why an unapproved account
+ * must not be able to read.)
  */
 import prisma from "@/lib/db";
 import { UserRole } from "@prisma/client";
 import { exchangeCode, fetchProfile, isAllowedAdminEmail } from "@/lib/linkedin-auth";
+import { getRegistrationMode } from "@/lib/registration";
+import type { LinkedInProfile } from "@/lib/linkedin-auth";
 
 export type ResolvedUser = {
   id: string;
@@ -27,16 +43,62 @@ export type ResolvedUser = {
   image: string | null;
 };
 
+/** Request-side provenance. Cloudflare populates these headers at the edge. */
+export type RequestContext = {
+  ip?: string | null;
+  country?: string | null;
+  userAgent?: string | null;
+};
+
 export type LoginOutcome =
-  | { ok: true; user: ResolvedUser }
+  | { ok: true; user: ResolvedUser; created?: boolean; pending?: boolean }
   | { ok: false; error: string };
+
+export function readRequestContext(req: Request): RequestContext {
+  const h = req.headers;
+  return {
+    ip: h.get("cf-connecting-ip") || h.get("x-forwarded-for")?.split(",")[0]?.trim() || null,
+    country: h.get("cf-ipcountry") || null,
+    userAgent: h.get("user-agent")?.slice(0, 500) || null,
+  };
+}
+
+function profileFields(profile: LinkedInProfile & Record<string, unknown>) {
+  return {
+    givenName: (profile.given_name as string | undefined) ?? null,
+    familyName: (profile.family_name as string | undefined) ?? null,
+    locale:
+      typeof profile.locale === "string"
+        ? profile.locale
+        : // LinkedIn sometimes returns locale as { country, language }.
+          profile.locale && typeof profile.locale === "object"
+          ? [
+              (profile.locale as { language?: string }).language,
+              (profile.locale as { country?: string }).country,
+            ]
+              .filter(Boolean)
+              .join("-") || null
+          : null,
+    emailVerified: profile.email_verified === true || profile.email_verified === "true",
+    profileJson: safeJson(profile),
+  };
+}
+
+function safeJson(v: unknown): string | null {
+  try {
+    return JSON.stringify(v).slice(0, 8000);
+  } catch {
+    return null;
+  }
+}
 
 export async function completeLinkedInLogin(
   code: string,
   redirectUri: string,
+  ctx: RequestContext = {},
 ): Promise<LoginOutcome> {
   const token = await exchangeCode(code, redirectUri);
-  const profile = await fetchProfile(token);
+  const profile = (await fetchProfile(token)) as LinkedInProfile & Record<string, unknown>;
 
   const email = (profile.email || "").toLowerCase().trim();
   if (!email) {
@@ -46,97 +108,170 @@ export async function completeLinkedInLogin(
     };
   }
 
-  // 1) Already linked, or invited under this email.
-  let user =
+  const fields = profileFields(profile);
+  const now = new Date();
+
+  // 1) Already linked, or already invited under this email.
+  const user =
     (await prisma.user.findUnique({ where: { linkedinSub: profile.sub } })) ??
     (await prisma.user.findUnique({ where: { email } }));
 
-  if (user && !user.isActive) {
-    return { ok: false, error: "Your access has been disabled. Contact the account admin." };
-  }
-
   if (user) {
-    // Keep the linkage and profile fresh on every sign-in.
+    if (user.pendingApproval) {
+      return {
+        ok: false,
+        error:
+          "Your account is waiting for an admin to approve it. You'll be able to sign in once it's approved.",
+      };
+    }
+    if (!user.isActive) {
+      return { ok: false, error: "Your access has been disabled. Contact the account admin." };
+    }
+
     const updated = await prisma.user.update({
       where: { id: user.id },
       data: {
         linkedinSub: profile.sub,
         name: user.name || profile.name || email,
         image: profile.picture ?? user.image,
+        ...fields,
+        lastLoginAt: now,
+        lastLoginIp: ctx.ip ?? user.lastLoginIp,
+        loginCount: { increment: 1 },
       },
     });
     return { ok: true, user: toResolved(updated) };
   }
 
-  // 2) Nobody matched. Only an allow-listed address may become an admin.
-  //
-  // The address is named in the message on purpose. Without it this rejection is
-  // undiagnosable: the email LinkedIn returns from OIDC is often NOT the address
-  // you assume the account uses, and the fix (invite it, or add it to the
-  // allow-list) depends entirely on knowing which address came back. Only the
-  // person who just attempted the sign-in sees it, so it leaks nothing.
-  if (!isAllowedAdminEmail(email)) {
-    return {
-      ok: false,
-      error: `${email} isn't invited yet. Ask the admin to add that exact address under Admin → Users — it is the email on the LinkedIn account, which may differ from the one you expect.`,
-    };
-  }
+  // 2) Nobody matched. An allow-listed address CLAIMS the unclaimed admin row.
+  if (isAllowedAdminEmail(email)) {
+    const unclaimed = await prisma.user.findFirst({
+      where: { role: UserRole.ADMIN, linkedinSub: null, isActive: true },
+      orderBy: { createdAt: "asc" },
+    });
 
-  // 3) CLAIM the existing unclaimed admin rather than creating a second one.
-  const unclaimed = await prisma.user.findFirst({
-    where: { role: UserRole.ADMIN, linkedinSub: null, isActive: true },
-    orderBy: { createdAt: "asc" },
-  });
+    if (unclaimed) {
+      const before = { id: unclaimed.id, email: unclaimed.email, name: unclaimed.name };
+      const claimed = await prisma.user.update({
+        where: { id: unclaimed.id },
+        data: {
+          email,
+          linkedinSub: profile.sub,
+          name: profile.name || unclaimed.name,
+          image: profile.picture ?? unclaimed.image,
+          ...fields,
+          signupSource: "linkedin-claim",
+          signupIp: ctx.ip ?? null,
+          signupCountry: ctx.country ?? null,
+          signupUserAgent: ctx.userAgent ?? null,
+          approvedAt: now,
+          lastLoginAt: now,
+          lastLoginIp: ctx.ip ?? null,
+          loginCount: { increment: 1 },
+        },
+      });
+      await audit(claimed.id, "USER_UPDATED", claimed.id, before, {
+        email: claimed.email,
+        name: claimed.name,
+        via: "linkedin-claim",
+      });
+      return { ok: true, user: toResolved(claimed) };
+    }
 
-  if (unclaimed) {
-    const before = { id: unclaimed.id, email: unclaimed.email, name: unclaimed.name };
-    const claimed = await prisma.user.update({
-      where: { id: unclaimed.id },
+    const admin = await prisma.user.create({
       data: {
+        name: profile.name || email,
         email,
         linkedinSub: profile.sub,
-        name: profile.name || unclaimed.name,
-        image: profile.picture ?? unclaimed.image,
+        image: profile.picture ?? null,
+        role: UserRole.ADMIN,
+        isActive: true,
+        ...fields,
+        signupSource: "linkedin-claim",
+        signupIp: ctx.ip ?? null,
+        signupCountry: ctx.country ?? null,
+        signupUserAgent: ctx.userAgent ?? null,
+        approvedAt: now,
+        lastLoginAt: now,
+        lastLoginIp: ctx.ip ?? null,
+        loginCount: 1,
       },
     });
-    await prisma.auditLog.create({
-      data: {
-        actorUserId: claimed.id,
-        actionType: "USER_UPDATED",
-        entityType: "User",
-        entityId: claimed.id,
-        beforeJson: JSON.stringify(before),
-        afterJson: JSON.stringify({
-          email: claimed.email,
-          name: claimed.name,
-          via: "linkedin-claim",
-        }),
-      },
+    await audit(admin.id, "USER_CREATED", admin.id, null, {
+      email,
+      role: "ADMIN",
+      via: "linkedin-provision",
     });
-    return { ok: true, user: toResolved(claimed) };
+    return { ok: true, user: toResolved(admin), created: true };
   }
 
-  // 4) No admin row to adopt — provision a fresh one.
+  // 3) Open self-registration. Lowest role, always. Usable now or pending,
+  //    depending on the registration mode.
+  const mode = await getRegistrationMode();
+  const pending = mode === "approval";
+
   const created = await prisma.user.create({
     data: {
       name: profile.name || email,
       email,
       linkedinSub: profile.sub,
       image: profile.picture ?? null,
-      role: UserRole.ADMIN,
-      isActive: true,
+      role: UserRole.READ_ONLY,
+      isActive: !pending,
+      pendingApproval: pending,
+      approvedAt: pending ? null : now,
+      ...fields,
+      signupSource: "linkedin-self",
+      signupIp: ctx.ip ?? null,
+      signupCountry: ctx.country ?? null,
+      signupUserAgent: ctx.userAgent ?? null,
+      lastLoginAt: now,
+      lastLoginIp: ctx.ip ?? null,
+      loginCount: 1,
     },
   });
-  await prisma.auditLog.create({
-    data: {
-      actorUserId: created.id,
-      actionType: "USER_CREATED",
-      entityType: "User",
-      entityId: created.id,
-      afterJson: JSON.stringify({ email, role: "ADMIN", via: "linkedin-provision" }),
-    },
+
+  await audit(created.id, "USER_CREATED", created.id, null, {
+    email,
+    name: created.name,
+    role: "READ_ONLY",
+    via: "linkedin-self-registration",
+    pendingApproval: pending,
+    country: ctx.country ?? null,
   });
-  return { ok: true, user: toResolved(created) };
+
+  if (pending) {
+    return {
+      ok: false,
+      error:
+        "Thanks — your account has been created and is waiting for an admin to approve it. You'll be able to sign in once it's approved.",
+    };
+  }
+
+  return { ok: true, user: toResolved(created), created: true };
+}
+
+async function audit(
+  actorUserId: string | null,
+  actionType: "USER_CREATED" | "USER_UPDATED",
+  entityId: string,
+  before: unknown,
+  after: unknown,
+) {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        actorUserId,
+        actionType,
+        entityType: "User",
+        entityId,
+        beforeJson: before === null ? null : safeJson(before),
+        afterJson: safeJson(after),
+      },
+    });
+  } catch {
+    // An audit write must never be the reason a sign-in fails.
+  }
 }
 
 function toResolved(u: {
