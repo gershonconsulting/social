@@ -5,9 +5,13 @@ import { appUrl, loginRedirectUri, LOGIN_SCOPES } from "@/lib/linkedin-auth";
 /**
  * GET /api/auth/linkedin/login
  *
- * Starts the "Sign In with LinkedIn" flow. Sets a random state cookie (CSRF)
- * and redirects to LinkedIn's OIDC authorization page. LinkedIn returns to
- * /api/auth/linkedin/login/callback.
+ * Starts the "Sign In with LinkedIn" flow.
+ *
+ * The LinkedIn app has ONE authorized redirect URL —
+ * /api/auth/linkedin/callback — so the sign-in flow returns through the same
+ * URL the "connect a client page" flow uses. The state carries `mode: "login"`
+ * so the callback knows which flow it is finishing, and a matching cookie
+ * covers CSRF.
  */
 export async function GET(_req: NextRequest) {
   const clientId = process.env.LINKEDIN_CLIENT_ID;
@@ -17,7 +21,9 @@ export async function GET(_req: NextRequest) {
     );
   }
 
-  const state = crypto.randomUUID();
+  const nonce = crypto.randomUUID();
+  const state = btoa(JSON.stringify({ mode: "login", nonce }));
+
   const authUrl = new URL("https://www.linkedin.com/oauth/v2/authorization");
   authUrl.searchParams.set("response_type", "code");
   authUrl.searchParams.set("client_id", clientId);
