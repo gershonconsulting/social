@@ -32,12 +32,17 @@ export async function GET(_req: NextRequest) {
   const users = await prisma.user.findMany({
     select: {
       id: true, name: true, email: true, role: true, isActive: true,
-      linkedinSub: true, image: true, createdAt: true,
+      linkedinSub: true, password: true, image: true, createdAt: true,
     },
     orderBy: [{ role: "asc" }, { name: "asc" }],
   });
-  // Expose whether a user can sign in with LinkedIn (linked) — not the sub itself.
-  const data = users.map(({ linkedinSub, ...u }) => ({ ...u, linkedinLinked: !!linkedinSub }));
+  // Expose whether a user can sign in with LinkedIn, and whether a password is
+  // still set — never the sub or the hash itself.
+  const data = users.map(({ linkedinSub, password, ...u }) => ({
+    ...u,
+    linkedinLinked: !!linkedinSub,
+    hasPassword: !!password,
+  }));
   return NextResponse.json({ success: true, data });
 }
 

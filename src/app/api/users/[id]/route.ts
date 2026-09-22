@@ -9,6 +9,10 @@ const patchSchema = z.object({
   role: z.nativeEnum(UserRole).optional(),
   isActive: z.boolean().optional(),
   name: z.string().min(1).max(200).optional(),
+  // Drop the password so the account is LinkedIn-only. Refused unless that
+  // account has already signed in with LinkedIn at least once, so this can
+  // never lock anybody out.
+  removePassword: z.literal(true).optional(),
 });
 
 function authErr(e: unknown): NextResponse | null {
@@ -50,9 +54,30 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     }
   }
 
+  const { removePassword, ...fields } = parsed.data;
+
+  if (removePassword) {
+    if (!target.linkedinSub) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "This account hasn't signed in with LinkedIn yet. Removing its password would lock it out.",
+        },
+        { status: 400 },
+      );
+    }
+    if (!target.password) {
+      return NextResponse.json(
+        { success: false, error: "This account already has no password." },
+        { status: 400 },
+      );
+    }
+  }
+
   const updated = await prisma.user.update({
     where: { id },
-    data: parsed.data,
+    data: removePassword ? { ...fields, password: null } : fields,
     select: { id: true, name: true, email: true, role: true, isActive: true },
   });
 
