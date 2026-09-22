@@ -69,10 +69,16 @@ export async function completeLinkedInLogin(
   }
 
   // 2) Nobody matched. Only an allow-listed address may become an admin.
+  //
+  // The address is named in the message on purpose. Without it this rejection is
+  // undiagnosable: the email LinkedIn returns from OIDC is often NOT the address
+  // you assume the account uses, and the fix (invite it, or add it to the
+  // allow-list) depends entirely on knowing which address came back. Only the
+  // person who just attempted the sign-in sees it, so it leaks nothing.
   if (!isAllowedAdminEmail(email)) {
     return {
       ok: false,
-      error: "This LinkedIn account isn't invited yet. Ask the admin to add you under Admin → Users.",
+      error: `${email} isn't invited yet. Ask the admin to add that exact address under Admin → Users — it is the email on the LinkedIn account, which may differ from the one you expect.`,
     };
   }
 
