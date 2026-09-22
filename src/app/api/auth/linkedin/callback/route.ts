@@ -1,7 +1,7 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { completeLinkedInLogin } from "@/lib/linkedin-login-flow";
+import { completeLinkedInLogin, readRequestContext } from "@/lib/linkedin-login-flow";
 import {
   connectRedirectUri,
   mintSessionToken,
@@ -25,7 +25,7 @@ async function finishSignIn(req: NextRequest, code: string, state: string): Prom
 
   let outcome;
   try {
-    outcome = await completeLinkedInLogin(code, connectRedirectUri());
+    outcome = await completeLinkedInLogin(code, connectRedirectUri(), readRequestContext(req));
   } catch (e) {
     const msg = e instanceof Error ? e.message : "LinkedIn sign-in failed";
     return NextResponse.redirect(`${base}/login?error=${encodeURIComponent(msg.slice(0, 160))}`);
