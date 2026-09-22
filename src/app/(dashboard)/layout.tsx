@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { Sidebar } from "@/components/layout/sidebar";
 import { ViewFiltersProvider } from "@/lib/view-filters";
 import { ExtensionSeenReporter } from "@/components/layout/extension-seen-reporter";
+import { ensureTenancy } from "@/lib/tenancy";
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
 const BUILD_DATE = process.env.NEXT_PUBLIC_BUILD_DATE || new Date().toISOString();
@@ -33,6 +34,11 @@ export default async function DashboardLayout({
   if (!session?.user) {
     redirect("/login");
   }
+
+  // One-time, idempotent: create the primary organization and adopt every
+  // pre-tenancy row into it. Free after the first successful run, and it
+  // swallows its own errors so it can never take the dashboard down.
+  await ensureTenancy();
 
   const shortVersion = APP_VERSION.length > 8 ? APP_VERSION.slice(0, 7) : APP_VERSION;
   const buildDate = formatBuildDate(BUILD_DATE);
