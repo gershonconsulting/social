@@ -115,6 +115,62 @@ enum AuditAction {
   USER_UPDATED
 }
 
+// ─── Organization (tenant) ─────────────────────────────────────────────────
+//
+// v4.0.0 — this app became multi-TENANT. Every signup gets its own workspace:
+// its own clients, partners, competition and internal accounts, and none of
+// anybody else's. Gershon Consulting is simply the first tenant (isPrimary),
+// and every row that existed before this change was adopted into it.
+//
+// Scoping is NOT enforced by hand in each query — see src/lib/tenancy.ts. One
+// forgotten `where` is a cross-tenant leak, so the filter is applied centrally.
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  // The original Gershon Consulting workspace. Exactly one row has this set;
+  // it is the org that pre-tenancy data was migrated into.
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users               User[]
+  clients             Client[]
+  platformConnections PlatformConnection[]
+  postingSchedules    PostingSchedule[]
+  socialPosts         SocialPost[]
+  dailyCompliance     DailyCompliance[]
+  followerSnapshots   FollowerSnapshot[]
+  contentAnalyses     ContentAnalysis[]
+  postPrompts         PostPrompt[]
+  syncJobs            SyncJob[]
+  auditLogs           AuditLog[]
+  orgSettings         OrgSetting[]
+
+  @@index([isPrimary])
+  @@map("organizations")
+}
+
+// Per-tenant settings. The global `Setting` table stays for platform-level
+// values (the registration mode); anything holding a credential — Streak key,
+// AI keys, Phantombuster key — belongs here, because a new tenant must not be
+// able to read, or spend against, another tenant's keys.
+
+model OrgSetting {
+  id             String   @id @default(cuid())
+  organizationId String
+  key            String
+  value          String   @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, key])
+  @@map("org_settings")
+}
+
 // ─── User ─────────────────────────────────────────────────────────────────────
 
 model User {
@@ -159,37 +215,44 @@ model User {
   lastLoginIp String?
   loginCount  Int       @default(0)
 
+  // Which workspace this person belongs to. Nullable only so the column could
+  // be added to a live table; every row is adopted by the backfill in
+  // src/lib/tenancy.ts, and a signup always creates or joins one.
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
   auditLogs AuditLog[]
   syncJobs  SyncJob[]
 
   @@index([pendingApproval])
+  @@index([organizationId])
   @@map("users")
 }
 
-// ─── Client ───────────────────────────────────────────────────────────────────
+// ─── Client ──────────────────────────────────────────────────────────────────
 
 model Client {
-  id                  String       @id @default(cuid())
-  slug                String       @unique
-  name                String
-  timezone            String       @default("America/New_York")
-  status              ClientStatus @default(DRAFT)
-  clientType          ClientType   @default(CLIENT)
-  campaignStartDate   DateTime?
-  reportingStartDate  DateTime?
-  internalOwner       String?
-  website             String?
-  logoUrl             String?
-  industry            String?
-  billingStatus       String?
-  contractStatus      String?
-  notes               String?
-  archivedAt          DateTime?
-  archiveReason       String?
-  streakBoxKey        String?      @unique
-  streakStageKey      String?
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  id                 String       @id @default(cuid())
+  slug               String       @unique
+  name               String
+  timezone           String       @default("America/New_York")
+  status             ClientStatus @default(DRAFT)
+  clientType         ClientType   @default(CLIENT)
+  campaignStartDate  DateTime?
+  reportingStartDate DateTime?
+  internalOwner      String?
+  website            String?
+  logoUrl            String?
+  industry           String?
+  billingStatus      String?
+  contractStatus     String?
+  notes              String?
+  archivedAt         DateTime?
+  archiveReason      String?
+  streakBoxKey       String?      @unique
+  streakStageKey     String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   platformConnections PlatformConnection[]
   postingSchedules    PostingSchedule[]
@@ -200,38 +263,45 @@ model Client {
   contentAnalyses     ContentAnalysis[]
   postPrompts         PostPrompt[]
 
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@map("clients")
 }
 
 // ─── PlatformConnection ───────────────────────────────────────────────────────
 
 model PlatformConnection {
-  id                    String           @id @default(cuid())
-  clientId              String
-  platform              Platform
-  externalAccountId     String?
-  externalAccountName   String?
-  externalAccountUrl    String?
-  isMandatory           Boolean          @default(true)
-  isEnabled             Boolean          @default(true)
-  connectionStatus      ConnectionStatus @default(PENDING)
-  tokenReference        String?
-  tokenExpiresAt        DateTime?
-  enforcementStartDate  DateTime?
-  enforcementEndDate    DateTime?
-  notes                 String?
-  lastSyncAt            DateTime?
-  lastSyncError         String?
-  createdAt             DateTime         @default(now())
-  updatedAt             DateTime         @updatedAt
+  id                   String           @id @default(cuid())
+  clientId             String
+  platform             Platform
+  externalAccountId    String?
+  externalAccountName  String?
+  externalAccountUrl   String?
+  isMandatory          Boolean          @default(true)
+  isEnabled            Boolean          @default(true)
+  connectionStatus     ConnectionStatus @default(PENDING)
+  tokenReference       String?
+  tokenExpiresAt       DateTime?
+  enforcementStartDate DateTime?
+  enforcementEndDate   DateTime?
+  notes                String?
+  lastSyncAt           DateTime?
+  lastSyncError        String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
 
-  client            Client            @relation(fields: [clientId], references: [id])
+  client            Client             @relation(fields: [clientId], references: [id])
   postingSchedules  PostingSchedule[]
   socialPosts       SocialPost[]
   dailyCompliance   DailyCompliance[]
   followerSnapshots FollowerSnapshot[]
+  organizationId    String?
+  organization      Organization?      @relation(fields: [organizationId], references: [id])
 
   @@unique([clientId, platform])
+  @@index([organizationId])
   @@map("platform_connections")
 }
 
@@ -253,6 +323,10 @@ model PostingSchedule {
   client             Client             @relation(fields: [clientId], references: [id])
   platformConnection PlatformConnection @relation(fields: [platformConnectionId], references: [id])
 
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@map("posting_schedules")
 }
 
@@ -275,7 +349,7 @@ model SocialPost {
   likeCount            Int      @default(0)
   commentCount         Int      @default(0)
   shareCount           Int      @default(0)
-  viewCount       Int      @default(0)
+  viewCount            Int      @default(0)
   rawPayloadJson       String?  @db.Text
   importedAt           DateTime @default(now())
   createdAt            DateTime @default(now())
@@ -283,9 +357,12 @@ model SocialPost {
 
   client             Client             @relation(fields: [clientId], references: [id])
   platformConnection PlatformConnection @relation(fields: [platformConnectionId], references: [id])
+  organizationId     String?
+  organization       Organization?      @relation(fields: [organizationId], references: [id])
 
   @@unique([clientId, platform, externalPostId])
   @@index([clientId, platform, publishedDateLocal])
+  @@index([organizationId])
   @@map("social_posts")
 }
 
@@ -311,10 +388,13 @@ model DailyCompliance {
 
   client             Client             @relation(fields: [clientId], references: [id])
   platformConnection PlatformConnection @relation(fields: [platformConnectionId], references: [id])
+  organizationId     String?
+  organization       Organization?      @relation(fields: [organizationId], references: [id])
 
   @@unique([clientId, platformConnectionId, dateLocal])
   @@index([clientId, dateLocal])
   @@index([platform, dateLocal])
+  @@index([organizationId])
   @@map("daily_compliance")
 }
 
@@ -333,9 +413,12 @@ model FollowerSnapshot {
 
   client             Client             @relation(fields: [clientId], references: [id])
   platformConnection PlatformConnection @relation(fields: [platformConnectionId], references: [id])
+  organizationId     String?
+  organization       Organization?      @relation(fields: [organizationId], references: [id])
 
   @@unique([clientId, platformConnectionId, snapshotDateLocal])
   @@index([clientId, platform])
+  @@index([organizationId])
   @@map("follower_snapshots")
 }
 
@@ -361,10 +444,13 @@ model ContentAnalysis {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  client Client @relation(fields: [clientId], references: [id])
+  client         Client        @relation(fields: [clientId], references: [id])
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
 
   @@unique([clientId, windowDays])
   @@index([clientId, generatedAt])
+  @@index([organizationId])
   @@map("content_analyses")
 }
 
@@ -392,38 +478,44 @@ model PostPrompt {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  client Client @relation(fields: [clientId], references: [id])
+  client         Client        @relation(fields: [clientId], references: [id])
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
 
   @@unique([clientId, windowDays])
   @@index([clientId, generatedAt])
+  @@index([organizationId])
   @@map("post_prompts")
 }
 
 // ─── SyncJob ─────────────────────────────────────────────────────────────────
 
 model SyncJob {
-  id              String        @id @default(cuid())
-  jobType         SyncJobType
-  scopeType       SyncScopeType @default(ALL)
-  scopeId         String?
-  clientId        String?
-  triggeredById   String?
-  startedAt       DateTime      @default(now())
-  finishedAt      DateTime?
-  status          SyncStatus    @default(PENDING)
-  itemsProcessed  Int           @default(0)
-  itemsSucceeded  Int           @default(0)
-  itemsFailed     Int           @default(0)
-  errorLogJson    String?       @db.Text
-  resultsJson     String?       @db.Text
-  notes           String?
-  createdAt       DateTime      @default(now())
+  id             String        @id @default(cuid())
+  jobType        SyncJobType
+  scopeType      SyncScopeType @default(ALL)
+  scopeId        String?
+  clientId       String?
+  triggeredById  String?
+  startedAt      DateTime      @default(now())
+  finishedAt     DateTime?
+  status         SyncStatus    @default(PENDING)
+  itemsProcessed Int           @default(0)
+  itemsSucceeded Int           @default(0)
+  itemsFailed    Int           @default(0)
+  errorLogJson   String?       @db.Text
+  resultsJson    String?       @db.Text
+  notes          String?
+  createdAt      DateTime      @default(now())
 
-  client      Client? @relation(fields: [clientId], references: [id])
-  triggeredBy User?   @relation(fields: [triggeredById], references: [id])
+  client         Client?       @relation(fields: [clientId], references: [id])
+  triggeredBy    User?         @relation(fields: [triggeredById], references: [id])
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
 
   @@index([clientId, status])
   @@index([jobType, startedAt])
+  @@index([organizationId])
   @@map("sync_jobs")
 }
 
@@ -440,20 +532,23 @@ model Setting {
 }
 
 model AuditLog {
-  id           String      @id @default(cuid())
-  actorUserId  String?
-  actionType   AuditAction
-  entityType   String
-  entityId     String
-  beforeJson   String?     @db.Text
-  afterJson    String?     @db.Text
-  ipAddress    String?
-  createdAt    DateTime    @default(now())
+  id          String      @id @default(cuid())
+  actorUserId String?
+  actionType  AuditAction
+  entityType  String
+  entityId    String
+  beforeJson  String?     @db.Text
+  afterJson   String?     @db.Text
+  ipAddress   String?
+  createdAt   DateTime    @default(now())
 
-  user User? @relation(fields: [actorUserId], references: [id])
+  user           User?         @relation(fields: [actorUserId], references: [id])
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
 
   @@index([entityType, entityId])
   @@index([actorUserId])
   @@index([createdAt])
+  @@index([organizationId])
   @@map("audit_logs")
 }
