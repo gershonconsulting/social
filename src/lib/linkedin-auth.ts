@@ -115,9 +115,12 @@ export async function exchangeCode(code: string, redirectUri?: string): Promise<
 
 /** Fetch the OIDC userinfo (sub, email, name, picture). */
 export async function fetchProfile(accessToken: string): Promise<LinkedInProfile> {
+  // NOTE: no `cache` option here. This runs on the Cloudflare Workers runtime,
+  // which rejects it outright with "The 'cache' field on 'RequestInitializerDict'
+  // is not implemented." — that error surfaced as a failed sign-in. The response
+  // is uncacheable anyway (bearer-token userinfo), so nothing is lost.
   const res = await fetch("https://api.linkedin.com/v2/userinfo", {
     headers: { Authorization: `Bearer ${accessToken}` },
-    cache: "no-store",
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
