@@ -1,10 +1,10 @@
 {
   "name": "social-gershon-crm",
-  "version": "4.6.0",
+  "version": "4.7.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/build-extension.mjs && next build",
     "start": "next start",
     "lint": "next lint",
     "db:generate": "prisma generate",
