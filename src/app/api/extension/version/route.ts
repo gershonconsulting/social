@@ -16,6 +16,7 @@ import { EXTENSION_LATEST } from "@/lib/extension-version";
 const LATEST = EXTENSION_LATEST;
 
 const RELEASE_NOTES: Record<string, string> = {
+  "0.11.0": "Workspace token. One extension now serves every workspace: paste the token from Settings → This computer and what this browser collects lands in that workspace and no other. Without a token it keeps feeding the original workspace, so nothing breaks before you set it — but that fallback closes for a workspace as soon as it sees its first tokened request.",
   "0.10.7": "Fix: posts are now scraped from the real profile pages — linkedin.com/company/<vanity>/posts/ and x.com/<handle> — by reading the rendered DOM. Drops the deprecated voyager + v1.1 user_timeline endpoints that started failing in 2026 (LinkedIn rejected our csrf because JSESSIONID is HttpOnly; X v1.1 user_timeline is locked behind the paid API plan). The Sync via extension popover now also surfaces the per-platform error instead of just \"N failed\".",
   "0.10.6": "Auto-reauth on LinkedIn — when your LinkedIn session has expired the extension now drives the login wall itself: clicks the saved-account button, lets Chrome's password autofill populate the password, and submits the form before resuming the scrape.",
   "0.10.5": "Smarter sync: only opens the LinkedIn / X tabs the targeted client actually has. A Twitter-only client no longer triggers a LinkedIn cookie capture attempt.",
