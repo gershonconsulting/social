@@ -41,6 +41,7 @@ export type ResolvedUser = {
   email: string;
   role: UserRole;
   image: string | null;
+  organizationId: string | null;
 };
 
 /** Request-side provenance. Cloudflare populates these headers at the edge. */
@@ -280,6 +281,14 @@ function toResolved(u: {
   email: string;
   role: UserRole;
   image: string | null;
+  organizationId: string | null;
 }): ResolvedUser {
-  return { id: u.id, name: u.name, email: u.email, role: u.role, image: u.image };
+  return {
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    image: u.image,
+    organizationId: u.organizationId,
+  };
 }
