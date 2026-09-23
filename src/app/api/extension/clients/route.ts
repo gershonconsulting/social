@@ -1,10 +1,16 @@
 export const runtime = 'edge';
-import { NextResponse } from "next/server";
-import prisma from "@/lib/db";
+import { NextRequest, NextResponse } from "next/server";
 import { Platform } from "@prisma/client";
+import { dbForOrg } from "@/lib/scoped-db";
+import { resolveExtensionCaller } from "@/lib/extension-auth";
 
 /**
  * GET /api/extension/clients
+ *
+ * The list is scoped to the workspace the extension's token belongs to — one
+ * extension, many customers, each install seeing only its own client book.
+ * See extension-auth.ts, including why a request with NO token still resolves
+ * to the primary workspace for now.
  *
  * Returns the list of ACTIVE clients with their LinkedIn / X handles + the
  * matching PlatformConnection IDs. The GershonAI Chrome extension calls this
@@ -35,9 +41,18 @@ const priorityRank = (t: string) => {
   return i === -1 ? SCRAPE_PRIORITY.length : i;
 };
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const clients = await prisma.client.findMany({
+    const caller = await resolveExtensionCaller(req);
+    if (!caller.ok) {
+      return NextResponse.json(
+        { success: false, error: "Unrecognised extension token" },
+        { status: 401 },
+      );
+    }
+    const db = dbForOrg(caller.orgId);
+
+    const clients = await db.client.findMany({
       where: { status: "ACTIVE" },
       orderBy: { name: "asc" },
       include: {

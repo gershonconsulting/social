@@ -1,12 +1,22 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/db";
+import prisma from "@/lib/db-raw";
 import { Platform } from "@prisma/client";
 import { recordIngestRun } from "@/lib/extension/heartbeat";
 import { recordExtSeen } from "@/lib/extension/seen";
+import { dbForOrg } from "@/lib/scoped-db";
+import { resolveExtensionCaller } from "@/lib/extension-auth";
 
 /**
  * POST /api/extension/ingest
+ *
+ * WHICH WORKSPACE. The extension's token says whose data this is (see
+ * extension-auth.ts). Every clientId in the batch is checked against that
+ * workspace before a single post is written — one indexed read per client,
+ * not per post: SocialPost rows hang off a Client, so verifying the client is
+ * what establishes the tenant. After that check the writes use the raw client
+ * deliberately, because routing a few hundred upserts through the scoped
+ * client would add a few hundred redundant ownership lookups.
  *
  * Receives a batch of posts scraped by the GershonAI Chrome extension from
  * inside the user's logged-in linkedin.com / x.com tabs. Each result is
@@ -69,10 +79,36 @@ interface IncomingBody {
 
 export async function POST(req: NextRequest) {
   try {
+    const caller = await resolveExtensionCaller(req);
+    if (!caller.ok) {
+      return NextResponse.json(
+        { success: false, error: "Unrecognised extension token" },
+        { status: 401 },
+      );
+    }
+    const db = dbForOrg(caller.orgId);
+
     const body = (await req.json().catch(() => null)) as IncomingBody | null;
     if (!body?.results || !Array.isArray(body.results)) {
       return NextResponse.json({ success: false, error: "results[] required" }, { status: 400 });
     }
+
+    /** Does this client, and this connection on it, belong to the workspace
+     *  the token named? Cached per batch — a batch names each client once per
+     *  platform, and the answer cannot change mid-request. */
+    const ownership = new Map<string, boolean>();
+    const ownsConnection = async (clientId: string, connectionId: string) => {
+      const key = clientId + "/" + connectionId;
+      const hit = ownership.get(key);
+      if (hit !== undefined) return hit;
+      const row = await db.platformConnection.findFirst({
+        where: { id: connectionId, clientId },
+        select: { id: true },
+      });
+      const owned = !!row;
+      ownership.set(key, owned);
+      return owned;
+    };
 
     const perClient: Array<{
       clientId: string;
@@ -104,6 +140,20 @@ export async function POST(req: NextRequest) {
         continue;
       }
       const platform = platStr === "LINKEDIN" ? Platform.LINKEDIN : Platform.TWITTER;
+
+      // Belongs to somebody else, or doesn't exist. Same answer either way —
+      // an extension does not get to learn which.
+      if (!(await ownsConnection(r.clientId, r.connectionId))) {
+        failed++;
+        perClient.push({
+          clientId: r.clientId,
+          platform: platStr,
+          attempted: 0,
+          upserted: 0,
+          error: "client not in this workspace",
+        });
+        continue;
+      }
 
       if (r.error) {
         failed++;
@@ -141,6 +191,11 @@ export async function POST(req: NextRequest) {
             },
           },
           create: {
+            // Stamped by hand: these writes take the raw client (see the note
+            // at the top), so nothing else would put the tenant on the row —
+            // and a post with no organizationId is invisible to the workspace
+            // that just collected it.
+            organizationId: caller.orgId,
             clientId: r.clientId,
             platformConnectionId: r.connectionId,
             platform,
