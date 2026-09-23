@@ -7,12 +7,10 @@ import { Platform } from "@prisma/client";
 import { PlatformAdapter } from "./base";
 import { LinkedInAdapter } from "./linkedin";
 import { TwitterAdapter } from "./twitter";
-import { GoogleBusinessAdapter } from "./google-business";
 
 const adapters: Partial<Record<Platform, PlatformAdapter>> = {
   [Platform.LINKEDIN]: new LinkedInAdapter(),
   [Platform.TWITTER]: new TwitterAdapter(),
-  [Platform.GOOGLE_BUSINESS]: new GoogleBusinessAdapter(),
 };
 
 /**

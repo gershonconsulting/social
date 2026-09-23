@@ -6,10 +6,10 @@ import prisma from "@/lib/db";
  * GET /api/settings/connections
  *
  * Returns the data the Settings page needs:
- *  - All CONNECTED platform connections (LinkedIn / Twitter / Google Business)
- *    grouped by platform, with which client they belong to.
+ *  - All CONNECTED platform connections (LinkedIn / Twitter) grouped by
+ *    platform, with which client they belong to.
  *  - Server-only "is OAuth configured" flags so the page can show whether
- *    LINKEDIN_CLIENT_ID / GOOGLE_CLIENT_ID env vars are set.
+ *    LINKEDIN_CLIENT_ID is set.
  *
  * Wraps in try/catch so failures come back as JSON instead of a Cloudflare
  * HTML error page (avoids the 1102 worker-error UX we were hitting on SSR).
@@ -18,7 +18,7 @@ export async function GET() {
   try {
     const connections = await prisma.platformConnection.findMany({
       where: {
-        platform: { in: ["LINKEDIN", "TWITTER", "GOOGLE_BUSINESS"] },
+        platform: { in: ["LINKEDIN", "TWITTER"] },
         connectionStatus: "CONNECTED",
       },
       select: {
@@ -64,8 +64,8 @@ export async function GET() {
         config: {
           linkedinConfigured: !!process.env.LINKEDIN_CLIENT_ID,
           linkedinSecretConfigured: !!process.env.LINKEDIN_CLIENT_SECRET,
-          googleConfigured: !!process.env.GOOGLE_CLIENT_ID,
-          googleSecretConfigured: !!process.env.GOOGLE_CLIENT_SECRET,
+          googleConfigured: false,
+          googleSecretConfigured: false,
           appUrl: process.env.NEXT_PUBLIC_APP_URL || "https://social.gershoncrm.com",
         },
       },

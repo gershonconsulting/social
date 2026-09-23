@@ -29,7 +29,7 @@ export async function GET() {
         // Don't include unsupported platforms in the health summary — they're
         // legacy rows that will be cleaned up; counting them as 'broken'
         // pollutes the dashboard banner.
-        platform: { in: ["LINKEDIN", "TWITTER", "GOOGLE_BUSINESS"] },
+        platform: { in: ["LINKEDIN", "TWITTER"] },
       },
       select: {
         id: true,

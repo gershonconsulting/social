@@ -18,16 +18,16 @@ import { ClientStatus, Platform } from "@prisma/client";
  * Output:
  *   { success: true, data: {
  *       days: ["2026-05-19", "2026-05-18", ...],
- *       platforms: ["LINKEDIN", "TWITTER", "GOOGLE_BUSINESS"],
+ *       platforms: ["LINKEDIN", "TWITTER"],
  *       clients: [{
  *         id, name, slug, clientType,
  *         // per-day per-platform got-data flag
- *         status: { "2026-05-19": { LINKEDIN: true, TWITTER: false, GOOGLE_BUSINESS: false }, ... }
+ *         status: { "2026-05-19": { LINKEDIN: true, TWITTER: false }, ... }
  *       }],
  *   } }
  */
 
-const PLATFORMS: Platform[] = [Platform.LINKEDIN, Platform.TWITTER, Platform.GOOGLE_BUSINESS];
+const PLATFORMS: Platform[] = [Platform.LINKEDIN, Platform.TWITTER];
 
 export async function GET(req: NextRequest) {
   try {

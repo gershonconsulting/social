@@ -9,7 +9,7 @@ import { ConnectionStatus, Platform } from "@prisma/client";
  * Returns everything currently or recently going wrong on the platform,
  * aggregated from multiple sources so the user has one place to look.
  *
- *   activeIssues: every platformConnection (LinkedIn/Twitter/GMB) whose
+ *   activeIssues: every platformConnection (LinkedIn/Twitter) whose
  *     lastSyncError is non-null OR connectionStatus is not CONNECTED.
  *     Includes client name, last sync time, and the recommended fix.
  *
@@ -19,7 +19,7 @@ import { ConnectionStatus, Platform } from "@prisma/client";
  */
 export async function GET() {
   try {
-    const SUPPORTED: Platform[] = [Platform.LINKEDIN, Platform.TWITTER, Platform.GOOGLE_BUSINESS];
+    const SUPPORTED: Platform[] = [Platform.LINKEDIN, Platform.TWITTER];
 
     // 1. Active connection issues
     const conns = await prisma.platformConnection.findMany({
@@ -43,7 +43,6 @@ export async function GET() {
         if (/expired|401|65601/i.test(err)) recommendedFix = "Reconnect in /settings (token expired)";
         else if (/403|permission|MARKETING|insufficient/i.test(err)) recommendedFix = "App may need Community Management API approval, or you're not an admin of this org";
         else if (/no\s+x.*user\s+id|no\s+account\s+id/i.test(err)) recommendedFix = "Twitter cookies or @handle missing — capture via /settings bookmarklet";
-        else if (/no.*location.*id|discover/i.test(err)) recommendedFix = "Google Business location discovery failing (worker timeout)";
         else if (/no.*token|no.*session/i.test(err)) recommendedFix = "No credentials on file — reconnect in /settings";
         else if (c.connectionStatus === ConnectionStatus.PENDING) recommendedFix = "Never authorized — reconnect in /settings";
 
