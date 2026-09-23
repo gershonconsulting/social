@@ -19,9 +19,14 @@
  *
  * Enforcement of the scope itself is NOT here and is NOT per-query by hand:
  * 229 call sites means one forgotten `where` is a cross-tenant leak. That
- * filter is applied centrally.
+ * filter is applied centrally — see scoped-db.ts, and db.ts which hands it out.
+ *
+ * Which is exactly why this file imports the RAW client. Its job is to find
+ * rows belonging to no organization at all; a scoped client, by construction,
+ * cannot see those, and its updateMany would rewrite `organizationId: null`
+ * into `organizationId: <the current org>` and quietly match nothing.
  */
-import prisma from "@/lib/db";
+import prisma from "@/lib/db-raw";
 
 const BACKFILL_KEY = "tenancy_backfill";
 const BACKFILL_VERSION = "1";

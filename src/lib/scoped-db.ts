@@ -9,8 +9,8 @@
  *
  * So the filter is applied in ONE place: a Prisma client extension that
  * rewrites every query against a tenant-scoped model before it reaches the
- * database. Route code calls `await scopedDb()` and then writes ordinary
- * Prisma, unaware that anything is happening.
+ * database. Route code writes ordinary Prisma against "@/lib/db", unaware that
+ * anything is happening — db.ts picks the scoped client automatically.
  *
  * What gets rewritten, per operation:
  *   reads      — organizationId is merged into `where`.
@@ -31,12 +31,19 @@
  * auth layer before any org is known), Organization itself, and the global
  * Setting table.
  *
- * Routes with no signed-in user — the Chrome extension ingest endpoint and the
- * cron jobs — must NOT use this. They have no session to scope by, so they keep
- * using the raw client until they are given their own tenant routing.
+ * NOT scoped, and a known gap: $queryRaw. Raw SQL goes straight to the
+ * database without passing through the extension, so every raw query needs its
+ * own organizationId predicate. Today the raw queries live in the daily report
+ * and the diagnostics page, both of which are whole-deployment views.
+ *
+ * WHY THE SESSION IS READ HERE rather than imported from "@/lib/auth": auth.ts
+ * re-exports authOptions, which pulls in the NextAuth options module, which
+ * imports the database client — importing it from here would close a cycle
+ * through db.ts. The token read below is the same nine lines, standing alone.
  */
-import prisma from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import prisma from "@/lib/db-raw";
+import { getToken } from "next-auth/jwt";
+import { cookies } from "next/headers";
 
 /** Models that carry organizationId and must never cross tenants. */
 const SCOPED_MODELS = new Set([
@@ -67,23 +74,101 @@ const GUARDED_WRITE_OPS = new Set(["update", "delete", "upsert"]);
 const BULK_WRITE_OPS = new Set(["updateMany", "deleteMany"]);
 
 /**
- * The organization the signed-in user belongs to.
+ * Who, if anyone, is making this request.
  *
- * Reads it from the session token first. Sessions minted before tenancy shipped
- * do not carry it, so there is a fallback lookup by user id — one indexed read,
- * and it disappears on their next sign-in.
+ * `signedIn: false` is not an error — it is how cron jobs, the Chrome
+ * extension endpoints and the sign-in callbacks all look. They have no tenant
+ * to be scoped to and run against the raw client.
+ *
+ * `signedIn: true, orgId: null` IS a problem: somebody is authenticated but
+ * belongs to no workspace. That must never quietly fall back to an unscoped
+ * query, so db.ts throws on it.
  */
-export async function getCurrentOrgId(): Promise<string | null> {
-  const session = await getSession();
-  const user = session?.user as { id?: string; organizationId?: string } | undefined;
-  if (!user?.id) return null;
-  if (user.organizationId) return user.organizationId;
+export type OrgResolution = { signedIn: boolean; orgId: string | null };
 
+/**
+ * Resolution cache, keyed by the session cookie itself.
+ *
+ * Every single query resolves the caller, and the NextAuth token is encrypted,
+ * so without this a page that runs fifteen queries pays for fifteen JWE
+ * decrypts. Keying on the cookie value — the credential itself — is what makes
+ * the cache safe: two requests share an entry only if they present the exact
+ * same session. The TTL keeps a revoked or re-minted session from lingering,
+ * and the map is bounded because a Workers isolate is not ours to fill up.
+ */
+const resolutionCache = new Map<string, { value: OrgResolution; at: number }>();
+const RESOLUTION_TTL_MS = 10_000;
+const RESOLUTION_MAX = 64;
+
+function cacheGet(key: string): OrgResolution | null {
+  const hit = resolutionCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > RESOLUTION_TTL_MS) {
+    resolutionCache.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+function cacheSet(key: string, value: OrgResolution): OrgResolution {
+  if (resolutionCache.size >= RESOLUTION_MAX) {
+    const oldest = resolutionCache.keys().next().value;
+    if (oldest !== undefined) resolutionCache.delete(oldest);
+  }
+  resolutionCache.set(key, { value, at: Date.now() });
+  return value;
+}
+
+export async function resolveOrg(): Promise<OrgResolution> {
+  let cookieHeader = "";
+  let token: Record<string, unknown> | null = null;
+
+  try {
+    const store = await cookies();
+    const all = store.getAll();
+    // Only the session cookie identifies the caller; the rest is noise that
+    // would fragment the cache.
+    cookieHeader = all
+      .filter((c) => c.name.includes("next-auth.session-token"))
+      .map((c) => `${c.name}=${c.value}`)
+      .join("; ");
+
+    if (!cookieHeader) return { signedIn: false, orgId: null };
+
+    const cached = cacheGet(cookieHeader);
+    if (cached) return cached;
+
+    token = (await getToken({
+      req: {
+        headers: { cookie: all.map((c) => `${c.name}=${c.value}`).join("; ") },
+        cookies: Object.fromEntries(all.map((c) => [c.name, c.value])),
+      } as Parameters<typeof getToken>[0]["req"],
+      secret: process.env.NEXTAUTH_SECRET as string,
+    })) as Record<string, unknown> | null;
+  } catch {
+    // No request context at all (a build-time render, the standalone job
+    // runner). Same shape as an anonymous caller.
+    return { signedIn: false, orgId: null };
+  }
+
+  const userId = token?.id as string | undefined;
+  if (!token || !userId) return cacheSet(cookieHeader, { signedIn: false, orgId: null });
+
+  const fromToken = token.organizationId as string | undefined;
+  if (fromToken) return cacheSet(cookieHeader, { signedIn: true, orgId: fromToken });
+
+  // Sessions minted before v4.2.0 do not carry the org. One indexed read, and
+  // it disappears the next time this person signs in.
   const row = await prisma.user.findUnique({
-    where: { id: user.id },
+    where: { id: userId },
     select: { organizationId: true },
   });
-  return row?.organizationId ?? null;
+  return cacheSet(cookieHeader, { signedIn: true, orgId: row?.organizationId ?? null });
+}
+
+/** The organization the signed-in user belongs to, or null. */
+export async function getCurrentOrgId(): Promise<string | null> {
+  return (await resolveOrg()).orgId;
 }
 
 function mergeWhere(args: Record<string, unknown>, orgId: string): Record<string, unknown> {
@@ -99,19 +184,28 @@ function mergeWhere(args: Record<string, unknown>, orgId: string): Record<string
  * unscoped query is never the safe fallback.
  */
 export async function scopedDb() {
-  const orgId = await getCurrentOrgId();
-  if (orgId === null) {
-    const session = await getSession();
-    throw new Error(session?.user ? "NO_ORGANIZATION" : "UNAUTHORIZED");
-  }
+  const { signedIn, orgId } = await resolveOrg();
+  if (!signedIn) throw new Error("UNAUTHORIZED");
+  if (!orgId) throw new Error("NO_ORGANIZATION");
   return dbForOrg(orgId);
 }
+
+/** One extended client per organization per isolate. $extends is not free. */
+const clientsByOrg = new Map<string, ReturnType<typeof buildScoped>>();
 
 /**
  * The same scoping, for a known organization id. Used by anything that resolves
  * its tenant some other way than a session — a per-org cron pass, say.
  */
 export function dbForOrg(orgId: string) {
+  const cached = clientsByOrg.get(orgId);
+  if (cached) return cached;
+  const built = buildScoped(orgId);
+  clientsByOrg.set(orgId, built);
+  return built;
+}
+
+function buildScoped(orgId: string) {
   return prisma.$extends({
     query: {
       $allModels: {
@@ -130,16 +224,15 @@ export function dbForOrg(orgId: string) {
 
           // findUnique cannot carry a scope, so read it as findFirst instead.
           if (UNIQUE_READ_OPS.has(operation)) {
-            const scoped = mergeWhere(a, orgId);
-            const rows = await (
+            const row = await (
               prisma[toDelegate(model)] as unknown as {
                 findFirst: (x: unknown) => Promise<unknown>;
               }
-            ).findFirst(scoped);
-            if (!rows && operation === "findUniqueOrThrow") {
+            ).findFirst(mergeWhere(a, orgId));
+            if (!row && operation === "findUniqueOrThrow") {
               throw new Error(`No ${model} found`);
             }
-            return rows;
+            return row;
           }
 
           if (operation === "create") {
@@ -158,28 +251,33 @@ export function dbForOrg(orgId: string) {
           }
 
           if (GUARDED_WRITE_OPS.has(operation)) {
-            // Prisma demands a unique `where` here, so the scope can't be
-            // merged in. Check ownership first and refuse otherwise.
+            // Prisma demands a UNIQUE `where` here, so the scope cannot be
+            // merged into it: the query would match another tenant's row by id
+            // or by a unique key and happily write to it. So look the row up
+            // first, unscoped, and decide.
             const where = (a.where ?? {}) as Record<string, unknown>;
-            const existing = await (
+            const existing = (await (
               prisma[toDelegate(model)] as unknown as {
                 findFirst: (x: unknown) => Promise<unknown>;
               }
-            ).findFirst({ where: { ...where, organizationId: orgId }, select: { id: true } });
+            ).findFirst({ where, select: { organizationId: true } })) as
+              | { organizationId: string | null }
+              | null;
 
-            if (!existing) {
-              if (operation === "upsert") {
-                // Nothing of ours to update — fall through to a scoped create.
-                const create = (a.create ?? {}) as Record<string, unknown>;
-                return run({ ...a, create: { ...create, organizationId: orgId } });
-              }
+            // Somebody else's row. Refuse — for update and delete, and for
+            // upsert too, where "update it instead" would be the leak.
+            if (existing && existing.organizationId !== orgId) {
               throw new Error("NOT_FOUND_IN_ORGANIZATION");
             }
 
             if (operation === "upsert") {
+              // Nothing matched, or ours did. Either way anything created here
+              // is born into this organization.
               const create = (a.create ?? {}) as Record<string, unknown>;
               return run({ ...a, create: { ...create, organizationId: orgId } });
             }
+
+            if (!existing) throw new Error("NOT_FOUND_IN_ORGANIZATION");
             return run(a);
           }
 
@@ -195,4 +293,4 @@ function toDelegate(model: string): keyof typeof prisma {
   return (model.charAt(0).toLowerCase() + model.slice(1)) as keyof typeof prisma;
 }
 
-export type ScopedDb = Awaited<ReturnType<typeof scopedDb>>;
+export type ScopedDb = ReturnType<typeof dbForOrg>;

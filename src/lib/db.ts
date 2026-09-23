@@ -1,71 +1,217 @@
 /**
- * Prisma client configured for Cloudflare Pages edge runtime.
+ * The database client every route imports — tenant-scoped, automatically.
  *
- * Two changes vs. the previous WebSocket-Pool wiring (which was the source
- * of the random 1101 / 1102 cold-isolate failures we kept band-aiding):
+ * WHY THIS EXISTS. Applying multi-tenancy by editing 229 call sites across 64
+ * files would have meant transcribing every one of those files through the
+ * GitHub API, and — much worse — it only takes one of them being missed for a
+ * tenant to read another tenant's client book. So the scope is applied where
+ * the client is handed out rather than where it is used. Route code does not
+ * change at all: `import prisma from "@/lib/db"` already means "the client I
+ * am allowed to use", and now that is true.
  *
- *   1. neonConfig.poolQueryViaFetch = true — makes every query run over a
- *      fresh HTTPS fetch instead of a persistent WebSocket. The WebSocket
- *      pool was sticking around in the global isolate cache; when the
- *      isolate got evicted and respun, the cached client referenced a dead
- *      socket and the next query crashed the worker (CF error 1101). With
- *      poolQueryViaFetch, there's nothing to keep alive — every query is
- *      stateless.
+ * HOW IT DECIDES. Every operation resolves the caller first (see
+ * scoped-db.ts):
  *
- *   2. No globalForPrisma cache. We create a fresh PrismaClient per
- *      module-resolution. With HTTP transport there's nothing to reuse,
- *      and the cache is exactly what made stale isolates fail.
+ *   signed in, has a workspace  → the scoped client. Reads are filtered to that
+ *                                 organization, writes are stamped with it, and
+ *                                 writes aimed at another tenant's row are
+ *                                 refused.
+ *   nobody signed in            → the raw client, exactly as before. This is
+ *                                 not a loophole, it is the system context: the
+ *                                 cron routes, the Chrome extension endpoints
+ *                                 and the sign-in callbacks all run with no
+ *                                 session and no tenant to be scoped to. None
+ *                                 of them serves a browser holding a login.
+ *   signed in, NO workspace     → throws NO_ORGANIZATION.
  *
- * Initialization is still lazy (via Proxy) so the module can be imported
- * at build time without DATABASE_URL being present.
+ * That last case is the one that matters, and it is why this file throws
+ * instead of degrading. A user who is authenticated but has not been placed in
+ * an organization is precisely the person who must not be handed an unfiltered
+ * client; failing loudly is the only acceptable outcome.
+ *
+ * THE LAZY PROMISE. Resolving the caller is asynchronous, but Prisma's API is
+ * synchronous — `prisma.client.findMany(...)` has to return something
+ * immediately. So it returns a thenable that does the resolution when it is
+ * awaited. Two consequences are handled here:
+ *
+ *   - $transaction([...]) is passed an array of these thenables. They carry the
+ *     call they stand for, so $transaction claims them (synchronously, before
+ *     they can start on their own) and re-issues them on the real client, which
+ *     keeps the batch in one transaction.
+ *   - a query nobody awaits — `void prisma.auditLog.create(...)` — would never
+ *     run if it only fired on `.then`. So an unclaimed thenable starts itself
+ *     at the end of the tick.
+ *
+ * $queryRaw and friends go straight to the raw client. Raw SQL bypasses the
+ * extension entirely, so those queries carry their own organizationId
+ * predicates or are deliberately deployment-wide.
  */
+import type { PrismaClient } from "@prisma/client";
+import raw from "@/lib/db-raw";
+import { dbForOrg, resolveOrg } from "@/lib/scoped-db";
 
-import { PrismaClient } from "@prisma/client";
-import { PrismaNeon } from "@prisma/adapter-neon";
-import { neonConfig, Pool } from "@neondatabase/serverless";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type AnyRec = Record<string, any>;
 
-// Route every Pool query through HTTPS fetch. Equivalent to using the
-// neon() HTTP driver, but compatible with the existing PrismaNeon adapter
-// that expects a Pool.
-neonConfig.poolQueryViaFetch = true;
+const LAZY = Symbol.for("gershon.scoped.lazyOp") as unknown as string;
 
-// In Node.js (local dev / CI), the WS polyfill is needed only when a
-// query actually uses a WebSocket. With poolQueryViaFetch the polyfill
-// is dead code on edge, but Prisma's listConnect probes may still call
-// it. Keep the fallback for safety.
-if (typeof globalThis.WebSocket === "undefined") {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any
-    neonConfig.webSocketConstructor = require("ws") as any;
-  } catch {
-    /* ws not installed — only an issue if a WS-only query actually fires */
+/** The Prisma delegate methods we intercept. Anything else falls through. */
+const OPERATIONS = new Set([
+  "findUnique",
+  "findUniqueOrThrow",
+  "findFirst",
+  "findFirstOrThrow",
+  "findMany",
+  "create",
+  "createMany",
+  "createManyAndReturn",
+  "update",
+  "updateMany",
+  "updateManyAndReturn",
+  "upsert",
+  "delete",
+  "deleteMany",
+  "count",
+  "aggregate",
+  "groupBy",
+]);
+
+/** The client this caller is allowed to use. */
+async function activeClient(): Promise<AnyRec> {
+  const { signedIn, orgId } = await resolveOrg();
+  if (!signedIn) return raw as unknown as AnyRec;
+  if (!orgId) {
+    throw new Error(
+      "NO_ORGANIZATION: this account is not attached to a workspace, so there " +
+        "is no tenant to scope its queries to.",
+    );
   }
+  return dbForOrg(orgId) as unknown as AnyRec;
 }
 
-function buildClient(): PrismaClient {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error("DATABASE_URL environment variable is not set");
-  }
-  const pool = new Pool({ connectionString });
-  const adapter = new PrismaNeon(pool);
-  return new PrismaClient({ adapter });
+type LazyMeta = {
+  model: string;
+  op: string;
+  args: unknown;
+  /** Take ownership before it self-starts. True if it had not started yet. */
+  claim(): boolean;
+};
+
+function lazyOp(model: string, op: string, args: unknown) {
+  let started: Promise<unknown> | null = null;
+  let claimed = false;
+
+  const start = () => (started ??= activeClient().then((c) => c[model][op](args)));
+
+  // Fire-and-forget safety net: if by the end of this tick nobody has awaited
+  // it and no $transaction has claimed it, run it anyway. Anything built and
+  // awaited (or claimed) in the same tick — which is every real call site —
+  // gets here with `claimed` or `started` already set and is left alone.
+  queueMicrotask(() => {
+    if (!claimed && !started) start().catch(() => undefined);
+  });
+
+  const meta: LazyMeta = {
+    model,
+    op,
+    args,
+    claim() {
+      claimed = true;
+      return started === null;
+    },
+  };
+
+  return {
+    [LAZY]: meta,
+    then: (onOk?: any, onErr?: any) => {
+      claimed = true;
+      return start().then(onOk, onErr);
+    },
+    catch: (onErr?: any) => {
+      claimed = true;
+      return start().catch(onErr);
+    },
+    finally: (onDone?: any) => {
+      claimed = true;
+      return start().finally(onDone);
+    },
+  } as any;
 }
 
-// Lazy proxy — actual client is constructed on first property access at
-// runtime (defers DATABASE_URL evaluation until a request fires). Unlike
-// the previous version we do NOT cache across isolates: each new isolate
-// gets its own client, and since HTTP queries are stateless that costs us
-// nothing.
-let cached: PrismaClient | null = null;
-const prisma: PrismaClient = new Proxy({} as PrismaClient, {
+function metaOf(value: unknown): LazyMeta | null {
+  if (!value || typeof value !== "object") return null;
+  return ((value as AnyRec)[LAZY] as LazyMeta | undefined) ?? null;
+}
+
+/**
+ * Batched writes. The array elements are our thenables; claim them before they
+ * self-start, then re-issue them on the real client so they run as one
+ * transaction rather than as N independent statements.
+ */
+async function scopedTransaction(arg: unknown, options?: unknown) {
+  const claimedMetas = Array.isArray(arg)
+    ? arg.map((el) => {
+        const meta = metaOf(el);
+        meta?.claim();
+        return meta;
+      })
+    : null;
+
+  const client = await activeClient();
+
+  if (Array.isArray(arg) && claimedMetas) {
+    const ops = arg.map((el, i) => {
+      const meta = claimedMetas[i];
+      return meta ? client[meta.model][meta.op](meta.args) : el;
+    });
+    return client.$transaction(ops, options);
+  }
+
+  // Interactive form: Prisma hands the callback an extended (still scoped)
+  // transaction client.
+  return client.$transaction(arg, options);
+}
+
+const delegateCache = new Map<string, AnyRec>();
+
+function delegateFor(model: string): AnyRec {
+  const hit = delegateCache.get(model);
+  if (hit) return hit;
+  const proxy = new Proxy(
+    {},
+    {
+      get(_t, op) {
+        if (typeof op !== "string") return undefined;
+        if (OPERATIONS.has(op)) {
+          return (args?: unknown) => lazyOp(model, op, args);
+        }
+        // Anything else on a delegate (fields metadata, extension helpers)
+        // comes off the raw client untouched.
+        const value = (raw as unknown as AnyRec)[model]?.[op];
+        return typeof value === "function"
+          ? value.bind((raw as unknown as AnyRec)[model])
+          : value;
+      },
+    },
+  );
+  delegateCache.set(model, proxy);
+  return proxy;
+}
+
+const scopedClient = new Proxy({} as PrismaClient, {
   get(_target, prop) {
-    if (!cached) cached = buildClient();
-    const client = cached;
-    const value = (client as unknown as Record<string | symbol, unknown>)[prop];
-    return typeof value === "function" ? (value as Function).bind(client) : value;
+    if (typeof prop !== "string") {
+      return (raw as unknown as AnyRec)[prop as unknown as string];
+    }
+    if (prop === "$transaction") return scopedTransaction;
+    if (prop.startsWith("$") || prop.startsWith("_")) {
+      const value = (raw as unknown as AnyRec)[prop];
+      return typeof value === "function" ? value.bind(raw) : value;
+    }
+    if (prop === "then") return undefined; // never look like a promise
+    return delegateFor(prop);
   },
 });
 
-export default prisma;
-export { prisma };
+export default scopedClient;
+export { scopedClient as prisma };
