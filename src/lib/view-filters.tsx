@@ -34,7 +34,6 @@ export const CATEGORY_OPTIONS = [
 export const NETWORK_OPTIONS = [
   { key: "LINKEDIN", label: "LinkedIn" },
   { key: "TWITTER", label: "X / Twitter" },
-  { key: "GOOGLE_BUSINESS", label: "Google Business" },
   { key: "TIKTOK", label: "TikTok" },
 ] as const;
 

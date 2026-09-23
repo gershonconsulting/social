@@ -14,12 +14,11 @@ export {
 
 export type { User, Client, PlatformConnection, PostingSchedule, SocialPost, DailyCompliance, FollowerSnapshot, SyncJob, AuditLog } from "@prisma/client";
 
-// ─── Platform display metadata ────────────────────────────────────────────────
+// ─── Platform display metadata ──────────────────────────────────────────────────
 
 export const PLATFORM_LABELS: Record<string, string> = {
   LINKEDIN: "LinkedIn",
   TWITTER: "X / Twitter",
-  GOOGLE_BUSINESS: "Google Business Profile",
   TIKTOK: "TikTok",
   THREADS: "Threads",
   PINTEREST: "Pinterest",
@@ -32,7 +31,6 @@ export const PLATFORM_LABELS: Record<string, string> = {
 export const PLATFORM_COLORS: Record<string, string> = {
   LINKEDIN: "#0A66C2",
   TWITTER: "#000000",
-  GOOGLE_BUSINESS: "#4285F4",
   TIKTOK: "#010101",
   THREADS: "#000000",
   PINTEREST: "#E60023",
@@ -42,7 +40,7 @@ export const PLATFORM_COLORS: Record<string, string> = {
   OTHER: "#6B7280",
 };
 
-// ─── Compliance status display ─────────────────────────────────────────────────
+// ─── Compliance status display ───────────────────────────────────────────────────
 
 export const STATUS_COLORS: Record<string, string> = {
   GREEN: "#16a34a",
@@ -58,7 +56,7 @@ export const STATUS_LABELS: Record<string, string> = {
   GRAY: "Not Expected",
 };
 
-// ─── API response types ────────────────────────────────────────────────────────
+// ─── API response types ─────────────────────────────────────────────────────────
 
 export interface ApiResponse<T = unknown> {
   success: boolean;
@@ -74,7 +72,7 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
   hasMore: boolean;
 }
 
-// ─── Dashboard types ──────────────────────────────────────────────────────────
+// ─── Dashboard types ───────────────────────────────────────────────────────────
 
 export interface DashboardSummary {
   totalActiveClients: number;
@@ -94,7 +92,6 @@ export interface ClientDashboardRow {
   todayOverallStatus: string;
   linkedinStatus: string | null;
   twitterStatus: string | null;
-  googleBusinessStatus: string | null;
   optionalPlatformSummary: string;
   lastSyncAt: string | null;
   connectionIssueCount: number;
@@ -133,7 +130,7 @@ export interface ClientMonthlyReport {
   hasVerificationIssues: boolean;
 }
 
-// ─── Sync / Adapter types ─────────────────────────────────────────────────────
+// ─── Sync / Adapter types ────────────────────────────────────────────────────
 
 export interface NormalizedPost {
   externalPostId: string;
@@ -166,7 +163,7 @@ export interface AdapterConfig {
   timezone: string;
 }
 
-// ─── Connection health indicator ──────────────────────────────────────────────
+// ─── Connection health indicator ───────────────────────────────────────────────
 
 export type DataFreshness = "LIVE" | "DELAYED" | "STALE" | "SYNC_ERROR";
 
@@ -176,4 +173,3 @@ export interface FreshnessIndicator {
   lastUpdated: string | null;
   description: string;
 }
-
