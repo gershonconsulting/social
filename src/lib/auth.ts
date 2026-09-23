@@ -54,6 +54,9 @@ export async function getSession() {
       name: token.name as string | undefined,
       email: token.email as string | undefined,
       role: token.role as UserRole | undefined,
+      // Which workspace this person belongs to. Absent on sessions minted
+      // before tenancy shipped; scoped-db falls back to a lookup for those.
+      organizationId: token.organizationId as string | undefined,
     },
   };
 }
@@ -67,7 +70,13 @@ export async function requireAuth() {
   if (!session?.user) {
     throw new Error("UNAUTHORIZED");
   }
-  return session.user as { id?: string; name?: string; email?: string; role?: UserRole };
+  return session.user as {
+    id?: string;
+    name?: string;
+    email?: string;
+    role?: UserRole;
+    organizationId?: string;
+  };
 }
 
 /**
