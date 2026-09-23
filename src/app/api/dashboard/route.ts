@@ -98,7 +98,6 @@ export async function GET(_req: NextRequest) {
         todayOverallStatus: overallStatus,
         linkedinStatus: (platformStatuses["LINKEDIN"] as string) ?? null,
         twitterStatus: (platformStatuses["TWITTER"] as string) ?? null,
-        googleBusinessStatus: (platformStatuses["GOOGLE_BUSINESS"] as string) ?? null,
         optionalPlatformSummary: buildOptionalSummary(platformStatuses),
         lastSyncAt: lastSync?.toISOString() ?? null,
         connectionIssueCount: connectionIssues,
@@ -124,7 +123,7 @@ export async function GET(_req: NextRequest) {
 }
 
 function buildOptionalSummary(statuses: Record<string, ComplianceStatus>): string {
-  const coreplatforms = new Set(["LINKEDIN", "TWITTER", "GOOGLE_BUSINESS"]);
+  const coreplatforms = new Set(["LINKEDIN", "TWITTER"]);
   const optional = Object.entries(statuses).filter(([p]) => !coreplatforms.has(p));
   if (optional.length === 0) return "—";
   const green = optional.filter(([, s]) => s === ComplianceStatus.GREEN).length;
