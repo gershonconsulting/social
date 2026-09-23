@@ -1,10 +1,21 @@
 export const runtime = 'edge';
+/**
+ * The people in a workspace.
+ *
+ * Reads and writes go through the RAW client with the organization filter
+ * written out by hand, because this route needs something the automatic
+ * scoping deliberately cannot express: the operator of the primary workspace
+ * also sees accounts that have signed up and are waiting for a decision.
+ * Those have no organization yet, so nobody else could ever approve them.
+ * See admin-scope.ts.
+ */
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/db";
+import prisma from "@/lib/db-raw";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { UserRole } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
+import { adminScopeFor, visibleUsersWhere } from "@/lib/admin-scope";
 
 // Invite: password is optional. LinkedIn-only users are invited by email +
 // role and sign in with "Continue with LinkedIn".
@@ -23,13 +34,17 @@ function authErr(e: unknown): NextResponse | null {
 }
 
 export async function GET(_req: NextRequest) {
+  let actor;
   try {
-    await requireRole(UserRole.ADMIN);
+    actor = await requireRole(UserRole.ADMIN);
   } catch (e) {
     return authErr(e) ?? NextResponse.json({ success: false, error: "Auth error" }, { status: 500 });
   }
 
+  const scope = await adminScopeFor(actor);
+
   const users = await prisma.user.findMany({
+    where: visibleUsersWhere(scope),
     select: {
       id: true, name: true, email: true, role: true, isActive: true,
       linkedinSub: true, password: true, image: true, createdAt: true,
@@ -69,6 +84,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const scope = await adminScopeFor(actor);
+  if (!scope.orgId) {
+    return NextResponse.json(
+      { success: false, error: "Your account isn't attached to a workspace yet." },
+      { status: 409 },
+    );
+  }
+
   const email = parsed.data.email.toLowerCase();
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
@@ -82,6 +105,8 @@ export async function POST(req: NextRequest) {
       email,
       password,
       role: parsed.data.role,
+      // An invitation is into the inviting admin's workspace, never a new one.
+      organizationId: scope.orgId,
       signupSource: "invite",
       approvedAt: new Date(),
     },
@@ -90,11 +115,18 @@ export async function POST(req: NextRequest) {
 
   await prisma.auditLog.create({
     data: {
+      organizationId: scope.orgId,
       actorUserId: actor.id ?? null,
       actionType: "USER_CREATED",
       entityType: "User",
       entityId: user.id,
-      afterJson: JSON.stringify({ name: user.name, email: user.email, role: user.role, invited: !password }),
+      afterJson: JSON.stringify({
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        invited: !password,
+        organizationId: scope.orgId,
+      }),
     },
   });
 

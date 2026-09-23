@@ -16,23 +16,34 @@
  * is deliberately not open to the world.
  *
  * SELF-REGISTRATION (v3.9.0). Everyone else may now sign up too, rather than
- * being turned away with "isn't invited yet". They are created at the LOWEST
- * role, and whether they are usable immediately depends on the registration
- * mode — see src/lib/registration.ts. Signing up never grants a role above
- * READ_ONLY and never grants admin.
+ * being turned away with "isn't invited yet". Whether the account is usable
+ * immediately depends on the registration mode — see src/lib/registration.ts.
  *
  * Because the door is open, we keep everything LinkedIn tells us about the
  * person plus the request-side provenance Cloudflare attaches, so the Users
  * screen can answer "who is this and where did they come from".
  *
- * (Client / Post / PlatformConnection are not user-scoped, so the collected
- * social data itself is global — which is exactly why an unapproved account
- * must not be able to read.)
+ * A NEW WORKSPACE PER SIGNUP (v4.3.0). Signing up no longer drops somebody
+ * into Gershon Consulting's data. It creates an Organization of their own and
+ * makes them the admin of THAT — which is a different thing from being an
+ * admin of somebody else's workspace, and is safe precisely because every
+ * query they can make is confined to their own organization (see db.ts).
+ *
+ * When registration is set to "wait for my approval", the workspace is NOT
+ * created here. A pending account cannot sign in, so it has no use for one,
+ * and rejecting somebody should not leave an empty organization behind. The
+ * workspace is created at the moment of approval instead — see
+ * /api/users/[id].
+ *
+ * This file talks to the RAW client on purpose. It runs before anybody is
+ * signed in, so there is no tenant to scope to, and its job is partly to
+ * decide which tenant the caller belongs to in the first place.
  */
-import prisma from "@/lib/db";
+import prisma from "@/lib/db-raw";
 import { UserRole } from "@prisma/client";
 import { exchangeCode, fetchProfile, isAllowedAdminEmail } from "@/lib/linkedin-auth";
 import { getRegistrationMode } from "@/lib/registration";
+import { createOrganizationFor, getPrimaryOrganization } from "@/lib/tenancy";
 import type { LinkedInProfile } from "@/lib/linkedin-auth";
 
 export type ResolvedUser = {
@@ -145,11 +156,17 @@ export async function completeLinkedInLogin(
   }
 
   // 2) Nobody matched. An allow-listed address CLAIMS the unclaimed admin row.
+  //    This is how you become an admin of the ORIGINAL workspace, which is why
+  //    it is limited to the allow-list and not open to the world.
   if (isAllowedAdminEmail(email)) {
     const unclaimed = await prisma.user.findFirst({
       where: { role: UserRole.ADMIN, linkedinSub: null, isActive: true },
       orderBy: { createdAt: "asc" },
     });
+
+    // The operator belongs to the original workspace, whether they are
+    // adopting its seeded admin row or being provisioned fresh.
+    const primary = await getPrimaryOrganization();
 
     if (unclaimed) {
       const before = { id: unclaimed.id, email: unclaimed.email, name: unclaimed.name };
@@ -169,6 +186,7 @@ export async function completeLinkedInLogin(
           lastLoginAt: now,
           lastLoginIp: ctx.ip ?? null,
           loginCount: { increment: 1 },
+          ...(unclaimed.organizationId ? {} : { organizationId: primary?.id ?? null }),
         },
       });
       await audit(claimed.id, "USER_UPDATED", claimed.id, before, {
@@ -187,6 +205,7 @@ export async function completeLinkedInLogin(
         image: profile.picture ?? null,
         role: UserRole.ADMIN,
         isActive: true,
+        organizationId: primary?.id ?? null,
         ...fields,
         signupSource: "linkedin-claim",
         signupIp: ctx.ip ?? null,
@@ -206,10 +225,14 @@ export async function completeLinkedInLogin(
     return { ok: true, user: toResolved(admin), created: true };
   }
 
-  // 3) Open self-registration. Lowest role, always. Usable now or pending,
-  //    depending on the registration mode.
+  // 3) Self-registration. This person gets a workspace of their own — empty,
+  //    and theirs — rather than a seat in somebody else's.
   const mode = await getRegistrationMode();
   const pending = mode === "approval";
+
+  // Nothing to create for an account that cannot sign in yet, and a rejection
+  // should not leave an orphan organization behind. Approval creates it.
+  const org = pending ? null : await createOrganizationFor(profile.name || email);
 
   const created = await prisma.user.create({
     data: {
@@ -217,7 +240,10 @@ export async function completeLinkedInLogin(
       email,
       linkedinSub: profile.sub,
       image: profile.picture ?? null,
-      role: UserRole.READ_ONLY,
+      // Admin OF THEIR OWN WORKSPACE. Every query they can make is confined to
+      // it, so this grants authority over their data and nobody else's.
+      role: pending ? UserRole.READ_ONLY : UserRole.ADMIN,
+      organizationId: org?.id ?? null,
       isActive: !pending,
       pendingApproval: pending,
       approvedAt: pending ? null : now,
@@ -235,9 +261,10 @@ export async function completeLinkedInLogin(
   await audit(created.id, "USER_CREATED", created.id, null, {
     email,
     name: created.name,
-    role: "READ_ONLY",
+    role: created.role,
     via: "linkedin-self-registration",
     pendingApproval: pending,
+    workspace: org?.name ?? null,
     country: ctx.country ?? null,
   });
 
