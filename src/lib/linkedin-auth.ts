@@ -142,6 +142,7 @@ export async function mintSessionToken(user: {
   email: string;
   role: UserRole;
   image?: string | null;
+  organizationId?: string | null;
 }): Promise<string> {
   return encode({
     token: {
@@ -151,6 +152,7 @@ export async function mintSessionToken(user: {
       email: user.email,
       picture: user.image ?? undefined,
       role: user.role,
+      organizationId: user.organizationId ?? undefined,
     },
     secret: process.env.NEXTAUTH_SECRET as string,
     maxAge: SESSION_MAX_AGE,
