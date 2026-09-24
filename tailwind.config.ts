@@ -11,7 +11,7 @@ const config: Config = {
     // v4.9.0 — "Charcoal & Signal Red". Geist for text, Geist Mono for numbers.
     fontFamily: {
       sans: ["Geist", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Helvetica Neue", "Arial", "sans-serif"],
-      mono: ["\"Geist Mono\"", "ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
+      mono: ["Geist Mono", "ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
     },
     extend: {
       colors: {
