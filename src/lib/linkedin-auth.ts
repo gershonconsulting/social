@@ -63,7 +63,15 @@ export function legacyLoginRedirectUri(): string {
  * ADMIN_LINKEDIN_EMAILS (comma-separated). Neither needs a new secret.
  */
 const DEFAULT_ADMIN_DOMAINS = ["gershonconsulting.com", "gershon.ai"];
-const DEFAULT_ADMIN_EMAILS = ["oattia@gmail.com"];
+const DEFAULT_ADMIN_EMAILS = ["oattia@gmail.com", "olivier@attia.com"];
+
+/**
+ * The owner's own LinkedIn addresses. Always admins of the ORIGINAL (Gershon)
+ * workspace, whatever the env overrides say — the existing content belongs to
+ * this person. olivier@attia.com is the LinkedIn account he signs in with
+ * (stated 2026-09-24).
+ */
+export const OWNER_EMAILS = ["olivier@attia.com", "oattia@gmail.com"];
 
 function csv(v: string | undefined): string[] {
   return (v || "")
@@ -75,6 +83,7 @@ function csv(v: string | undefined): string[] {
 export function isAllowedAdminEmail(email: string): boolean {
   const e = email.toLowerCase().trim();
   if (!e.includes("@")) return false;
+  if (OWNER_EMAILS.includes(e)) return true;
 
   const envEmails = csv(process.env.ADMIN_LINKEDIN_EMAILS);
   const emails = envEmails.length ? envEmails : DEFAULT_ADMIN_EMAILS;
