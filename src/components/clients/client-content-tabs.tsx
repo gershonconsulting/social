@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { List, Sparkles, PenLine } from "lucide-react";
+import { List, Sparkles, PenLine, Swords } from "lucide-react";
 import { PostsListing } from "./posts-listing";
 import { ContentIntelligence } from "./content-intelligence";
 import { PostStudio } from "./post-studio";
+import { CompetitorWatch } from "./competitor-watch";
 
 /**
  * Company detail: collected content (Posts), the analysis layer built on top of
@@ -24,18 +25,21 @@ export function ClientContentTabs({
   clientName: string;
   clientType?: string;
 }) {
-  const [tab, setTab] = useState<"posts" | "intelligence" | "studio">("posts");
+  const [tab, setTab] = useState<"posts" | "intelligence" | "studio" | "competitors">("posts");
   const isCampaign = clientType === "CAMPAIGN";
 
   const tabs = [
     { key: "posts" as const, label: "Collected posts", icon: List },
     { key: "intelligence" as const, label: "Content Intelligence", icon: Sparkles },
     ...(isCampaign ? [{ key: "studio" as const, label: "Post Studio", icon: PenLine }] : []),
+    // A competitor's own page doesn't get a competitor view of its own.
+    ...(clientType !== "COMPETITION" ? [{ key: "competitors" as const, label: "Competitor Watch", icon: Swords }] : []),
   ];
 
   // Defensive: if a company is re-categorized away from CAMPAIGN while this
   // panel is mounted, don't leave a now-hidden tab selected.
-  const active = tab === "studio" && !isCampaign ? "posts" : tab;
+  const active =
+    (tab === "studio" && !isCampaign) || (tab === "competitors" && clientType === "COMPETITION") ? "posts" : tab;
 
   return (
     <div className="space-y-4">
@@ -57,6 +61,7 @@ export function ClientContentTabs({
       {active === "posts" && <PostsListing clientId={clientId} />}
       {active === "intelligence" && <ContentIntelligence clientId={clientId} clientName={clientName} />}
       {active === "studio" && isCampaign && <PostStudio clientId={clientId} clientName={clientName} />}
+      {active === "competitors" && <CompetitorWatch clientId={clientId} clientName={clientName} />}
     </div>
   );
 }
