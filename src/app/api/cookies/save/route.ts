@@ -1,29 +1,28 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/db";
+import { resolveRequestOrg } from "@/lib/session-org";
+import { getOrgCookies, saveOrgCookies, type SessionPlatform } from "@/lib/x-session";
 
 /**
  * POST /api/cookies/save
  *
- * Receives a captured set of session cookies from the Watchman Chrome
- * extension and stores them in the Setting table so the server can
- * authenticate scraping calls (LinkedIn Voyager API, X GraphQL, etc.).
+ * Receives a captured set of session cookies from the GershonAI Chrome
+ * extension (or a signed-in dashboard tab) and stores them for THE CALLER'S
+ * WORKSPACE, so server-side collection reads X / LinkedIn with that
+ * workspace's own access.
  *
- * Body:
- *   {
- *     platform: 'LINKEDIN' | 'TWITTER',
- *     cookies: { [name: string]: value },   // li_at, JSESSIONID, auth_token, ct0, ...
- *     capturedAt: string (ISO)
- *   }
+ * Body: { platform: 'LINKEDIN' | 'TWITTER', cookies: {name: value}, capturedAt?: ISO }
  *
- * Stored under Setting.key = "cookies:LINKEDIN" / "cookies:TWITTER".
- * Value is a JSON string of { cookies, capturedAt }.
- *
- * NOTE: stored as plain JSON in DB. This is a single-user platform per
- * the existing memory; if multi-tenant later, encrypt at rest.
+ * v4.8.0: used to write the GLOBAL Setting row with no credential at all —
+ * any caller could replace Gershon's X session. Now the workspace comes from
+ * the session or the extension's workspace token (see lib/session-org.ts),
+ * and the value is encrypted at rest (lib/x-session.ts).
  */
 export async function POST(req: NextRequest) {
   try {
+    const org = await resolveRequestOrg(req);
+    if (!org.ok) return NextResponse.json({ success: false, error: org.error }, { status: org.status });
+
     const body = (await req.json().catch(() => null)) as
       | { platform?: string; cookies?: Record<string, string>; capturedAt?: string }
       | null;
@@ -34,34 +33,25 @@ export async function POST(req: NextRequest) {
     if (platform !== "LINKEDIN" && platform !== "TWITTER") {
       return NextResponse.json({ success: false, error: "platform must be LINKEDIN or TWITTER" }, { status: 400 });
     }
-    // Validate the required auth cookie is present
     const required = platform === "LINKEDIN" ? "li_at" : "auth_token";
     if (!body.cookies[required]) {
-      return NextResponse.json({
-        success: false,
-        error: `Missing required cookie: ${required}`,
-      }, { status: 400 });
+      return NextResponse.json({ success: false, error: `Missing required cookie: ${required}` }, { status: 400 });
     }
 
-    const key = `cookies:${platform}`;
-    const value = JSON.stringify({
-      cookies: body.cookies,
-      capturedAt: body.capturedAt ?? new Date().toISOString(),
-    });
+    // Only string values, bounded — this is a credential store, not a dump.
+    const cookies: Record<string, string> = {};
+    for (const [k, v] of Object.entries(body.cookies).slice(0, 60)) {
+      if (typeof v === "string" && k.length <= 100) cookies[k] = v.slice(0, 4000);
+    }
 
-    await prisma.setting.upsert({
-      where: { key },
-      create: { key, value },
-      update: { value },
+    const saved = await saveOrgCookies(org.orgId, platform as SessionPlatform, cookies, {
+      capturedAt: body.capturedAt ?? null,
+      source: org.via === "extension" ? "extension" : "manual",
     });
 
     return NextResponse.json({
       success: true,
-      data: {
-        platform,
-        cookieCount: Object.keys(body.cookies).length,
-        capturedAt: body.capturedAt ?? new Date().toISOString(),
-      },
+      data: { platform, cookieCount: Object.keys(cookies).length, capturedAt: saved.capturedAt },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Server error";
@@ -69,28 +59,16 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/**
- * GET /api/cookies/save  (helper for debugging — returns capture status,
- * never the actual cookie values).
- */
-export async function GET() {
+/** GET — capture status for the caller's workspace. Never returns cookie values. */
+export async function GET(req: NextRequest) {
   try {
-    const rows = await prisma.setting.findMany({
-      where: { key: { in: ["cookies:LINKEDIN", "cookies:TWITTER"] } },
-    });
-    const status: Record<string, { capturedAt: string; cookieCount: number } | null> = {
-      LINKEDIN: null,
-      TWITTER: null,
-    };
-    for (const r of rows) {
-      try {
-        const parsed = JSON.parse(r.value) as { cookies?: Record<string, string>; capturedAt?: string };
-        const plat = r.key.split(":")[1];
-        status[plat] = {
-          capturedAt: parsed.capturedAt ?? "",
-          cookieCount: Object.keys(parsed.cookies ?? {}).length,
-        };
-      } catch {}
+    const org = await resolveRequestOrg(req);
+    if (!org.ok) return NextResponse.json({ success: false, error: org.error }, { status: org.status });
+    const status: Record<string, { capturedAt: string; cookieCount: number } | null> = { LINKEDIN: null, TWITTER: null };
+    for (const p of ["LINKEDIN", "TWITTER"] as const) {
+      const b = await getOrgCookies(org.orgId, p);
+      const n = Object.keys(b.cookies).length;
+      status[p] = n ? { capturedAt: b.capturedAt ?? "", cookieCount: n } : null;
     }
     return NextResponse.json({ success: true, data: status });
   } catch (err) {

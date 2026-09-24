@@ -1,63 +1,34 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/db";
 import { z } from "zod";
+import { orgFromSession } from "@/lib/session-org";
+import { saveOrgCookies } from "@/lib/x-session";
 
 const schema = z.object({
-  authToken: z.string().min(20).max(200),
-  ct0: z.string().min(20).max(200),
+  authToken: z.string().min(20).max(400),
+  ct0: z.string().min(20).max(400),
 });
 
 /**
- * POST /api/settings/twitter
- * Body: { authToken, ct0 }
+ * POST /api/settings/twitter   Body: { authToken, ct0 }
  *
- * Stores X / Twitter session cookies on every Twitter platform connection.
- * Same auth your browser uses when you're logged in to x.com — the adapter
- * sends them as Cookie: auth_token=...; ct0=... + x-csrf-token: <ct0>.
- *
- * To get the values: log into x.com, open dev tools → Application → Cookies →
- * x.com, copy the Value for auth_token and ct0.
+ * Legacy entry point, kept for older UI. Since v4.8.0 it stores the X session
+ * for the CALLER'S WORKSPACE (see /api/settings/x-account, lib/x-session.ts)
+ * instead of stamping it on every Twitter connection in the database.
  */
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => null);
-    const parsed = schema.safeParse(body);
+    const orgId = await orgFromSession();
+    if (!orgId) return NextResponse.json({ success: false, error: "Not signed in to a workspace" }, { status: 401 });
+    const parsed = schema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) {
       return NextResponse.json(
-        {
-          success: false,
-          error: "Both auth_token and ct0 cookies are required (20+ chars each).",
-        },
-        { status: 400 }
+        { success: false, error: "Both auth_token and ct0 cookies are required (20+ chars each)." },
+        { status: 400 },
       );
     }
-
-    const { authToken, ct0 } = parsed.data;
-    const tokenRef = JSON.stringify({ authToken, ct0 });
-
-    const conns = await prisma.platformConnection.findMany({ where: { platform: "TWITTER" } });
-    if (conns.length === 0) {
-      return NextResponse.json(
-        { success: false, error: "No Twitter platform connections found. Add a client with Twitter first." },
-        { status: 404 }
-      );
-    }
-
-    await prisma.platformConnection.updateMany({
-      where: { platform: "TWITTER" },
-      data: {
-        tokenReference: tokenRef,
-        connectionStatus: "CONNECTED",
-        lastSyncError: null,
-        externalAccountId: null, // re-resolve user_id on next sync
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: `Session cookies saved on ${conns.length} Twitter connection(s). Run Sync Now on a client to fetch tweets.`,
-    });
+    await saveOrgCookies(orgId, "TWITTER", { auth_token: parsed.data.authToken, ct0: parsed.data.ct0 }, { source: "manual" });
+    return NextResponse.json({ success: true, message: "X session saved for your workspace." });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to save session";
     return NextResponse.json({ success: false, error: message }, { status: 500 });

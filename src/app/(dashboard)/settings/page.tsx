@@ -2,10 +2,17 @@
 // edge-runtime resource-limit (Cloudflare Worker error 1102) we were hitting
 // when this page ran a Prisma query during SSR.
 import { SettingsPageClient } from "./page-client";
+import { XAccountCard } from "@/components/settings/x-account-card";
 
 export const runtime = 'edge';
 export const dynamic = "force-dynamic";
 
 export default function SettingsPage() {
-  return <SettingsPageClient />;
+  return (
+    <>
+      <SettingsPageClient />
+      {/* v4.8.0 — each workspace connects its own X account. */}
+      <XAccountCard />
+    </>
+  );
 }
