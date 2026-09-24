@@ -18,6 +18,7 @@ export interface OverviewRow {
 // One row per enabled platform connection — for the collection-health card,
 // filterable by category.
 export interface OverviewConn {
+  clientId: string;
   clientType: string;
   platform: string;
   state: "collected" | "empty" | "failed" | "stale";
@@ -63,6 +64,7 @@ export async function DashboardOverview() {
   // by category too.
   const typeById = new Map(rows.map((r) => [r.id, r.clientType]));
   const conns: OverviewConn[] = collection.connections.map((c) => ({
+    clientId: c.clientId,
     clientType: typeById.get(c.clientId) ?? "",
     platform: c.platform,
     state: c.state,
