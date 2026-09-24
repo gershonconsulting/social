@@ -50,14 +50,14 @@ export default async function DashboardLayout({
       {/* Invisible: reports the installed Chrome-extension version to the
           server so the daily progress report can warn about a stale build. */}
       <ExtensionSeenReporter />
-      <div className="flex h-screen overflow-hidden bg-[#fafafa]">
+      <div className="flex h-screen overflow-hidden bg-[#F5F4F0]">
         <Sidebar />
         <main className="flex-1 overflow-y-auto">
-          <div className="max-w-7xl mx-auto px-6 py-8">
-            <div className="text-[11px] text-gray-400 mb-4 font-mono">
-              {buildLabel && <>{buildLabel} &middot; </>}v{shortVersion} &middot; {buildDate}
-            </div>
+          <div className="max-w-[1400px] mx-auto px-9 pt-7 pb-10">
             {children}
+            <footer className="mt-12 pt-4 border-t border-gray-200 text-[11px] text-gray-500 font-mono">
+              {buildLabel && <>{buildLabel} &middot; </>}v{shortVersion} &middot; {buildDate}
+            </footer>
           </div>
         </main>
       </div>
