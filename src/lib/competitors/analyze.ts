@@ -133,7 +133,8 @@ export function summarize(
     const bi = new Set<string>();
     for (let i = 1; i < toks.length; i++) bi.add(`${toks[i - 1]} ${toks[i]}`);
     for (const b of bi) bigrams.set(b, (bigrams.get(b) ?? 0) + 1);
-    for (const t of new Set(p.hashtags)) tags.set(t, (tags.get(t) ?? 0) + 1);
+    // Skip numeric "tags" — they are HTML entities (&#10145;) and emoji codes, not hashtags.
+    for (const t of new Set(p.hashtags)) if (/\p{L}/u.test(t)) tags.set(t, (tags.get(t) ?? 0) + 1);
     for (const th of THEMES) if (th.re.test(p.text)) themeCounts.set(th.key, (themeCounts.get(th.key) ?? 0) + 1);
 
     const d = new Date(p.date + "T12:00:00Z");
@@ -149,7 +150,9 @@ export function summarize(
 
   const dates = posts.map((p) => p.date).filter(Boolean).sort();
   const last = dates[dates.length - 1] ?? null;
-  const weeksInWindow = Math.max(1, Math.round(windowDays / 7));
+  // Calendar weeks the window touches (30 days spans 5 Mon-Sun weeks) — the
+  // denominator for "active weeks". Posts/week still divides by windowDays/7.
+  const weeksInWindow = Math.floor(windowDays / 7) + 1;
   const bestWeekday = Array.from(dayCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 
   return {
@@ -157,7 +160,7 @@ export function summarize(
     name,
     isSelf,
     postCount: posts.length,
-    postsPerWeek: Math.round((posts.length / weeksInWindow) * 10) / 10,
+    postsPerWeek: Math.round((posts.length / (windowDays / 7)) * 10) / 10,
     activeWeeks: weekSet.size,
     weeksInWindow,
     lastPostDate: last,
