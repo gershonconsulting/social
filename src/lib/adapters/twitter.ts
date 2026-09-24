@@ -24,6 +24,7 @@
 import { PlatformAdapter, buildUnavailableResult, toLocalDateString, toLocalTime, truncateSnippet } from "./base";
 import { AdapterConfig, AdapterFetchResult, NormalizedPost } from "@/types";
 import prisma from "@/lib/db";
+import { xSessionForConnection } from "@/lib/x-session";
 
 const PUBLIC_BEARER =
   "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA";
@@ -40,19 +41,6 @@ interface SessionCookies {
   ct0: string;
 }
 
-function parseSessionCookies(tokenRef: string | null): SessionCookies | null {
-  if (!tokenRef) return null;
-  try {
-    const parsed = JSON.parse(tokenRef);
-    if (parsed && typeof parsed === "object" && parsed.authToken && parsed.ct0) {
-      return { authToken: String(parsed.authToken), ct0: String(parsed.ct0) };
-    }
-  } catch {
-    // Not JSON — treat as a raw auth_token; ct0 missing makes the call fail
-    // but we still surface a clearer error than 'unknown'.
-  }
-  return null;
-}
 
 async function resolveHandle(config: AdapterConfig): Promise<string | null> {
   try {
@@ -199,11 +187,12 @@ export class TwitterAdapter implements PlatformAdapter {
       );
     }
 
-    const session = parseSessionCookies(config.tokenReference);
+    // v4.8.0: the workspace's own X session first, then the legacy per-connection value.
+    const session = await xSessionForConnection(config.connectionId, config.tokenReference);
     if (!session) {
       return buildUnavailableResult(
         "NO_SESSION",
-        "X / Twitter session cookies not configured. Paste auth_token and ct0 from your browser into Settings.",
+        "No X account connected for this workspace. Connect it in Settings → Your X account.",
         false
       );
     }
@@ -284,8 +273,8 @@ export class TwitterAdapter implements PlatformAdapter {
   }
 
   async validateConnection(config: AdapterConfig): Promise<{ valid: boolean; error?: string }> {
-    if (!parseSessionCookies(config.tokenReference)) {
-      return { valid: false, error: "Paste auth_token + ct0 from your browser into Settings." };
+    if (!(await xSessionForConnection(config.connectionId, config.tokenReference))) {
+      return { valid: false, error: "Connect your X account in Settings → Your X account." };
     }
     if (!(await resolveHandle(config))) {
       return { valid: false, error: "Connection has no @handle." };

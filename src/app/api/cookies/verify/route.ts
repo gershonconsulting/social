@@ -1,6 +1,7 @@
 export const runtime = 'edge';
-import { NextResponse } from "next/server";
-import prisma from "@/lib/db";
+import { NextRequest, NextResponse } from "next/server";
+import { resolveRequestOrg } from "@/lib/session-org";
+import { getOrgCookies } from "@/lib/x-session";
 
 /**
  * GET /api/cookies/verify
@@ -26,14 +27,6 @@ type Probe = {
   identifiedAs?: string | null;
 };
 
-async function loadCookies(platform: "LINKEDIN" | "TWITTER"): Promise<{ cookies: Record<string,string>; capturedAt: string | null }> {
-  const row = await prisma.setting.findUnique({ where: { key: `cookies:${platform}` } });
-  if (!row) return { cookies: {}, capturedAt: null };
-  try {
-    const parsed = JSON.parse(row.value) as { cookies?: Record<string,string>; capturedAt?: string };
-    return { cookies: parsed.cookies ?? {}, capturedAt: parsed.capturedAt ?? null };
-  } catch { return { cookies: {}, capturedAt: null }; }
-}
 
 function cookieHeader(cookies: Record<string,string>): string {
   return Object.entries(cookies).map(([k,v]) => `${k}=${v}`).join("; ");
@@ -162,10 +155,13 @@ async function probeTwitter(cookies: Record<string,string>, capturedAt: string |
   return probe;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const liData = await loadCookies("LINKEDIN");
-    const twData = await loadCookies("TWITTER");
+    // v4.8.0: the caller's own workspace session, never the global one.
+    const org = await resolveRequestOrg(req);
+    if (!org.ok) return NextResponse.json({ success: false, error: org.error }, { status: org.status });
+    const liData = await getOrgCookies(org.orgId, "LINKEDIN");
+    const twData = await getOrgCookies(org.orgId, "TWITTER");
     const [linkedin, twitter] = await Promise.all([
       probeLinkedIn(liData.cookies, liData.capturedAt),
       probeTwitter(twData.cookies, twData.capturedAt),
