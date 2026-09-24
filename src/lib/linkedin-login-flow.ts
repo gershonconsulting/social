@@ -129,6 +129,43 @@ export async function completeLinkedInLogin(
     (await prisma.user.findUnique({ where: { email } }));
 
   if (user) {
+    // An allow-listed operator (e.g. olivier@attia.com) belongs to the
+    // ORIGINAL workspace. If an earlier sign-in parked them as a pending
+    // self-signup, or in a fresh empty workspace of their own, bring them home
+    // as ADMIN of the primary workspace instead of refusing or stranding them.
+    if (isAllowedAdminEmail(email)) {
+      const primary = await getPrimaryOrganization();
+      const misplaced =
+        !!primary &&
+        (user.pendingApproval || !user.isActive || user.organizationId !== primary.id || user.role !== UserRole.ADMIN);
+      if (primary && misplaced) {
+        const before = { organizationId: user.organizationId, role: user.role, pendingApproval: user.pendingApproval };
+        const moved = await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            organizationId: primary.id,
+            role: UserRole.ADMIN,
+            isActive: true,
+            pendingApproval: false,
+            approvedAt: user.approvedAt ?? now,
+            linkedinSub: profile.sub,
+            name: user.name || profile.name || email,
+            image: profile.picture ?? user.image,
+            ...fields,
+            lastLoginAt: now,
+            lastLoginIp: ctx.ip ?? user.lastLoginIp,
+            loginCount: { increment: 1 },
+          },
+        });
+        await audit(moved.id, "USER_UPDATED", moved.id, before, {
+          organizationId: primary.id,
+          role: "ADMIN",
+          via: "owner-rehome",
+        });
+        return { ok: true, user: toResolved(moved) };
+      }
+    }
+
     if (user.pendingApproval) {
       return {
         ok: false,
