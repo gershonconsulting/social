@@ -1,16 +1,19 @@
+/* v4.9.0 — Geist + Geist Mono. Must stay above the @tailwind lines. */
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 45 17% 95%;
+    --foreground: 225 14% 10%;
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    --primary: 5 99% 50%;
+    --primary: 4 74% 49%;
     --primary-foreground: 0 0% 100%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
@@ -20,9 +23,9 @@
     --accent-foreground: 222.2 47.4% 11.2%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 5 99% 50%;
+    --border: 43 15% 87%;
+    --input: 43 13% 80%;
+    --ring: 4 74% 49%;
     --radius: 0.5rem;
   }
 
@@ -75,3 +78,35 @@
 .compliance-red { @apply bg-red-100 text-red-800; }
 .compliance-yellow { @apply bg-amber-100 text-amber-800; }
 .compliance-gray { @apply bg-gray-100 text-gray-500; }
+
+/* ---------------------------------------------------------------------------
+ * v4.9.0 — "Charcoal & Signal Red" design system
+ * ------------------------------------------------------------------------ */
+@layer base {
+  body {
+    font-feature-settings: "ss01" on;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 { letter-spacing: -0.015em; }
+  table { font-variant-numeric: tabular-nums; }
+  ::selection { background: #FBDCD8; color: #15171C; }
+}
+
+/* Older pages hard-code the previous brand red (#FE1B04, hover #d11200) as
+   arbitrary Tailwind values. Map them onto the new signal red so every page
+   matches without touching each file. */
+.bg-\[\#FE1B04\] { background-color: #D92D20 !important; }
+.text-\[\#FE1B04\] { color: #D92D20 !important; }
+.border-\[\#FE1B04\] { border-color: #D92D20 !important; }
+.bg-\[\#d11200\], .hover\:bg-\[\#d11200\]:hover { background-color: #B42318 !important; }
+
+/* Reusable pieces for new and refreshed pages. */
+@layer components {
+  .gx-card { @apply bg-white border border-gray-200 rounded-xl; }
+  .gx-btn { @apply inline-flex items-center justify-center gap-2 h-9 px-3.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50; }
+  .gx-btn-primary { @apply gx-btn bg-red-600 text-white font-semibold hover:bg-red-700; }
+  .gx-btn-secondary { @apply gx-btn bg-white text-gray-900 border border-gray-200 hover:bg-gray-50; }
+  .gx-pill { @apply inline-flex items-center gap-1 text-xs font-medium px-2.5 py-0.5 rounded-full; }
+  .gx-num { font-family: "Geist Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+}

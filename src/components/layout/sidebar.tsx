@@ -1,5 +1,13 @@
 "use client";
 
+/**
+ * The left menu — v4.9.0 "Charcoal & Signal Red".
+ *
+ * Dark charcoal rail, grouped sections (Overview · Portfolio · System ·
+ * Workspace). Red appears only as the thin marker on the current page, so the
+ * content area stays the focus. Routes and order are unchanged from v2.6.0.
+ */
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
@@ -9,7 +17,7 @@ import {
   LayoutDashboard,
   LayoutList,
   Settings,
-  Shield,
+  Users,
   LogOut,
   ScrollText,
   AlertOctagon,
@@ -21,86 +29,126 @@ import { useDemoMode, setDemoMode } from "@/lib/use-demo-mode";
 import { FilterPanel } from "./filter-panel";
 import { cn } from "@/lib/utils";
 
-const navItems = [
-  // Menu aligned with the other platform dashboards:
-  // Dashboard (dynamic insights + charts) → Summary (company-by-company view)
-  // → Companies → Networks → Analytics → Logs → Errors → Admin → Settings.
-  { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { href: "/summary", icon: LayoutList, label: "Summary" },
+type NavItem = {
+  href: string;
+  icon: typeof LayoutDashboard;
+  label: string;
+  children?: { href: string; label: string }[];
+};
+
+const navGroups: { label: string; items: NavItem[] }[] = [
   {
-    href: "/clients",
-    icon: Building2,
-    label: "Companies",
-    children: [{ href: "/clients/by-cloudcampaign", label: "By Cloud Campaign" }, { href: "/clients/by-heropost", label: "By HeroPost" }],
+    label: "Overview",
+    items: [
+      { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+      { href: "/summary", icon: LayoutList, label: "Summary" },
+    ],
   },
-  { href: "/networks", icon: Network, label: "Networks" },
-  { href: "/analytics", icon: BarChart3, label: "Analytics" },
-  { href: "/logs", icon: ScrollText, label: "Logs" },
-  { href: "/errors", icon: AlertOctagon, label: "Errors" },
-  { href: "/admin", icon: Shield, label: "Admin", children: [{ href: "/admin/users", label: "Users" }] },
-  { href: "/settings", icon: Settings, label: "Settings" },
+  {
+    label: "Portfolio",
+    items: [
+      {
+        href: "/clients",
+        icon: Building2,
+        label: "Companies",
+        children: [
+          { href: "/clients/by-cloudcampaign", label: "By Cloud Campaign" },
+          { href: "/clients/by-heropost", label: "By HeroPost" },
+        ],
+      },
+      { href: "/networks", icon: Network, label: "Networks" },
+      { href: "/analytics", icon: BarChart3, label: "Analytics" },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { href: "/logs", icon: ScrollText, label: "Logs" },
+      { href: "/errors", icon: AlertOctagon, label: "Errors" },
+    ],
+  },
+  {
+    label: "Workspace",
+    items: [
+      { href: "/admin", icon: Users, label: "Admin", children: [{ href: "/admin/users", label: "Users" }] },
+      { href: "/settings", icon: Settings, label: "Settings" },
+    ],
+  },
 ];
+
+function initials(name?: string | null, email?: string | null): string {
+  const src = (name || email || "?").replace(/[^A-Za-z ]/g, " ").trim();
+  const parts = src.split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] || "?") + (parts[1]?.[0] || "")).toUpperCase();
+}
 
 export function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const role = (session?.user as { role?: string } | undefined)?.role?.toLowerCase() ?? "user";
 
   return (
-    <aside className="w-60 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0">
-      {/* Logo */}
-      <div className="px-5 py-5 border-b border-gray-100">
+    <aside className="w-[248px] flex-shrink-0 bg-[#111317] text-gray-300 flex flex-col h-screen sticky top-0 border-r border-[#1F2229]">
+      {/* Brand */}
+      <div className="px-5 pt-5 pb-4 border-b border-[#1F2229]">
         <Link href="/dashboard" className="flex items-center gap-2.5">
-          <div className="w-2 h-2 rounded-full bg-[#FE1B04] flex-shrink-0" />
-          <div>
-            <div className="text-sm font-semibold text-gray-900 leading-tight">social.gershonCRM</div>
-            <div className="text-[11px] text-gray-400 leading-tight">Campaign Compliance</div>
+          <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center text-white font-bold text-base flex-shrink-0">
+            G
+          </div>
+          <div className="leading-tight">
+            <div className="text-sm font-semibold text-white tracking-tight">Gershon.AI</div>
+            <div className="text-xs text-[#8E949F]">Social</div>
           </div>
         </Link>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-          const children = "children" in item ? item.children : undefined;
-          return (
-            <div key={item.href}>
-              <Link
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-red-50 text-[#FE1B04]"
-                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                )}
-              >
-                <item.icon className="flex-shrink-0" size={18} />
-                {item.label}
-              </Link>
-              {children && isActive && (
-                <div className="mt-0.5 mb-1 ml-7 pl-3 border-l border-gray-200 space-y-0.5">
-                  {children.map((sub) => {
-                    const subActive = pathname === sub.href || pathname.startsWith(sub.href + "/");
-                    return (
-                      <Link
-                        key={sub.href}
-                        href={sub.href}
-                        className={cn(
-                          "block px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors",
-                          subActive
-                            ? "bg-red-50 text-[#FE1B04]"
-                            : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-                        )}
-                      >
-                        {sub.label}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
+      <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-5">
+        {navGroups.map((group) => (
+          <div key={group.label} className="space-y-0.5">
+            <div className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#7D838E]">
+              {group.label}
             </div>
-          );
-        })}
+            {group.items.map((item) => {
+              const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+              return (
+                <div key={item.href}>
+                  <Link
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-[#23262D] text-white shadow-[inset_2px_0_0_#D92D20]"
+                        : "text-[#C9CDD4] hover:bg-[#1A1D23] hover:text-white"
+                    )}
+                  >
+                    <item.icon className="flex-shrink-0" size={17} strokeWidth={1.8} />
+                    {item.label}
+                  </Link>
+                  {item.children && isActive && (
+                    <div className="mt-0.5 mb-1 ml-[30px] pl-2.5 border-l border-[#2A2E37] space-y-0.5">
+                      {item.children.map((sub) => {
+                        const subActive = pathname === sub.href || pathname.startsWith(sub.href + "/");
+                        return (
+                          <Link
+                            key={sub.href}
+                            href={sub.href}
+                            className={cn(
+                              "block px-2.5 py-1.5 rounded-md text-[13px] font-medium transition-colors",
+                              subActive ? "text-white bg-[#1A1D23]" : "text-[#9BA0AA] hover:text-white"
+                            )}
+                          >
+                            {sub.label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
 
         {/* View filters — category / month / network, applied across the
             dashboard views. Hidden on pages the filters don't drive. */}
@@ -108,27 +156,29 @@ export function Sidebar() {
       </nav>
 
       {/* User footer */}
-      <div className="px-3 py-4 border-t border-gray-100">
-        <div className="px-3 py-2 mb-1">
-          <div className="text-sm font-medium text-gray-900 truncate">{session?.user?.name}</div>
-          <div className="text-xs text-gray-400 truncate">{session?.user?.email}</div>
-          <span className="inline-block mt-1 text-[10px] font-medium text-[#FE1B04] bg-red-50 px-1.5 py-0.5 rounded capitalize">
-            {(session?.user as { role?: string })?.role?.toLowerCase() ?? "user"}
-          </span>
-        </div>
+      <div className="px-3 py-3 border-t border-[#1F2229]">
         <DemoToggleButton />
-        <button
-          onClick={() => signOut({ callbackUrl: "/login" })}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors"
-        >
-          <LogOut size={16} />
-          Sign out
-        </button>
+        <div className="flex items-center gap-2.5 px-2 py-1.5">
+          <div className="w-8 h-8 rounded-full bg-[#2A2E37] text-white text-xs font-semibold flex items-center justify-center flex-shrink-0">
+            {initials(session?.user?.name, session?.user?.email)}
+          </div>
+          <div className="flex-1 min-w-0 leading-tight">
+            <div className="text-[13px] font-medium text-white truncate">{session?.user?.name}</div>
+            <div className="text-xs text-[#8E949F] truncate capitalize">{role}</div>
+          </div>
+          <button
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            aria-label="Sign out"
+            title="Sign out"
+            className="w-8 h-8 rounded-md flex items-center justify-center text-[#8E949F] hover:bg-[#1A1D23] hover:text-white transition-colors"
+          >
+            <LogOut size={16} />
+          </button>
+        </div>
       </div>
     </aside>
   );
 }
-
 
 function DemoToggleButton() {
   const demoOn = useDemoMode();
@@ -141,13 +191,13 @@ function DemoToggleButton() {
       }}
       title={demoOn ? "Currently showing FAKE demo data. Click to switch back to real." : "Switch to fake demo data — every chart full, every number inflated."}
       className={
-        "w-full flex items-center gap-3 px-3 py-2 mb-1 rounded-lg text-sm font-medium transition-colors " +
+        "w-full flex items-center gap-2.5 px-2.5 py-1.5 mb-1 rounded-md text-[13px] font-medium transition-colors " +
         (demoOn
-          ? "bg-amber-100 text-amber-800 hover:bg-amber-200 ring-1 ring-amber-300"
-          : "text-gray-400 hover:bg-gray-50 hover:text-gray-600")
+          ? "bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/40"
+          : "text-[#8E949F] hover:bg-[#1A1D23] hover:text-white")
       }
     >
-      {demoOn ? <StopCircle size={16} /> : <PlayCircle size={16} />}
+      {demoOn ? <StopCircle size={15} /> : <PlayCircle size={15} />}
       {demoOn ? "Demo mode ON" : "Demo mode"}
     </button>
   );
