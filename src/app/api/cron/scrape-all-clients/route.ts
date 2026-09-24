@@ -2,6 +2,7 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { Platform } from "@prisma/client";
+import { getOrgCookies } from "@/lib/x-session";
 
 /**
  * GET /api/cron/scrape-all-clients
@@ -19,13 +20,17 @@ import { Platform } from "@prisma/client";
 
 interface CookieBundle { cookies: Record<string,string>; capturedAt: string | null; }
 
-async function loadCookies(platform: "LINKEDIN" | "TWITTER"): Promise<CookieBundle> {
-  const row = await prisma.setting.findUnique({ where: { key: `cookies:${platform}` } });
-  if (!row) return { cookies: {}, capturedAt: null };
-  try {
-    const parsed = JSON.parse(row.value) as CookieBundle;
-    return { cookies: parsed.cookies ?? {}, capturedAt: parsed.capturedAt ?? null };
-  } catch { return { cookies: {}, capturedAt: null }; }
+// v4.8.0: each workspace is read with ITS OWN captured session.
+const cookieCache = new Map<string, CookieBundle>();
+async function loadCookies(orgId: string | null, platform: "LINKEDIN" | "TWITTER"): Promise<CookieBundle> {
+  if (!orgId) return { cookies: {}, capturedAt: null };
+  const k = orgId + ":" + platform;
+  const hit = cookieCache.get(k);
+  if (hit) return hit;
+  const b = await getOrgCookies(orgId, platform);
+  const v = { cookies: b.cookies, capturedAt: b.capturedAt };
+  cookieCache.set(k, v);
+  return v;
 }
 function cookieHeader(c: Record<string,string>) { return Object.entries(c).map(([k,v]) => `${k}=${v}`).join("; "); }
 function activityIdFromUrl(url: string): string {
@@ -52,6 +57,7 @@ async function scrapeLinkedInOne(
   clientName: string,
   url: string,
   cookies: Record<string,string>,
+  organizationId: string | null = null,
 ): Promise<ScrapeResult> {
   const res: ScrapeResult = { client: clientName, clientId, platform: "LINKEDIN", url, upserted: 0, status: 0 };
   if (!cookies.li_at) { res.error = "no LinkedIn cookies on file"; return res; }
@@ -115,7 +121,7 @@ async function scrapeLinkedInOne(
         ops.push({
           where: { clientId_platform_externalPostId: { clientId, platform: Platform.LINKEDIN, externalPostId: activityId } },
           create: {
-            clientId, platformConnectionId: connectionId, platform: Platform.LINKEDIN,
+            clientId, platformConnectionId: connectionId, platform: Platform.LINKEDIN, organizationId,
             externalPostId: activityId,
             postUrl: `https://www.linkedin.com/feed/update/urn:li:activity:${activityId}/`,
             postTextSnippet: text.slice(0, 280),
@@ -160,6 +166,7 @@ async function scrapeTwitterOne(
   clientName: string,
   url: string,
   cookies: Record<string,string>,
+  organizationId: string | null = null,
 ): Promise<ScrapeResult> {
   const res: ScrapeResult = { client: clientName, clientId, platform: "TWITTER", url, upserted: 0, status: 0 };
   if (!cookies.auth_token || !cookies.ct0) { res.error = "no X cookies on file"; return res; }
@@ -189,7 +196,7 @@ async function scrapeTwitterOne(
       ops.push({
         where: { clientId_platform_externalPostId: { clientId, platform: Platform.TWITTER, externalPostId: id } },
         create: {
-          clientId, platformConnectionId: connectionId, platform: Platform.TWITTER,
+          clientId, platformConnectionId: connectionId, platform: Platform.TWITTER, organizationId,
           externalPostId: id,
           postUrl: `https://x.com/${handle}/status/${id}`,
           postTextSnippet: text.slice(0, 280),
@@ -243,8 +250,7 @@ export async function GET(req: NextRequest) {
     const offset = Math.max(0, parseInt(sp.get("offset") || "0", 10));
     const limit = Math.min(10, Math.max(1, parseInt(sp.get("limit") || "5", 10)));
 
-    const liData = await loadCookies("LINKEDIN");
-    const twData = await loadCookies("TWITTER");
+    cookieCache.clear();
 
     const clients = await prisma.client.findMany({
       where: { status: "ACTIVE" },
@@ -269,9 +275,11 @@ export async function GET(req: NextRequest) {
         if (!url) continue;
         let r: ScrapeResult;
         if (conn.platform === Platform.LINKEDIN) {
-          r = await scrapeLinkedInOne(c.id, conn.id, c.name, url, liData.cookies);
+          const li = await loadCookies(c.organizationId, "LINKEDIN");
+          r = await scrapeLinkedInOne(c.id, conn.id, c.name, url, li.cookies, c.organizationId);
         } else {
-          r = await scrapeTwitterOne(c.id, conn.id, c.name, url, twData.cookies);
+          const tw = await loadCookies(c.organizationId, "TWITTER");
+          r = await scrapeTwitterOne(c.id, conn.id, c.name, url, tw.cookies, c.organizationId);
         }
         results.push(r);
         // Tiny pause to avoid rate-limit
