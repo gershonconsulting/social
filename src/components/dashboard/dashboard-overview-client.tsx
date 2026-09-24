@@ -66,8 +66,13 @@ export function DashboardOverviewClient({ data }: { data: OverviewData }) {
       (r) => matchesCategory(r.clientType, categories) && matchesNetwork(r.platforms, networks),
     );
     const ids = new Set(rows.map((r) => r.id));
+    // Only the networks we actually collect. Google Business is being retired
+    // ("nothing there to collect") and must never flag a company.
     const conns = data.conns.filter(
-      (c) => ids.has(c.clientId) && (networks.length === 0 || networks.includes(c.platform)),
+      (c) =>
+        ids.has(c.clientId) &&
+        c.platform in NETWORK &&
+        (networks.length === 0 || networks.includes(c.platform)),
     );
 
     // Networks that did not come back on the last run, per company.
