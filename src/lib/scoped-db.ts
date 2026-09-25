@@ -42,6 +42,7 @@
  * through db.ts. The token read below is the same nine lines, standing alone.
  */
 import prisma from "@/lib/db-raw";
+import { freshUser } from "@/lib/fresh-user";
 import { getToken } from "next-auth/jwt";
 import { cookies } from "next/headers";
 
@@ -154,16 +155,13 @@ export async function resolveOrg(): Promise<OrgResolution> {
   const userId = token?.id as string | undefined;
   if (!token || !userId) return cacheSet(cookieHeader, { signedIn: false, orgId: null });
 
-  const fromToken = token.organizationId as string | undefined;
-  if (fromToken) return cacheSet(cookieHeader, { signedIn: true, orgId: fromToken });
-
-  // Sessions minted before v4.2.0 do not carry the org. One indexed read, and
-  // it disappears the next time this person signs in.
-  const row = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { organizationId: true },
-  });
-  return cacheSet(cookieHeader, { signedIn: true, orgId: row?.organizationId ?? null });
+  // Workspace comes from the user row, never the token: a token minted before
+  // an admin moved this person would otherwise keep them reading their OLD
+  // workspace until it expired. A deactivated or deleted user resolves to
+  // "signed in, no workspace", which db.ts refuses outright.
+  const fresh = await freshUser(userId);
+  if (!fresh || !fresh.isActive) return cacheSet(cookieHeader, { signedIn: true, orgId: null });
+  return cacheSet(cookieHeader, { signedIn: true, orgId: fresh.organizationId });
 }
 
 /** The organization the signed-in user belongs to, or null. */

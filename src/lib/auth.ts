@@ -9,6 +9,7 @@
 import { getToken } from "next-auth/jwt";
 import { cookies } from "next/headers";
 import { UserRole } from "@prisma/client";
+import { freshUser } from "@/lib/fresh-user";
 
 export { authOptions } from "@/app/api/auth/[...nextauth]/options";
 
@@ -48,15 +49,21 @@ async function getTokenFromCookies() {
 export async function getSession() {
   const token = await getTokenFromCookies();
   if (!token) return null;
+  const id = token.id as string | undefined;
+
+  // Role and workspace come from the user row, NOT the token: the token is
+  // minted at sign-in and would keep a moved / demoted / deactivated person
+  // on their old workspace and role for weeks. See lib/fresh-user.ts.
+  const fresh = id ? await freshUser(id) : null;
+  if (id && (!fresh || !fresh.isActive)) return null;
+
   return {
     user: {
-      id: token.id as string | undefined,
+      id,
       name: token.name as string | undefined,
       email: token.email as string | undefined,
-      role: token.role as UserRole | undefined,
-      // Which workspace this person belongs to. Absent on sessions minted
-      // before tenancy shipped; scoped-db falls back to a lookup for those.
-      organizationId: token.organizationId as string | undefined,
+      role: (fresh?.role ?? token.role) as UserRole | undefined,
+      organizationId: (fresh ? fresh.organizationId ?? undefined : (token.organizationId as string | undefined)),
     },
   };
 }
