@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
+import { OwnWorkspacePanel } from "@/components/admin/own-workspace-panel";
 import {
   UserPlus, Loader2, Trash2, ShieldCheck, Download, Linkedin, Mail, KeyRound,
-  Check, X, Globe, Clock, LogIn, BadgeCheck, ChevronDown, ChevronRight, UserCheck,
+  Check, X, Globe, Clock, LogIn, BadgeCheck, ChevronDown, ChevronRight, UserCheck, Building2,
 } from "lucide-react";
 
 type Role = "ADMIN" | "OPERATIONS" | "READ_ONLY";
@@ -70,6 +71,7 @@ export default function UsersAdminClient() {
   const [mode, setMode] = useState<RegistrationMode | null>(null);
   const [savingMode, setSavingMode] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [workspaceFor, setWorkspaceFor] = useState<string | null>(null);
 
   // invite form
   const [name, setName] = useState("");
@@ -319,6 +321,13 @@ export default function UsersAdminClient() {
                   <KeyRound size={12} /> Remove password
                 </button>
               )}
+              <button
+                onClick={() => setWorkspaceFor(workspaceFor === u.id ? null : u.id)}
+                className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50"
+                title="Move this person into a workspace of their own, with only the companies you pick"
+              >
+                <Building2 size={12} /> Own workspace
+              </button>
             </>
           )}
 
@@ -327,6 +336,17 @@ export default function UsersAdminClient() {
           </button>
         </div>
         {open && <Detail u={u} />}
+        {workspaceFor === u.id && (
+          <OwnWorkspacePanel
+            user={u}
+            onCancel={() => setWorkspaceFor(null)}
+            onDone={async (text) => {
+              setWorkspaceFor(null);
+              setMsg({ kind: "ok", text });
+              await load();
+            }}
+          />
+        )}
       </div>
     );
   }
