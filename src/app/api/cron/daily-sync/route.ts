@@ -118,5 +118,17 @@ export async function GET(req: NextRequest) {
     report.fallback.error = e instanceof Error ? e.message : String(e);
   }
 
+  // Mirrored companies in other workspaces pick up what was just collected.
+  // Separate same-origin request = its own Worker budget. Best-effort.
+  try {
+    const url = new URL(req.url);
+    if (secret) {
+      await fetch(`${url.protocol}//${url.host}/api/cron/mirror-sync`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${secret}` },
+      });
+    }
+  } catch {}
+
   return NextResponse.json(report);
 }
