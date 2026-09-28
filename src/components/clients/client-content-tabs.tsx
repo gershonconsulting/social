@@ -50,7 +50,7 @@ export function ClientContentTabs({
             onClick={() => setTab(t.key)}
             className={`px-4 py-2 text-xs font-semibold flex items-center gap-1.5 transition-colors ${
               i < tabs.length - 1 ? "border-r border-gray-200" : ""
-            } ${active === t.key ? "bg-red-50 text-[#FE1B04]" : "text-gray-500 hover:bg-gray-50"}`}
+            } ${active === t.key ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50"}`}
           >
             <t.icon size={13} />
             {t.label}
