@@ -10,12 +10,13 @@ import prisma from "@/lib/db";
 import rawDb from "@/lib/db-raw";
 import { THEMES } from "@/lib/competitors/analyze";
 import { getCompetitorIds } from "@/lib/competitors/store";
+import { DEFAULT_PER_WEEK, monthTarget, objectivesFor } from "@/lib/campaigns/objectives";
 import type { CategoryData, CompanyExtras, CompanyMonth, MonthWindow, ReportPost } from "./model";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-/** Order + labels of the per-category reports. */
+/** Order + labels of the per-category reports. CAMPAIGN is measured against its posting objective. */
 export const CATEGORY_ORDER: Array<{ key: string; label: string; perCompany: boolean }> = [
   { key: "CAMPAIGN", label: "Campaigns", perCompany: true },
   { key: "CLIENT", label: "Clients", perCompany: false },
@@ -77,7 +78,7 @@ function themesOf(posts: PostRow[]): Array<[string, number]> {
 }
 
 function shapeCompany(win: MonthWindow, c: { id: string; name: string }, posts: PostRow[], prev: PostRow[],
-  fol: { gain: number; li: number | null; x: number | null }): CompanyMonth {
+  objective: CompanyMonth["objective"]): CompanyMonth {
   const perDay = Array(win.dim).fill(0), perDayLi = Array(win.dim).fill(0);
   const wd = new Map<number, { n: number; eng: number }>();
   for (const p of posts) {
@@ -108,52 +109,24 @@ function shapeCompany(win: MonthWindow, c: { id: string; name: string }, posts: 
     days: perDay.map((v, i) => (v > 0 ? i + 1 : 0)).filter(Boolean),
     perDay, perDayLi,
     prev: { posts: prev.length, eng: prev.reduce((s, p) => s + engOf(p), 0), days: new Set(prev.map((p) => p.publishedDateLocal)).size },
-    followers: fol, top, themes: themesOf(posts), bestWeekday,
+    objective, top, themes: themesOf(posts), bestWeekday,
   };
-}
-
-/** Follower gain per client over the month: last snapshot minus the last one before (or the first in) the month. */
-async function followerGains(clientIds: string[], win: MonthWindow): Promise<Map<string, { gain: number; li: number | null; x: number | null }>> {
-  const out = new Map<string, { gain: number; li: number | null; x: number | null }>();
-  if (!clientIds.length) return out;
-  const { last } = bounds(win.y, win.m);
-  const prevB = bounds(win.m === 0 ? win.y - 1 : win.y, (win.m + 11) % 12);
-  const snaps = await prisma.followerSnapshot.findMany({
-    where: { clientId: { in: clientIds }, snapshotDateLocal: { gte: prevB.first, lte: last } },
-    select: { clientId: true, platformConnectionId: true, platform: true, snapshotDateLocal: true, followerCount: true },
-    orderBy: { snapshotDateLocal: "asc" },
-  });
-  const per = new Map<string, { clientId: string; platform: string; base: number | null; end: number | null; firstIn: number | null }>();
-  const monthStart = `${win.key}-01`;
-  for (const s of snaps) {
-    const k = s.platformConnectionId;
-    const r = per.get(k) || { clientId: s.clientId, platform: s.platform, base: null, end: null, firstIn: null };
-    if (s.snapshotDateLocal < monthStart) r.base = s.followerCount;
-    else { if (r.firstIn == null) r.firstIn = s.followerCount; r.end = s.followerCount; }
-    per.set(k, r);
-  }
-  for (const r of per.values()) {
-    if (r.end == null) continue;
-    const start = r.base ?? r.firstIn;
-    const o = out.get(r.clientId) || { gain: 0, li: null, x: null };
-    if (start != null && r.end > start) o.gain += r.end - start;
-    if (r.platform === "LINKEDIN") o.li = r.end; else if (r.platform === "TWITTER") o.x = r.end;
-    out.set(r.clientId, o);
-  }
-  return out;
 }
 
 export async function loadCategories(win: MonthWindow, orgId: string): Promise<CategoryData[]> {
   const clients = await prisma.client.findMany({
     where: { organizationId: orgId, status: { not: "ARCHIVED" } },
-    select: { id: true, name: true, clientType: true },
+    select: { id: true, name: true, clientType: true, status: true },
   });
   const ids = clients.map((c) => c.id);
   const cur = bounds(win.y, win.m);
   const prevB = bounds(win.m === 0 ? win.y - 1 : win.y, (win.m + 11) % 12);
   const posts = await postsIn(ids, cur.first, cur.last);
   const prev = await postsIn(ids, prevB.first, prevB.last);
-  const fol = await followerGains(ids, win);
+
+  // Posting objective (posts / week) for ACTIVE campaign companies — Settings.
+  const campaigns = clients.filter((c) => c.clientType === "CAMPAIGN");
+  const obj = await objectivesFor(orgId, campaigns);
 
   const by = (rows: PostRow[]) => {
     const m = new Map<string, PostRow[]>();
@@ -163,9 +136,15 @@ export async function loadCategories(win: MonthWindow, orgId: string): Promise<C
   const cm = by(posts), pm = by(prev);
   return CATEGORY_ORDER.map((cat) => ({
     key: cat.key, label: cat.label, perCompany: cat.perCompany,
+    objective: cat.key === "CAMPAIGN",
+    defaultPerWeek: cat.key === "CAMPAIGN" ? obj.o.default : DEFAULT_PER_WEEK,
     companies: clients
       .filter((c) => c.clientType === cat.key)
-      .map((c) => shapeCompany(win, c, cm.get(c.id) || [], pm.get(c.id) || [], fol.get(c.id) || { gain: 0, li: null, x: null })),
+      .map((c) => {
+        const perWeek = obj.perWeek(c.id);
+        const objective = cat.key === "CAMPAIGN" && c.status === "ACTIVE" ? { perWeek, target: monthTarget(perWeek, win.dim) } : null;
+        return shapeCompany(win, c, cm.get(c.id) || [], pm.get(c.id) || [], objective);
+      }),
   }));
 }
 
