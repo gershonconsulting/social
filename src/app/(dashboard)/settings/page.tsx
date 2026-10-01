@@ -3,6 +3,7 @@
 // when this page ran a Prisma query during SSR.
 import { SettingsPageClient } from "./page-client";
 import { XAccountCard } from "@/components/settings/x-account-card";
+import { CampaignObjectivesCard } from "@/components/settings/campaign-objectives-card";
 
 export const runtime = 'edge';
 export const dynamic = "force-dynamic";
@@ -11,6 +12,8 @@ export default function SettingsPage() {
   return (
     <>
       <SettingsPageClient />
+      {/* v4.16.0 — posts-per-week objective per campaign company (monthly reports). */}
+      <CampaignObjectivesCard />
       {/* v4.8.0 — each workspace connects its own X account. */}
       <XAccountCard />
     </>
