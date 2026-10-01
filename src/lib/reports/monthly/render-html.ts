@@ -67,7 +67,7 @@ const footer = (left: string, right: string) => `<tr><td style="padding:24px 28p
 const link = (t: { text: string; url: string | null }) => (t.url ? `<a href="${e(t.url)}" style="color:${K.ink};text-decoration:none">${e(t.text)}</a>` : e(t.text));
 
 export function categorySubject(win: MonthWindow, m: CategoryModel): string {
-  return `Social Report — ${m.label} — ${win.name} ${win.y} · ${fmt(m.totals.posts)} posts · ${fmt(m.totals.eng)} engagements`;
+  return `Social Report — ${m.label} — ${win.name} ${win.y} · ${m.totals.pct != null ? `${m.totals.pct}% of posting objective · ` : ""}${fmt(m.totals.posts)} posts · ${fmt(m.totals.eng)} engagements`;
 }
 
 export function categoryHtml(win: MonthWindow, m: CategoryModel, build: string): string {
@@ -83,11 +83,16 @@ ${m.highlights.map((h) => `<td valign="top" width="${Math.floor(100 / m.highligh
 </tr></table></td></tr>
 ${sect("Posts published per day")}
 <tr><td style="padding:0 28px">${bars(win.dim, [{ vals: m.perDayLi, color: K.li }, { vals: m.perDay.map((v, i) => v - (m.perDayLi[i] || 0)), color: K.ink }], [["LinkedIn", K.li], ["X", K.ink]])}</td></tr>
-${sect("Results per company")}
+${m.objective ? `${sect("Objective per company")}
 <tr><td style="padding:0 22px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-<tr>${th("COMPANY")}${th("POSTS", "right")}${th("DAYS", "right")}${th("ENGAGEMENT", "right")}${th("FOLLOWERS", "right")}${th("HIGHLIGHT")}</tr>
-${m.rows.map((r) => `<tr>${td(`<b>${e(r.name)}</b>`)}${td(fmt(r.posts), "", "right")}${td(r.days, "", "right")}${td(`<b>${fmt(r.eng)}</b>`, "", "right")}${td(r.fol ? `+${fmt(r.fol)}` : "", `font-weight:700;color:${K.good}`, "right")}${td(e(r.note), `color:${K.good};font-size:11px`)}</tr>`).join("")}
-</table></td></tr>
+<tr>${th("COMPANY")}${th("PER WEEK", "right")}${th("POSTS", "right")}${th("OBJECTIVE", "right")}${th("REACHED")}${th("ENGAGEMENT", "right")}</tr>
+${m.rows.map((r) => { const pc = r.pct ?? 0; const col = pc >= 100 ? K.good : K.li; return `<tr>${td(`<b>${e(r.name)}</b>${r.note ? `<div style="font-size:11px;color:${K.good}">${e(r.note)}</div>` : ""}`)}${td(r.perWeek ?? "", `color:${K.mut}`, "right")}${td(`<b>${fmt(r.posts)}</b>`, "", "right")}${td(r.target ?? "", "", "right")}
+${td(`<table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr><td width="70%"><div style="background:${K.tint};height:8px"><div style="width:${Math.min(100, pc)}%;height:8px;background:${col}"></div></div></td><td align="right" style="font-size:12px;font-weight:700;color:${pc >= 100 ? K.good : K.ink};padding-left:6px">${r.pct ?? 0}%</td></tr></table>`, "width:130px")}${td(fmt(r.eng), "", "right")}</tr>`; }).join("")}
+</table></td></tr>` : `${sect("Results per company")}
+<tr><td style="padding:0 22px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<tr>${th("COMPANY")}${th("POSTS", "right")}${th("DAYS", "right")}${th("ENGAGEMENT", "right")}${th("PER POST", "right")}${th("HIGHLIGHT")}</tr>
+${m.rows.map((r) => `<tr>${td(`<b>${e(r.name)}</b>`)}${td(fmt(r.posts), "", "right")}${td(r.days, "", "right")}${td(`<b>${fmt(r.eng)}</b>`, "", "right")}${td(r.perPost, "", "right")}${td(e(r.note), `color:${K.good};font-size:11px`)}</tr>`).join("")}
+</table></td></tr>`}
 ${m.top.length ? `${sect(`Best posts of ${win.name}`)}
 <tr><td style="padding:0 28px">${m.top.map((t, i) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:7px 0"><tr>
 <td valign="top" style="font-size:17px;font-weight:700;color:${K.red};width:24px">${i + 1}</td>
@@ -100,7 +105,7 @@ ${footer(`Social · Gershon.AI · ${e(m.label)} · The same report is attached a
 }
 
 export function companySubject(win: MonthWindow, m: CompanyModel): string {
-  return `Your ${win.name} on social — ${m.name} · ${m.tiles[0].value} posts · ${m.tiles[1].value} engagements`;
+  return `Your ${win.name} on social — ${m.name}${m.pct != null ? ` · ${m.pct}% of your posting objective` : ""} · ${m.tiles.find((t) => t.label === "POSTS PUBLISHED")?.value ?? ""} posts`;
 }
 
 export function companyHtml(win: MonthWindow, m: CompanyModel, build: string, to: string): string {

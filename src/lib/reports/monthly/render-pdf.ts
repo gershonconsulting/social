@@ -132,26 +132,48 @@ export function categoryPdf(win: MonthWindow, m: CategoryModel, build: string): 
     [{ vals: m.perDayLi, color: C.LI }, { vals: m.perDay.map((v, i) => v - (m.perDayLi[i] || 0)), color: C.X }],
     `${win.name} 1-${win.dim}`, [["LinkedIn", C.LI], ["X", C.X]]);
 
-  y -= 22; sect(p, y, "Results per company"); y -= 16;
-  const cx = [M + 2, M + 170, M + 214, M + 270, M + 318, M + 370, M + 384];
+  y -= 22; sect(p, y, m.objective ? "Objective per company" : "Results per company"); y -= 16;
   p.rect(M, y - 5, CW, 15, C.TINT);
-  ([["COMPANY", 0, 0], ["POSTS", 1, 1], ["DAYS", 2, 1], ["ENGAGEMENT", 3, 1], ["PER POST", 4, 1], ["FOLLOWERS", 5, 1], ["HIGHLIGHT", 6, 0]] as Array<[string, number, number]>)
-    .forEach(([t, i, r]) => (r ? p.rtext(cx[i], y, t, 6.4, true, C.MUT) : p.text(cx[i], y, t, 6.4, true, C.MUT)));
-  y -= 4;
   const shown = m.rows.slice(0, 8);
-  for (const r of shown) {
-    y -= 17; p.line(M, y + 13, PW - M, C.RULE, 0.4);
-    p.text(cx[0], y + 1, clip(r.name, 8, true, 128), 8, true, C.INK);
-    p.rtext(cx[1], y + 1, fmt(r.posts), 7.8, false, C.INK);
-    p.rtext(cx[2], y + 1, String(r.days), 7.8, false, C.INK);
-    p.rtext(cx[3], y + 1, fmt(r.eng), 7.8, true, C.INK);
-    p.rtext(cx[4], y + 1, String(r.perPost), 7.8, false, C.INK);
-    p.rtext(cx[5], y + 1, r.fol ? `+${fmt(r.fol)}` : "", 7.8, true, C.GOOD);
-    p.text(cx[6], y + 1, clip(r.note, 7.2, false, PW - M - cx[6]), 7.2, false, C.GOOD);
+  if (m.objective) {
+    // COMPANY · PER WEEK · POSTS · OBJECTIVE · REACHED (bar + %) · ENGAGEMENT · HIGHLIGHT
+    const X = { name: M + 2, wk: M + 186, posts: M + 226, target: M + 272, bar: M + 284, pct: M + 372, eng: M + 432, note: M + 444 };
+    p.text(X.name, y, "COMPANY", 6.4, true, C.MUT); p.rtext(X.wk, y, "PER WEEK", 6.4, true, C.MUT);
+    p.rtext(X.posts, y, "POSTS", 6.4, true, C.MUT); p.rtext(X.target, y, "OBJECTIVE", 6.4, true, C.MUT);
+    p.text(X.bar, y, "REACHED", 6.4, true, C.MUT); p.rtext(X.eng, y, "ENGAGEMENT", 6.4, true, C.MUT);
+    p.text(X.note, y, "HIGHLIGHT", 6.4, true, C.MUT);
+    y -= 4;
+    for (const r of shown) {
+      y -= 17; p.line(M, y + 13, PW - M, C.RULE, 0.4);
+      const pc = r.pct ?? 0, col = pc >= 100 ? C.GOOD : C.INK;
+      p.text(X.name, y + 1, clip(r.name, 8, true, 140), 8, true, C.INK);
+      p.rtext(X.wk, y + 1, r.perWeek != null ? String(r.perWeek) : "", 7.8, false, C.MUT);
+      p.rtext(X.posts, y + 1, fmt(r.posts), 7.8, true, C.INK);
+      p.rtext(X.target, y + 1, r.target != null ? fmt(r.target) : "", 7.8, false, C.INK);
+      p.rect(X.bar, y + 1.5, 56, 6, C.TINT);
+      p.rect(X.bar, y + 1.5, Math.min(56, (56 * pc) / 100), 6, pc >= 100 ? C.GOOD : C.LI);
+      p.rtext(X.pct, y + 1, r.pct != null ? `${r.pct}%` : "", 7.8, true, col);
+      p.rtext(X.eng, y + 1, fmt(r.eng), 7.8, false, C.INK);
+      p.text(X.note, y + 1, clip(r.note, 7, false, PW - M - X.note), 7, false, C.GOOD);
+    }
+  } else {
+    const cx = [M + 2, M + 200, M + 244, M + 310, M + 364, M + 380];
+    ([["COMPANY", 0, 0], ["POSTS", 1, 1], ["DAYS", 2, 1], ["ENGAGEMENT", 3, 1], ["PER POST", 4, 1], ["HIGHLIGHT", 5, 0]] as Array<[string, number, number]>)
+      .forEach(([t, i, r]) => (r ? p.rtext(cx[i], y, t, 6.4, true, C.MUT) : p.text(cx[i], y, t, 6.4, true, C.MUT)));
+    y -= 4;
+    for (const r of shown) {
+      y -= 17; p.line(M, y + 13, PW - M, C.RULE, 0.4);
+      p.text(cx[0], y + 1, clip(r.name, 8, true, 160), 8, true, C.INK);
+      p.rtext(cx[1], y + 1, fmt(r.posts), 7.8, false, C.INK);
+      p.rtext(cx[2], y + 1, String(r.days), 7.8, false, C.INK);
+      p.rtext(cx[3], y + 1, fmt(r.eng), 7.8, true, C.INK);
+      p.rtext(cx[4], y + 1, String(r.perPost), 7.8, false, C.INK);
+      p.text(cx[5], y + 1, clip(r.note, 7.2, false, PW - M - cx[5]), 7.2, false, C.GOOD);
+    }
   }
   if (m.rows.length > shown.length) {
     y -= 12;
-    p.text(M + 2, y, `+ ${m.rows.length - shown.length} more companies published — full list in the dashboard.`, 6.8, false, C.MUT);
+    p.text(M + 2, y, `+ ${m.rows.length - shown.length} more companies — full list in the dashboard.`, 6.8, false, C.MUT);
   }
 
   if (m.top.length) {
