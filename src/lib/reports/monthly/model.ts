@@ -57,6 +57,14 @@ export interface CompanyMonth {
   top: ReportPost[];
   themes: Array<[string, number]>;
   bestWeekday: string | null;
+  /** What the Competition report learns from (see competition.ts). */
+  learn: {
+    comments: number;
+    hashtags: Array<[string, number]>; // tag → posts using it
+    themeStats: Array<{ theme: string; posts: number; eng: number; comments: number }>;
+    conversations: ReportPost[]; // posts with the most comments
+    followers: number | null; // latest LinkedIn + X followers (COMPETITION only)
+  };
 }
 
 export interface CategoryData {
