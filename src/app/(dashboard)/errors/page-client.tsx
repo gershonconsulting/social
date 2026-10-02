@@ -50,7 +50,6 @@ interface ErrorsData {
 const PLATFORM_LABEL: Record<string, string> = {
   LINKEDIN: "LinkedIn",
   TWITTER: "X / Twitter",
-  GOOGLE_BUSINESS: "Google Business",
 };
 
 function fmtDate(iso: string | null) {
@@ -170,12 +169,11 @@ export function ErrorsPageClient() {
       {!loading && !error && data && (
         <>
           {/* Summary cards / platform filter */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {[
               { key: "ALL", label: "All issues", n: data.summary.activeCount, css: "bg-gray-50 text-gray-700" },
               { key: "LINKEDIN", label: "LinkedIn", n: data.summary.byPlatform.LINKEDIN ?? 0, css: "bg-blue-50 text-blue-700" },
               { key: "TWITTER", label: "X / Twitter", n: data.summary.byPlatform.TWITTER ?? 0, css: "bg-gray-100 text-gray-700" },
-              { key: "GOOGLE_BUSINESS", label: "Google Business", n: data.summary.byPlatform.GOOGLE_BUSINESS ?? 0, css: "bg-emerald-50 text-emerald-700" },
             ].map((c) => (
               <button
                 key={c.key}
