@@ -123,8 +123,8 @@ async function buildDigest(): Promise<DigestData> {
     lastSyncAt: c.lastSyncAt?.toISOString() ?? null,
   }));
 
-  // 6. Coverage summary across the 3 main platforms
-  const COVERAGE_PLATFORMS: Platform[] = [Platform.LINKEDIN, Platform.TWITTER, Platform.GOOGLE_BUSINESS];
+  // 6. Coverage summary across the two platforms we collect
+  const COVERAGE_PLATFORMS: Platform[] = [Platform.LINKEDIN, Platform.TWITTER];
   const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
   const [conns, anyPostKeys, recentKeys] = await Promise.all([
     prisma.platformConnection.findMany({
@@ -181,7 +181,6 @@ async function buildDigest(): Promise<DigestData> {
 const PLATFORM_LABELS: Record<string, string> = {
   LINKEDIN: "LinkedIn",
   TWITTER: "X / Twitter",
-  GOOGLE_BUSINESS: "Google Business",
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
