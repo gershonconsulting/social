@@ -164,9 +164,16 @@ export function ExtensionPageClient({ latest }: { latest: string }) {
           <div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 size={16} className="animate-spin" /> Checking…</div>
         )}
         {detect.state === "missing" && (
-          <div className="flex items-center gap-2 text-sm text-gray-700">
-            <XCircle size={18} className="text-gray-400" />
-            Not detected in this browser. Latest version is <strong>v{latest}</strong>.
+          <div className="rounded-lg bg-red-50 border border-red-300 p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-red-900">
+              <XCircle size={18} className="text-[#FE1B04]" />
+              Not installed in this browser — no LinkedIn or X posts are collected from here.
+            </div>
+            <a href="/gershonai-extension.zip" download
+              className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[#FE1B04] text-white text-sm font-semibold px-4 py-2">
+              <Download size={16} /> Download v{latest}
+            </a>
+            <span className="ml-3 text-xs text-red-800">then follow the steps below.</span>
           </div>
         )}
         {detect.state === "found" && !outOfDate && (
