@@ -5,7 +5,6 @@
 
 import prisma from "@/lib/db";
 import { getAdapter } from "@/lib/adapters/registry";
-import { GoogleBusinessAdapter } from "@/lib/adapters/google-business";
 import { getSupportedPlatforms } from "@/lib/adapters/registry";
 import { recomputeCompliance } from "@/lib/compliance/engine";
 import { AdapterConfig } from "@/types";
@@ -55,22 +54,6 @@ export async function syncPlatformConnection(
 
   // Auto-discover platform-specific IDs if not set
   let externalAccountId = connection.externalAccountId ?? "";
-
-  // Google Business: discover location ID
-  if (connection.platform === "GOOGLE_BUSINESS" && !externalAccountId && connection.tokenReference) {
-    const gbAdapter = adapter as GoogleBusinessAdapter;
-    const location = await gbAdapter.discoverLocation(connection.tokenReference);
-    if (location) {
-      externalAccountId = location.locationName;
-      await prisma.platformConnection.update({
-        where: { id: connectionId },
-        data: {
-          externalAccountId: location.locationName,
-          externalAccountName: location.displayName,
-        },
-      });
-    }
-  }
 
   // LinkedIn: discover organization ID from company URL
   if (connection.platform === "LINKEDIN" && !externalAccountId && connection.tokenReference) {
@@ -357,10 +340,10 @@ export async function runBackfill(
     const allConnections = await prisma.platformConnection.findMany({
       where: { clientId, isEnabled: true },
     });
-    // Only attempt platforms we have adapters for. Olivier's spec is the
-    // big-three only (LinkedIn, X / Twitter, Google Business). Anything else
-    // (Facebook, Instagram, TikTok, etc.) gets skipped — counting them as
-    // failures was inflating the FAILED ratio in /logs and confusing the user.
+    // Only attempt platforms we have adapters for: LinkedIn and X / Twitter.
+    // Anything else (Facebook, Instagram, TikTok, etc.) gets skipped — counting
+    // them as failures was inflating the FAILED ratio in /logs and confusing
+    // the user. Google Business was removed in v4.18.0: nothing to collect.
     const supported = new Set(getSupportedPlatforms());
     const connections = allConnections.filter((c) => supported.has(c.platform));
     const skipped = allConnections.length - connections.length;
