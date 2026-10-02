@@ -27,6 +27,7 @@ import prisma from "@/lib/db";
 import { recomputeClientCompliance } from "@/lib/compliance/engine";
 import { ClientStatus } from "@prisma/client";
 import { subDays } from "date-fns";
+import { isolateDmitri } from "@/lib/workspaces/empty-workspace";
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (secret) {
@@ -35,6 +36,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   }
+
+  // Backstop for the one-shot in the dashboard layout: make sure Dmitri's
+  // workspace is emptied even if nobody has opened the dashboard. Runs before
+  // mirror-sync so no copied posts land first. Marker-guarded, never throws.
+  await isolateDmitri();
 
   const report: {
     success: boolean;
