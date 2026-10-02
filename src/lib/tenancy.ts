@@ -31,8 +31,13 @@ import prisma from "@/lib/db-raw";
 const BACKFILL_KEY = "tenancy_backfill";
 const BACKFILL_VERSION = "1";
 
-/** Set once per isolate so the marker row isn't re-read on every request. */
+/** Google My Business row cleanup — see removeGoogleMyBusiness below. */
+const GMB_KEY = "gmb_removed";
+const GMB_VERSION = "1";
+
+/** Set once per isolate so the marker rows aren't re-read on every request. */
 let backfilledInThisIsolate = false;
+let gmbRemovedInThisIsolate = false;
 
 export type Org = { id: string; name: string; slug: string };
 
@@ -131,6 +136,82 @@ export async function ensureTenancy(): Promise<void> {
     // Never surface a backfill failure into a page render. The next request
     // tries again; until it succeeds nothing is scoped, which is the state the
     // app was already in.
+  }
+}
+
+/**
+ * Delete every Google My Business row. "Nothing there to collect" — the
+ * adapter is gone, so these rows can no longer be synced or read; they are
+ * just dead weight pinning an enum value in place.
+ *
+ * WHY THIS HAS TO RUN BEFORE THE ENUM VALUE CAN GO. `prisma db push` refuses
+ * to drop a value from an enum while any row still references it, and this
+ * deploy pipeline is `db push` with no migration or seed stage. So the rows go
+ * in THIS deploy, from application code, and GOOGLE_BUSINESS leaves the
+ * Platform enum in the NEXT one. Two deploys, in that order, no shortcuts.
+ *
+ * Children before parents: DailyCompliance and FollowerSnapshot and SocialPost
+ * and PostingSchedule all hang off a PlatformConnection, and the connection is
+ * what carries the platform, so each child is matched through it.
+ *
+ * Idempotent, marker-guarded, and silent on failure like the backfill above —
+ * a cleanup that fails must not take a page render down with it.
+ */
+export async function removeGoogleMyBusiness(): Promise<void> {
+  if (gmbRemovedInThisIsolate) return;
+
+  try {
+    const marker = await prisma.setting.findUnique({ where: { key: GMB_KEY } });
+    if (marker) {
+      const parsed = JSON.parse(marker.value) as { version?: string };
+      if (parsed.version === GMB_VERSION) {
+        gmbRemovedInThisIsolate = true;
+        return;
+      }
+    }
+
+    // Raw string rather than Platform.GOOGLE_BUSINESS on purpose: the enum
+    // value is removed in the next deploy, and this code has to keep compiling
+    // across that change — it is the thing that makes the change possible.
+    const platform = "GOOGLE_BUSINESS" as never;
+
+    const connections = await prisma.platformConnection.findMany({
+      where: { platform },
+      select: { id: true },
+    });
+    const connectionIds = connections.map((c) => c.id);
+
+    if (connectionIds.length > 0) {
+      const byConnection = { platformConnectionId: { in: connectionIds } };
+      await prisma.dailyCompliance.deleteMany({ where: byConnection });
+      await prisma.followerSnapshot.deleteMany({ where: byConnection });
+      await prisma.socialPost.deleteMany({ where: byConnection });
+      await prisma.postingSchedule.deleteMany({ where: byConnection });
+      await prisma.platformConnection.deleteMany({ where: { id: { in: connectionIds } } });
+    }
+
+    await prisma.setting.upsert({
+      where: { key: GMB_KEY },
+      create: {
+        key: GMB_KEY,
+        value: JSON.stringify({
+          version: GMB_VERSION,
+          connectionsDeleted: connectionIds.length,
+          at: new Date().toISOString(),
+        }),
+      },
+      update: {
+        value: JSON.stringify({
+          version: GMB_VERSION,
+          connectionsDeleted: connectionIds.length,
+          at: new Date().toISOString(),
+        }),
+      },
+    });
+
+    gmbRemovedInThisIsolate = true;
+  } catch {
+    // Same contract as the backfill: never fail a request over housekeeping.
   }
 }
 
