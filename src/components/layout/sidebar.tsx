@@ -8,6 +8,7 @@
  * content area stays the focus. Routes and order are unchanged from v2.6.0.
  */
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
@@ -24,6 +25,7 @@ import {
   Network,
   PlayCircle,
   StopCircle,
+  Rocket,
 } from "lucide-react";
 import { useDemoMode, setDemoMode } from "@/lib/use-demo-mode";
 import { FilterPanel } from "./filter-panel";
@@ -76,6 +78,30 @@ const navGroups: { label: string; items: NavItem[] }[] = [
   },
 ];
 
+/**
+ * Whether this workspace still has setup left. Asked once per mount; a failure
+ * answers "complete", because a menu entry is not worth an error state.
+ */
+function useSetupIncomplete(): boolean {
+  const [incomplete, setIncomplete] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      try {
+        const r = await fetch("/api/onboarding");
+        const j = await r.json();
+        if (live && j?.success) setIncomplete(!j.data.complete);
+      } catch {
+        /* leave it hidden */
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, []);
+  return incomplete;
+}
+
 function initials(name?: string | null, email?: string | null): string {
   const src = (name || email || "?").replace(/[^A-Za-z ]/g, " ").trim();
   const parts = src.split(/\s+/).filter(Boolean);
@@ -86,6 +112,18 @@ export function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const role = (session?.user as { role?: string } | undefined)?.role?.toLowerCase() ?? "user";
+  const setupIncomplete = useSetupIncomplete();
+
+  // "Getting started" earns a place in the menu only while there is still
+  // something to do. A finished workspace shouldn't carry a permanent reminder
+  // of setup it completed months ago.
+  const groups = setupIncomplete
+    ? navGroups.map((g) =>
+        g.label === "Overview"
+          ? { ...g, items: [{ href: "/welcome", icon: Rocket, label: "Getting started" }, ...g.items] }
+          : g,
+      )
+    : navGroups;
 
   return (
     <aside className="w-[248px] flex-shrink-0 bg-[#111317] text-gray-300 flex flex-col h-screen sticky top-0 border-r border-[#1F2229]">
@@ -104,7 +142,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-5">
-        {navGroups.map((group) => (
+        {groups.map((group) => (
           <div key={group.label} className="space-y-0.5">
             <div className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#7D838E]">
               {group.label}
