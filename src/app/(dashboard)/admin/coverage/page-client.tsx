@@ -27,7 +27,6 @@ interface ClientRow {
 const COLUMNS: { platform: string; label: string }[] = [
   { platform: "LINKEDIN", label: "LinkedIn" },
   { platform: "TWITTER", label: "X / Twitter" },
-  { platform: "GOOGLE_BUSINESS", label: "Google My Business" },
 ];
 
 // Build with the 5-retry fetch pattern we use everywhere else.
