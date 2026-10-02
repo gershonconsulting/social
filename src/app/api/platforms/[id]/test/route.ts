@@ -35,7 +35,7 @@ export async function POST(
     // For platforms that need OAuth, no token = PENDING. Twitter is an exception:
     // we read public profiles via syndication, so a missing token is fine — the
     // adapter just needs the @handle (resolved from the connection's URL).
-    const platformsThatNeedToken = new Set(["LINKEDIN", "GOOGLE_BUSINESS"]);
+    const platformsThatNeedToken = new Set(["LINKEDIN"]);
     if (!conn.tokenReference && platformsThatNeedToken.has(conn.platform)) {
       await prisma.platformConnection.update({
         where: { id },
@@ -116,9 +116,9 @@ export async function POST(
       });
     }
 
-    // No throw. If the adapter returned null (not all platforms expose follower
-    // counts — e.g. Google Business returns null by design), we still consider
-    // the call successful as long as it didn't throw.
+    // No throw. If the adapter returned null — some platforms don't expose a
+    // follower count at all — we still consider the call successful, because
+    // not throwing is what we were actually probing for.
     await prisma.platformConnection.update({
       where: { id },
       data: {

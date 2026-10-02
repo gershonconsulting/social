@@ -59,7 +59,6 @@ async function main() {
   const platforms: { platform: Platform; name: string; mandatory: boolean }[] = [
     { platform: Platform.LINKEDIN, name: "LinkedIn Company Page", mandatory: true },
     { platform: Platform.TWITTER, name: "X / Twitter", mandatory: true },
-    { platform: Platform.GOOGLE_BUSINESS, name: "Google Business Profile", mandatory: true },
   ];
 
   for (const p of platforms) {

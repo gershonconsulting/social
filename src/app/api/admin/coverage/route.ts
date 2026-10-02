@@ -12,11 +12,11 @@ import { ClientStatus, Platform } from "@prisma/client";
  *   upToDate  — at least one SocialPost row in the last 14 days
  *
  * Used by /admin/coverage to render the
- *   0/1/2/3 green-check grid (no link → no data → stale → fresh).
+ *   0/1/2 green-check grid (no link → no data → stale → fresh).
  *
  * Caching: short-TTL public cache so flipping back to the page is instant.
  */
-const PLATFORMS: Platform[] = [Platform.LINKEDIN, Platform.TWITTER, Platform.GOOGLE_BUSINESS];
+const PLATFORMS: Platform[] = [Platform.LINKEDIN, Platform.TWITTER];
 
 interface PerPlatform {
   hasLink: boolean;

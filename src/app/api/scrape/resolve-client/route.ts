@@ -5,7 +5,7 @@ import prisma from "@/lib/db";
 /**
  * GET /api/scrape/resolve-client?url=<linkedin or x URL>
  *
- * Match a given LinkedIn / X / GBP URL back to a client + platform pair so
+ * Match a given LinkedIn / X URL back to a client + platform pair so
  * a one-click bookmarklet (running on the page itself) can POST scraped
  * posts to /api/scrape/import without the user needing to know clientIds.
  *
@@ -25,7 +25,6 @@ function normalize(u: string): string {
 function detectPlatform(host: string): string | null {
   if (host.includes("linkedin.com")) return "LINKEDIN";
   if (host.includes("twitter.com") || host.includes("x.com")) return "TWITTER";
-  if (host.includes("google.com/maps") || host.includes("g.co/kgs")) return "GOOGLE_BUSINESS";
   return null;
 }
 
@@ -67,7 +66,7 @@ export async function GET(req: NextRequest) {
       : { not: null };
     const all = await prisma.platformConnection.findMany({
       where: {
-        platform: platform as "LINKEDIN" | "TWITTER" | "GOOGLE_BUSINESS",
+        platform: platform as "LINKEDIN" | "TWITTER",
         isEnabled: true,
         externalAccountUrl: containsClause,
         // Skip archived clients — earlier dedupe left some archived rows
