@@ -28,6 +28,7 @@ import { recomputeClientCompliance } from "@/lib/compliance/engine";
 import { ClientStatus } from "@prisma/client";
 import { subDays } from "date-fns";
 import { isolateDmitri } from "@/lib/workspaces/empty-workspace";
+import { seedValosWorkspace } from "@/lib/workspaces/seed-valos";
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (secret) {
@@ -41,6 +42,7 @@ export async function GET(req: NextRequest) {
   // workspace is emptied even if nobody has opened the dashboard. Runs before
   // mirror-sync so no copied posts land first. Marker-guarded, never throws.
   await isolateDmitri();
+  await seedValosWorkspace();
 
   const report: {
     success: boolean;
