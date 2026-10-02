@@ -26,6 +26,7 @@ import {
   PlayCircle,
   StopCircle,
   Rocket,
+  Puzzle,
 } from "lucide-react";
 import { useDemoMode, setDemoMode } from "@/lib/use-demo-mode";
 import { FilterPanel } from "./filter-panel";
@@ -67,6 +68,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     items: [
       { href: "/logs", icon: ScrollText, label: "Logs" },
       { href: "/errors", icon: AlertOctagon, label: "Errors" },
+      { href: "/extension", icon: Puzzle, label: "Extension" },
     ],
   },
   {
