@@ -7,6 +7,7 @@ import { ExtensionSeenReporter } from "@/components/layout/extension-seen-report
 import { ensureTenancy, removeGoogleMyBusiness } from "@/lib/tenancy";
 import { isolateDmitri } from "@/lib/workspaces/empty-workspace";
 import { seedValosWorkspace } from "@/lib/workspaces/seed-valos";
+import { extendValosCoverage } from "@/lib/workspaces/valos-coverage";
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
 const BUILD_DATE = process.env.NEXT_PUBLIC_BUILD_DATE || new Date().toISOString();
@@ -49,6 +50,8 @@ export default async function DashboardLayout({
   await isolateDmitri();
   // Then VALOS + its nine competitors, entered fresh in that workspace.
   await seedValosWorkspace();
+  // Then widen coverage: 3 more competitors + partner Bio4Dreams (lib/workspaces/valos-coverage.ts).
+  await extendValosCoverage();
 
   const shortVersion = APP_VERSION.length > 8 ? APP_VERSION.slice(0, 7) : APP_VERSION;
   const buildDate = formatBuildDate(BUILD_DATE);
