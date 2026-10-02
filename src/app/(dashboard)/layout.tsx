@@ -8,6 +8,8 @@ import { ensureTenancy, removeGoogleMyBusiness } from "@/lib/tenancy";
 import { isolateDmitri } from "@/lib/workspaces/empty-workspace";
 import { seedValosWorkspace } from "@/lib/workspaces/seed-valos";
 import { extendValosCoverage } from "@/lib/workspaces/valos-coverage";
+import { ExtensionInstallBanner } from "@/components/layout/extension-install-banner";
+import { EXTENSION_LATEST } from "@/lib/extension-version";
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
 const BUILD_DATE = process.env.NEXT_PUBLIC_BUILD_DATE || new Date().toISOString();
@@ -67,6 +69,8 @@ export default async function DashboardLayout({
         <Sidebar />
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-[1400px] mx-auto px-9 pt-7 pb-10">
+            {/* Red strip when the extension is missing or out of date here. */}
+            <ExtensionInstallBanner latest={EXTENSION_LATEST} />
             {children}
             <footer className="mt-12 pt-4 border-t border-gray-200 text-[11px] text-gray-500 font-mono">
               {buildLabel && <>{buildLabel} &middot; </>}v{shortVersion} &middot; {buildDate}
