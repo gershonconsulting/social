@@ -47,13 +47,11 @@ interface Summary {
 const PLATFORM_LABELS: Record<string, string> = {
   LINKEDIN: "LinkedIn",
   TWITTER: "X / Twitter",
-  GOOGLE_BUSINESS: "Google Business",
 };
 
 const PLATFORM_COLOR: Record<string, string> = {
   LINKEDIN: "bg-blue-500",
   TWITTER: "bg-gray-700",
-  GOOGLE_BUSINESS: "bg-green-600",
 };
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -84,9 +82,8 @@ function buildDemoSummary(real: Summary | null): Summary {
     const date = d.toISOString().slice(0, 10);
     const li = pickInt(rng, 12, 28);
     const tw = pickInt(rng, 10, 24);
-    const gmb = pickInt(rng, 6, 14);
-    const total = li + tw + gmb;
-    postsByDay.push({ date, total, byPlatform: { LINKEDIN: li, TWITTER: tw, GOOGLE_BUSINESS: gmb } });
+    const total = li + tw;
+    postsByDay.push({ date, total, byPlatform: { LINKEDIN: li, TWITTER: tw } });
     totalPosts += total;
     totalLikes += pickInt(rng, 30, 60) * total;
     totalComments += pickInt(rng, 2, 6) * total;
@@ -95,7 +92,6 @@ function buildDemoSummary(real: Summary | null): Summary {
   const byPlatform: Record<string, PlatformTotals> = {
     LINKEDIN: { posts: 0, likes: 0, comments: 0, shares: 0 },
     TWITTER: { posts: 0, likes: 0, comments: 0, shares: 0 },
-    GOOGLE_BUSINESS: { posts: 0, likes: 0, comments: 0, shares: 0 },
   };
   for (const day of postsByDay) {
     for (const [k, v] of Object.entries(day.byPlatform)) {
@@ -109,7 +105,7 @@ function buildDemoSummary(real: Summary | null): Summary {
   const fakeClients = ["APM Music", "WALLIX", "Business France", "SelectUSA", "MAbSilico", "Finance Montreal", "Edflex", "VALOS"];
   const topPosts: TopPost[] = Array.from({ length: 5 }).map((_, i) => {
     const c = fakeClients[i % fakeClients.length];
-    const plats = ["LINKEDIN", "TWITTER", "LINKEDIN", "GOOGLE_BUSINESS", "TWITTER"];
+    const plats = ["LINKEDIN", "TWITTER", "LINKEDIN", "TWITTER", "LINKEDIN"];
     return {
       id: "demo-" + i,
       platform: plats[i],
