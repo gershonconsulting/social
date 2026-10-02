@@ -54,9 +54,21 @@ export async function primaryOrgId(): Promise<string> {
 
 type PostRow = {
   clientId: string; platform: string; publishedDateLocal: string; likeCount: number; commentCount: number;
-  shareCount: number; postTextSnippet: string | null; postUrl: string | null;
+  shareCount: number; postTextSnippet: string | null; postUrl: string | null; hashtags: string | null;
 };
-const POST_SELECT = { clientId: true, platform: true, publishedDateLocal: true, likeCount: true, commentCount: true, shareCount: true, postTextSnippet: true, postUrl: true } as const;
+const POST_SELECT = { clientId: true, platform: true, publishedDateLocal: true, likeCount: true, commentCount: true, shareCount: true, postTextSnippet: true, postUrl: true, hashtags: true } as const;
+
+/** Hashtags from the dedicated column (JSON or loose) and the text — same rule as lib/content/corpus.ts. */
+function tagsOf(p: PostRow): string[] {
+  const out = new Set<string>();
+  if (p.hashtags) {
+    let tags: string[] = [];
+    try { const v = JSON.parse(p.hashtags); if (Array.isArray(v)) tags = v.map(String); } catch { tags = p.hashtags.split(/[,\s#]+/); }
+    for (const t of tags) { const c = t.trim().replace(/^#/, "").toLowerCase(); if (c.length >= 2 && /\p{L}/u.test(c)) out.add(c); }
+  }
+  for (const m of (p.postTextSnippet || "").matchAll(/#([\p{L}\p{N}_]{2,40})/gu)) if (/\p{L}/u.test(m[1])) out.add(m[1].toLowerCase());
+  return Array.from(out);
+}
 const engOf = (p: PostRow) => (p.likeCount || 0) + (p.commentCount || 0) + (p.shareCount || 0);
 const netOf = (platform: string) => (platform === "TWITTER" ? "X" : platform === "LINKEDIN" ? "LinkedIn" : platform.charAt(0) + platform.slice(1).toLowerCase());
 
@@ -78,7 +90,7 @@ function themesOf(posts: PostRow[]): Array<[string, number]> {
 }
 
 function shapeCompany(win: MonthWindow, c: { id: string; name: string }, posts: PostRow[], prev: PostRow[],
-  objective: CompanyMonth["objective"]): CompanyMonth {
+  objective: CompanyMonth["objective"], followers: number | null = null): CompanyMonth {
   const perDay = Array(win.dim).fill(0), perDayLi = Array(win.dim).fill(0);
   const wd = new Map<number, { n: number; eng: number }>();
   for (const p of posts) {
@@ -89,18 +101,32 @@ function shapeCompany(win: MonthWindow, c: { id: string; name: string }, posts: 
   }
   const wdays = Array.from(wd.entries()).filter(([, s]) => s.n >= 2);
   const bestWeekday = wdays.length >= 2 ? WEEKDAYS[wdays.sort((a, b) => b[1].eng / b[1].n - a[1].eng / a[1].n)[0][0]] : null;
-  const top: ReportPost[] = posts
-    .filter((p) => (p.postTextSnippet || "").trim())
-    .sort((a, b) => engOf(b) - engOf(a))
-    .slice(0, 5)
-    .map((p) => {
-      const d = +p.publishedDateLocal.slice(8, 10);
-      return {
-        company: c.name, date: `${win.mon3} ${d}`, net: netOf(p.platform),
-        text: (p.postTextSnippet || "").replace(/\s+/g, " ").trim().slice(0, 140),
-        url: p.postUrl, likes: p.likeCount || 0, comments: p.commentCount || 0, shares: p.shareCount || 0, eng: engOf(p),
-      };
-    });
+  const toPost = (p: PostRow): ReportPost => {
+    const d = +p.publishedDateLocal.slice(8, 10);
+    return {
+      company: c.name, date: `${win.mon3} ${d}`, net: netOf(p.platform),
+      text: (p.postTextSnippet || "").replace(/\s+/g, " ").trim().slice(0, 140),
+      url: p.postUrl, likes: p.likeCount || 0, comments: p.commentCount || 0, shares: p.shareCount || 0, eng: engOf(p),
+    };
+  };
+  const withText = posts.filter((p) => (p.postTextSnippet || "").trim());
+  const top: ReportPost[] = withText.slice().sort((a, b) => engOf(b) - engOf(a)).slice(0, 5).map(toPost);
+
+  // Learning data (used by the Competition report).
+  const tagCount = new Map<string, number>();
+  for (const p of posts) for (const t of tagsOf(p)) tagCount.set(t, (tagCount.get(t) || 0) + 1);
+  const themeStat = new Map<string, { posts: number; eng: number; comments: number }>();
+  for (const p of posts) for (const th of THEMES) if (th.re.test(p.postTextSnippet || "")) {
+    const s = themeStat.get(th.label) || { posts: 0, eng: 0, comments: 0 };
+    s.posts++; s.eng += engOf(p); s.comments += p.commentCount || 0; themeStat.set(th.label, s);
+  }
+  const learn: CompanyMonth["learn"] = {
+    comments: posts.reduce((s, p) => s + (p.commentCount || 0), 0),
+    hashtags: Array.from(tagCount.entries()).sort((a, b) => b[1] - a[1]).slice(0, 20),
+    themeStats: Array.from(themeStat.entries()).map(([theme, s]) => ({ theme, ...s })),
+    conversations: withText.filter((p) => (p.commentCount || 0) > 0).sort((a, b) => (b.commentCount || 0) - (a.commentCount || 0)).slice(0, 3).map(toPost),
+    followers,
+  };
   return {
     id: c.id, name: c.name,
     li: posts.filter((p) => p.platform === "LINKEDIN").length,
@@ -109,8 +135,27 @@ function shapeCompany(win: MonthWindow, c: { id: string; name: string }, posts: 
     days: perDay.map((v, i) => (v > 0 ? i + 1 : 0)).filter(Boolean),
     perDay, perDayLi,
     prev: { posts: prev.length, eng: prev.reduce((s, p) => s + engOf(p), 0), days: new Set(prev.map((p) => p.publishedDateLocal)).size },
-    objective, top, themes: themesOf(posts), bestWeekday,
+    objective, top, themes: themesOf(posts), bestWeekday, learn,
   };
+}
+
+/** Latest LinkedIn + X follower count per client, as of the month's last day. */
+async function latestFollowers(clientIds: string[], last: string): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!clientIds.length) return out;
+  const snaps = await prisma.followerSnapshot.findMany({
+    where: { clientId: { in: clientIds }, snapshotDateLocal: { lte: last }, platform: { in: ["LINKEDIN", "TWITTER"] } },
+    select: { clientId: true, platformConnectionId: true, snapshotDateLocal: true, followerCount: true },
+    orderBy: { snapshotDateLocal: "desc" },
+    take: 2000,
+  });
+  const seen = new Set<string>();
+  for (const s of snaps) {
+    if (seen.has(s.platformConnectionId)) continue;
+    seen.add(s.platformConnectionId);
+    out.set(s.clientId, (out.get(s.clientId) || 0) + s.followerCount);
+  }
+  return out;
 }
 
 export async function loadCategories(win: MonthWindow, orgId: string): Promise<CategoryData[]> {
@@ -123,6 +168,9 @@ export async function loadCategories(win: MonthWindow, orgId: string): Promise<C
   const prevB = bounds(win.m === 0 ? win.y - 1 : win.y, (win.m + 11) % 12);
   const posts = await postsIn(ids, cur.first, cur.last);
   const prev = await postsIn(ids, prevB.first, prevB.last);
+
+  // Latest follower count for COMPETITION companies ("who is most followed").
+  const followers = await latestFollowers(clients.filter((c) => c.clientType === "COMPETITION").map((c) => c.id), cur.last);
 
   // Posting objective (posts / week) for ACTIVE campaign companies — Settings.
   const campaigns = clients.filter((c) => c.clientType === "CAMPAIGN");
@@ -143,7 +191,7 @@ export async function loadCategories(win: MonthWindow, orgId: string): Promise<C
       .map((c) => {
         const perWeek = obj.perWeek(c.id);
         const objective = cat.key === "CAMPAIGN" && c.status === "ACTIVE" ? { perWeek, target: monthTarget(perWeek, win.dim) } : null;
-        return shapeCompany(win, c, cm.get(c.id) || [], pm.get(c.id) || [], objective);
+        return shapeCompany(win, c, cm.get(c.id) || [], pm.get(c.id) || [], objective, followers.get(c.id) ?? null);
       }),
   }));
 }

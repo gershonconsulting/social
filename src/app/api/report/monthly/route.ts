@@ -13,7 +13,8 @@ import { primaryOrgId } from "@/lib/reports/monthly/data";
  * GET  /api/report/monthly?company=<clientId>[&format=pdf]
  *        &month=YYYY-MM                                  — any closed month (default: last one)
  *      Auth: an ADMIN of the primary workspace, or Bearer CRON_SECRET / DIGEST_SECRET.
- * POST /api/report/monthly[?month=&force=1&dry=1]       — build AND send (Bearer secret only)
+ * POST /api/report/monthly[?month=&force=1&dry=1]       — build AND send (same auth as GET: a primary-
+ *      workspace ADMIN — so a month can be previewed then sent from the browser — or the Bearer secret)
  *
  * Production trigger: the daily digest calls runMonthlyReports() during the
  * first 7 days of each month; delivery is idempotent per report, so it sends
@@ -74,7 +75,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!secretOk(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!secretOk(req) && !(await adminOk())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const url = new URL(req.url);
     const r = await runMonthlyReports({

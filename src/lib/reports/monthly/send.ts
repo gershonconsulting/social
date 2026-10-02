@@ -16,6 +16,7 @@ import { categoryPdf, companyPdf } from "./render-pdf";
 import { categoryHtml, categorySubject, companyHtml, companySubject } from "./render-html";
 import { loadCategories, loadCompanyExtras, monthWindow, primaryOrgId } from "./data";
 import { APP_VERSION } from "@/lib/extension-version";
+import { competitionHtml, competitionModel, competitionPdf, competitionSubject, type CompetitionModel } from "./competition";
 
 export const MONTHLY_SENT_KEY = "monthly_report_sent";
 const REPORT_INBOX = "report@gershonconsulting.com";
@@ -68,7 +69,7 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(
 
 export interface MonthlyBuild {
   win: MonthWindow;
-  categories: CategoryModel[];
+  categories: Array<CategoryModel | CompetitionModel>;
   companies: Array<{ model: CompanyModel; recipients: string[] }>;
 }
 
@@ -87,12 +88,18 @@ export async function buildMonthly(month?: string | null): Promise<MonthlyBuild>
     }
     cat.delivered = companies.filter((x) => x.recipients.length && cat.companies.some((c) => c.id === x.model.id)).map((x) => x.model.name);
   }
-  const categories = cats.map((c) => categoryModel(win, c)).filter((m): m is CategoryModel => !!m);
+  // Competition gets its own learning report; every other category the standard one.
+  const categories = cats
+    .map((c) => (c.key === "COMPETITION" ? competitionModel(win, c) : categoryModel(win, c)))
+    .filter((m): m is CategoryModel | CompetitionModel => !!m);
   return { win, categories, companies };
 }
 
-export function renderCategory(b: MonthlyBuild, m: CategoryModel) {
+export function renderCategory(b: MonthlyBuild, m: CategoryModel | CompetitionModel) {
   const build = buildLabel();
+  if (m.kind === "competition") {
+    return { subject: competitionSubject(b.win, m), html: competitionHtml(b.win, m, build), pdf: competitionPdf(b.win, m, build), filename: `social-${b.win.key}-competition.pdf` };
+  }
   return { subject: categorySubject(b.win, m), html: categoryHtml(b.win, m, build), pdf: categoryPdf(b.win, m, build), filename: `social-${b.win.key}-${slug(m.label)}.pdf` };
 }
 export function renderCompany(b: MonthlyBuild, m: CompanyModel, to: string) {
