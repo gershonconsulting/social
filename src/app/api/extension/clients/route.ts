@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
       let linkedin: { connectionId: string; url: string; vanity: string } | null = null;
       let twitter: { connectionId: string; url: string; handle: string } | null = null;
       if (li?.externalAccountUrl) {
-        const m = li.externalAccountUrl.match(/linkedin\.com\/(?:company|in|school)\/([a-zA-Z0-9\-_.]+)/i);
+        const m = li.externalAccountUrl.match(/linkedin\.com\/(?:company|in|school)\/([^/?#]+)/i);
         if (m) linkedin = { connectionId: li.id, url: li.externalAccountUrl, vanity: m[1] };
       }
       if (tw?.externalAccountUrl) {
