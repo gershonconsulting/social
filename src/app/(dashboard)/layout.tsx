@@ -7,7 +7,7 @@ import { ExtensionSeenReporter } from "@/components/layout/extension-seen-report
 import { ensureTenancy, removeGoogleMyBusiness } from "@/lib/tenancy";
 import { isolateDmitri } from "@/lib/workspaces/empty-workspace";
 import { seedValosWorkspace } from "@/lib/workspaces/seed-valos";
-import { extendValosCoverage } from "@/lib/workspaces/valos-coverage";
+import { purgeValosFromGershonOnce } from "@/lib/workspaces/purge-valos-from-gershon";
 import { ExtensionInstallBanner } from "@/components/layout/extension-install-banner";
 import { EXTENSION_LATEST } from "@/lib/extension-version";
 
@@ -52,8 +52,10 @@ export default async function DashboardLayout({
   await isolateDmitri();
   // Then VALOS + its nine competitors, entered fresh in that workspace.
   await seedValosWorkspace();
-  // Then widen coverage: 3 more competitors + partner Bio4Dreams (lib/workspaces/valos-coverage.ts).
-  await extendValosCoverage();
+  // v4.27.0: extendValosCoverage() is no longer called — it added VALOS's
+  // competitors to the GERSHON workspace (cross-tenant leak). One-shot clean-up
+  // of what it and Competitor Watch left there, plus every mirror link:
+  await purgeValosFromGershonOnce();
 
   const shortVersion = APP_VERSION.length > 8 ? APP_VERSION.slice(0, 7) : APP_VERSION;
   const buildDate = formatBuildDate(BUILD_DATE);
