@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Social — LinkedIn & X Collector",
-  "version": "0.12.2",
+  "name": "Social by Gershon.AI — LinkedIn & X Collector",
+  "version": "0.12.3",
   "description": "Collects LinkedIn and X posts for social.gershoncrm.com, for the workspace of whoever is signed in there in this browser. Collects nothing until then.",
   "permissions": [
     "cookies",
@@ -27,7 +27,7 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "Social Sync",
+    "default_title": "Social by Gershon.AI — Sync",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",

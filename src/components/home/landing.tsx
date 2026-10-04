@@ -169,7 +169,7 @@ export function Landing({
                   </svg>
                 </span>
                 <div>
-                  <h3>Social — LinkedIn &amp; X Collector</h3>
+                  <h3>Social by Gershon.AI — LinkedIn &amp; X Collector</h3>
                   <div className="extbox-meta">Version <b>{extensionVersion}</b> · ~42 KB · Chrome &amp; Edge (Chromium)</div>
                 </div>
               </div>
