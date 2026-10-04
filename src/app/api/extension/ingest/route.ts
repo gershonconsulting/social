@@ -6,6 +6,7 @@ import { recordIngestRun } from "@/lib/extension/heartbeat";
 import { recordExtSeen } from "@/lib/extension/seen";
 import { dbForOrg } from "@/lib/scoped-db";
 import { resolveExtensionCaller } from "@/lib/extension-auth";
+import { recordLinkedInResults } from "@/lib/collection-health";
 
 /**
  * POST /api/extension/ingest
@@ -121,6 +122,8 @@ export async function POST(req: NextRequest) {
     let totalUpserted = 0;
     let totalAttempts = 0;
     let failed = 0;
+    /** What each LinkedIn company returned — feeds the "LinkedIn broke" alarm. */
+    const liHealth: Array<{ connectionId: string; n: number; error?: string | null }> = [];
 
     for (const r of body.results) {
       const platStr = (r.platform || "").toUpperCase();
@@ -153,6 +156,14 @@ export async function POST(req: NextRequest) {
           error: "client not in this workspace",
         });
         continue;
+      }
+
+      if (platform === Platform.LINKEDIN) {
+        liHealth.push({
+          connectionId: r.connectionId,
+          n: r.error ? 0 : Array.isArray(r.posts) ? r.posts.length : 0,
+          error: r.error ?? null,
+        });
       }
 
       if (r.error) {
@@ -300,6 +311,7 @@ export async function POST(req: NextRequest) {
     //    nothing, so the daily report can tell "quiet day" from "job dead".
     // 2. Extension version, when the build sends one — a stronger signal than
     //    the page bridge, which only fires when a dashboard tab is open.
+    await recordLinkedInResults(caller.orgId, liHealth);
     try {
       await recordIngestRun({ attempted: totalAttempts, upserted: totalUpserted, failed });
     } catch {}
