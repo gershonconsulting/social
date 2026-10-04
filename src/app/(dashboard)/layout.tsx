@@ -9,6 +9,7 @@ import { isolateDmitri } from "@/lib/workspaces/empty-workspace";
 import { seedValosWorkspace } from "@/lib/workspaces/seed-valos";
 import { purgeValosFromGershonOnce } from "@/lib/workspaces/purge-valos-from-gershon";
 import { ExtensionInstallBanner } from "@/components/layout/extension-install-banner";
+import { CollectionHealthBanner } from "@/components/layout/collection-health-banner";
 import { EXTENSION_LATEST } from "@/lib/extension-version";
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
@@ -73,6 +74,8 @@ export default async function DashboardLayout({
           <div className="max-w-[1400px] mx-auto px-9 pt-7 pb-10">
             {/* Red strip when the extension is missing or out of date here. */}
             <ExtensionInstallBanner latest={EXTENSION_LATEST} />
+            {/* Red strip when LinkedIn collection returns nothing for every company. */}
+            <CollectionHealthBanner />
             {children}
             <footer className="mt-12 pt-4 border-t border-gray-200 text-[11px] text-gray-500 font-mono">
               {buildLabel && <>{buildLabel} &middot; </>}v{shortVersion} &middot; {buildDate}
