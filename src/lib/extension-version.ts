@@ -6,7 +6,7 @@
  *   - GET /api/extension/version  (the popup's update check)
  *   - the public home page        (download card)
  */
-export const EXTENSION_LATEST = "0.12.0";
+export const EXTENSION_LATEST = "0.12.1";
 
 /** App version — keep in sync with package.json. Shown in the home-page footer. */
-export const APP_VERSION = "4.24.0";
+export const APP_VERSION = "4.24.1";

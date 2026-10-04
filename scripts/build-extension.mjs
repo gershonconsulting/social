@@ -1,5 +1,6 @@
 /**
- * Rebuild public/gershonai-extension.zip from the overrides in extension-src/.
+ * Rebuild public/gershonai-extension.zip from the overrides in extension-src/,
+ * and write the same build as public/social-extension.zip.
  *
  * WHY A PATCH AND NOT A SOURCE TREE. The extension ships as a zip committed to
  * the repo, and the icons inside it are PNGs. The tooling that writes to this
@@ -9,14 +10,20 @@
  * extension-src/ provides, adds any that are new, and writes it back. Files
  * nobody overrides pass through byte for byte.
  *
+ * NAMING. Every Gershon extension is named after its platform: Pulse LinkedIn
+ * Collector / pulse-extension.zip, Linalysis — LinkedIn analytics collector /
+ * linalysis-extension.zip, Radar — Sales Nav Collector, NexaShare — … /
+ * nexashare-extension.zip. This one is "Social — LinkedIn & X Collector" and
+ * downloads as social-extension.zip. The old gershonai-extension.zip is still
+ * written so existing links keep working.
+ *
  * Entries are written STORED (no compression). A zip of a hundred kilobytes of
  * JavaScript does not need deflate, and stored entries keep this script short
  * enough to read in one sitting, which matters more for something that runs on
  * every deploy.
  *
- * It fails soft: if anything goes wrong the committed zip ships unchanged — an
- * older extension that still collects through the untokened fallback — rather
- * than taking the deploy down with it.
+ * It fails soft: if anything goes wrong the committed zip ships unchanged
+ * (under both names) rather than taking the deploy down with it.
  */
 import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -24,6 +31,7 @@ import { inflateRawSync } from "node:zlib";
 
 const ZIP_PATH = "public/gershonai-extension.zip";
 const SRC_DIR = "extension-src";
+const PUBLIC_ZIP = "public/social-extension.zip";
 
 /* ---------- read ---------- */
 
@@ -183,13 +191,20 @@ try {
     ...[...byName.values()].filter((e) => !original.some((o) => o.name === e.name)),
   ];
 
-  writeFileSync(ZIP_PATH, writeZip(ordered));
+  const built = writeZip(ordered);
+  writeFileSync(ZIP_PATH, built);
+  writeFileSync(PUBLIC_ZIP, built);
   console.log(
-    `extension: ${ordered.length} files (${replaced} replaced, ${added} added) -> ${ZIP_PATH}`,
+    `extension: ${ordered.length} files (${replaced} replaced, ${added} added) -> ${ZIP_PATH} + ${PUBLIC_ZIP}`,
   );
 } catch (err) {
   console.warn(
     "extension: could not patch the zip, shipping the committed one as-is — " +
       (err && err.message ? err.message : String(err)),
   );
+  try {
+    writeFileSync(PUBLIC_ZIP, readFileSync(ZIP_PATH));
+  } catch {
+    // Nothing more to do; the old name still serves.
+  }
 }

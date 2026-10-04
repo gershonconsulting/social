@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * /extension — everything about the GershonAI Chrome extension in one place:
+ * /extension — everything about the Social Chrome extension in one place:
  * is it installed in this browser and up to date, download it, the workspace
  * key it needs, and a button that runs a collection for every company now.
  *
@@ -169,7 +169,7 @@ export function ExtensionPageClient({ latest }: { latest: string }) {
               <XCircle size={18} className="text-[#FE1B04]" />
               Not installed in this browser — no LinkedIn or X posts are collected from here.
             </div>
-            <a href="/gershonai-extension.zip" download
+            <a href="/social-extension.zip" download
               className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[#FE1B04] text-white text-sm font-semibold px-4 py-2">
               <Download size={16} /> Download v{latest}
             </a>
@@ -191,15 +191,15 @@ export function ExtensionPageClient({ latest }: { latest: string }) {
       </Card>
 
       <Card title={`Download v${latest}`}>
-        <a href="/gershonai-extension.zip" download
+        <a href="/social-extension.zip" download
           className="inline-flex items-center gap-2 rounded-lg bg-[#FE1B04] text-white text-sm font-semibold px-4 py-2">
           <Download size={16} /> Download the extension
         </a>
         <ol className="mt-4 text-sm text-gray-600 list-decimal pl-5 space-y-1">
           <li>Unzip the file into a folder you keep.</li>
           <li>Open <code>chrome://extensions</code> and switch on Developer mode.</li>
-          <li>New install: <strong>Load unpacked</strong> and pick the folder. Update: replace the folder&apos;s files, then press the reload arrow on the GershonAI card.</li>
-          <li>Open the extension and paste the workspace key below.</li>
+          <li>New install: <strong>Load unpacked</strong> and pick the folder. Update: replace the folder&apos;s files, then press the reload arrow on the Social card.</li>
+          <li>Open social.gershoncrm.com in that Chrome while signed in. The extension connects itself to your workspace — the popup then shows <strong>Collecting for: &lt;your workspace&gt;</strong>.</li>
         </ol>
       </Card>
 

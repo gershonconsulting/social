@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Red strip on EVERY dashboard page when the GershonAI Chrome extension is
+ * Red strip on EVERY dashboard page when the Social Chrome extension is
  * not installed in this browser, or is out of date — with the download right
  * in it. Olivier, 2026-10-02: "Why no message when the extension is not
  * installed!"
@@ -60,13 +60,13 @@ export function ExtensionInstallBanner({ latest }: { latest: string }) {
       <div className="flex-1 text-sm">
         <strong>
           {missing
-            ? "The GershonAI Chrome extension is not installed in this browser."
+            ? "The Social Chrome extension is not installed in this browser."
             : `Your Chrome extension is out of date (v${(state as { version: string }).version}, latest v${latest}).`}
         </strong>{" "}
         Without it, no new LinkedIn or X posts are collected.{" "}
         <Link href="/extension" className="underline font-semibold">How to install</Link>
       </div>
-      <a href="/gershonai-extension.zip" download
+      <a href="/social-extension.zip" download
         className="shrink-0 inline-flex items-center gap-2 bg-white text-[#FE1B04] text-sm font-semibold rounded-lg px-3 py-1.5">
         <Download size={15} /> Download v{latest}
       </a>
