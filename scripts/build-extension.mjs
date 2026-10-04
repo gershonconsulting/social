@@ -5,10 +5,10 @@
  * WHY A PATCH AND NOT A SOURCE TREE. The extension ships as a zip committed to
  * the repo, and the icons inside it are PNGs. The tooling that writes to this
  * repository sends file contents as text, so a binary file cannot be replaced
- * through it — which means the zip has to stay, and the icons have to keep
- * coming out of it. So this reads the committed zip, replaces the entries that
- * extension-src/ provides, adds any that are new, and writes it back. Files
- * nobody overrides pass through byte for byte.
+ * through it — which means the zip has to stay. So this reads the committed
+ * zip, replaces the entries that extension-src/ provides, adds any that are
+ * new, and writes it back. Files nobody overrides pass through byte for byte.
+ * The toolbar icons are drawn by scripts/social-icon.mjs (the Social mark).
  *
  * NAMING. Every Gershon extension is named after its platform: Pulse LinkedIn
  * Collector / pulse-extension.zip, Linalysis — LinkedIn analytics collector /
@@ -28,6 +28,7 @@
 import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { inflateRawSync } from "node:zlib";
+import { socialIconPng } from "./social-icon.mjs";
 
 const ZIP_PATH = "public/gershonai-extension.zip";
 const SRC_DIR = "extension-src";
@@ -183,6 +184,13 @@ try {
     if (byName.has(name)) replaced++;
     else added++;
     byName.set(name, { name, data });
+  }
+  // Toolbar icons: the Social mark, drawn by scripts/social-icon.mjs.
+  for (const size of [16, 48, 128]) {
+    const name = `icons/icon${size}.png`;
+    if (byName.has(name)) replaced++;
+    else added++;
+    byName.set(name, { name, data: socialIconPng(size) });
   }
 
   // Keep the original ordering, then anything new, so diffs stay legible.

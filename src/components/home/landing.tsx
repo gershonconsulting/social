@@ -1,3 +1,4 @@
+import { SocialMark } from "@/components/brand/social-mark";
 import { landingStyles } from "./landing-styles";
 
 const LinkedInIcon = () => (
@@ -15,15 +16,6 @@ const DownloadIcon = () => (
 const CheckIcon = () => (
   <svg className="li" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <path d="M20 6L9 17l-5-5" stroke="#16a34a" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-const Mark = ({ size = 18 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <circle cx="12" cy="12" r="9" stroke="#fff" strokeWidth="1.6" />
-    <circle cx="12" cy="12" r="4.5" stroke="#fff" strokeWidth="1.6" />
-    <circle cx="12" cy="12" r="1.6" fill="#fff" />
-    <path d="M12 12L19 6" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
   </svg>
 );
 
@@ -47,7 +39,7 @@ export function Landing({
       <header>
         <div className="wrap nav">
           <a className="brand" href="/">
-            <span className="dot"><Mark /></span>
+            <SocialMark size={30} />
             <span>Social<small>by Gershon.AI</small></span>
           </a>
           <nav className="nav-links">
@@ -162,7 +154,7 @@ export function Landing({
       <section className="pad" id="extension">
         <div className="wrap">
           <div className="eyebrow">The collector</div>
-          <h2 className="sec">Get the GershonAI Chrome extension.</h2>
+          <h2 className="sec">Get the Social Chrome extension.</h2>
           <p className="lead">
             Social collects inside <em>your</em> browser, using <em>your</em> LinkedIn and X sessions — so there is no
             password sharing and nothing to configure on a server. The extension is the engine; the dashboard is the cockpit.
@@ -177,11 +169,11 @@ export function Landing({
                   </svg>
                 </span>
                 <div>
-                  <h3>GershonAI — Social Collector</h3>
+                  <h3>Social — LinkedIn &amp; X Collector</h3>
                   <div className="extbox-meta">Version <b>{extensionVersion}</b> · ~42 KB · Chrome &amp; Edge (Chromium)</div>
                 </div>
               </div>
-              <a className="btn btn-primary extbox-dl" href="/gershonai-extension.zip" download>
+              <a className="btn btn-primary extbox-dl" href="/social-extension.zip" download>
                 <DownloadIcon />
                 Download the extension
               </a>
@@ -266,7 +258,7 @@ export function Landing({
       <footer>
         <div className="wrap">
           <a className="brand" href="/">
-            <span className="dot"><Mark size={16} /></span>
+            <SocialMark size={24} />
             <span>Social<small>by Gershon.AI</small></span>
           </a>
           <div className="foot-links">
