@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Social by Gershon.AI — LinkedIn & X Collector",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "Collects LinkedIn and X posts for social.gershoncrm.com, for the workspace of whoever is signed in there in this browser. Collects nothing until then.",
   "permissions": [
     "cookies",

@@ -175,6 +175,32 @@ export async function POST(req: NextRequest) {
 
       const posts = Array.isArray(r.posts) ? r.posts : [];
       totalAttempts += posts.length;
+
+      // LinkedIn's new page layout no longer exposes post ids, so extension
+      // 0.13.1+ keys those posts by a fingerprint ("lih-…"). A post already
+      // held under its old activity id (same company, same opening text) keeps
+      // that id, so nothing is counted twice.
+      if (platform === Platform.LINKEDIN && posts.some((p) => (p.externalPostId ?? "").startsWith("lih-"))) {
+        try {
+          const existing = await prisma.socialPost.findMany({
+            where: { clientId: r.clientId, platform },
+            select: { externalPostId: true, postTextSnippet: true },
+            orderBy: { publishedAtUtc: "desc" },
+            take: 1500,
+          });
+          const norm = (t: string | null | undefined) => (t ?? "").replace(/\s+/g, " ").trim().slice(0, 60).toLowerCase();
+          const byText = new Map<string, string>();
+          for (const e of existing) {
+            const k = norm(e.postTextSnippet);
+            if (k.length >= 20 && !byText.has(k)) byText.set(k, e.externalPostId);
+          }
+          for (const p of posts) {
+            if (!(p.externalPostId ?? "").startsWith("lih-")) continue;
+            const known = byText.get(norm(p.postTextSnippet));
+            if (known) p.externalPostId = known;
+          }
+        } catch {}
+      }
       let upserted = 0;
       const ops = [];
       for (const p of posts) {
