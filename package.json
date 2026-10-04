@@ -1,6 +1,6 @@
 {
   "name": "social-gershon-crm",
-  "version": "4.25.1",
+  "version": "4.25.2",
   "private": true,
   "scripts": {
     "dev": "next dev",
