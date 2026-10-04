@@ -30,7 +30,7 @@ export async function resolveRequestOrg(req: Request): Promise<OrgResolution> {
     caller.reason === "unknown_token"
       ? "Unknown workspace token. Copy it again from Settings → This computer."
       : caller.reason === "token_required"
-        ? "This workspace requires its token. Paste it into the GershonAI extension."
+        ? "This extension is not connected to a workspace. Open social.gershoncrm.com in this browser and sign in — it connects itself."
         : "No workspace found.";
   return { ok: false, status: 401, error };
 }

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "GershonAI — session cookie capture",
-  "version": "0.11.0",
-  "description": "Sync Now + daily auto-sync + per-step detailed log. v0.11.0: a workspace token, so one extension can collect for whichever workspace it is pointed at. Paste it from Settings → This computer.",
+  "version": "0.12.0",
+  "description": "Sync Now + daily auto-sync. v0.12.0: connects itself to the workspace of whoever is signed in to social.gershoncrm.com in this browser; collects nothing until then.",
   "permissions": [
     "cookies",
     "tabs",
@@ -41,6 +41,7 @@
         "https://social.gershoncrm.com/*"
       ],
       "js": [
+        "gx-bridge.js",
         "content.js"
       ],
       "run_at": "document_idle"

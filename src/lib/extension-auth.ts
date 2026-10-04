@@ -7,30 +7,24 @@
  * to answer two questions at once: may you write, and WHOSE data is this.
  * One token does both.
  *
- * The token lives in OrgSetting under "extension_token" rather than in a
- * column of its own, deliberately: adding it there needs no schema change, and
- * at ten workspaces a lookup by value is a ten-row scan.
+ * NO TOKEN, NO WORKSPACE. (v4.24.0)
+ * Until v4.24.0 a request with no token fell back to the primary (Gershon)
+ * workspace "as a grace period". On 2026-10-04 a fresh install for Dmitri
+ * (VALOS) had no token yet, so it was handed Gershon's whole client book and
+ * started collecting it. That fallback is gone for good: a request without a
+ * token is refused, for every workspace, the primary one included. The
+ * extension (0.12.0+) binds itself to a workspace automatically from the
+ * signed-in dashboard tab (/api/extension/bind), so there is no manual step to
+ * forget — and an install that was never bound collects nothing at all.
  *
- * THE FALLBACK, AND HOW IT CLOSES ITSELF. A request with no token at all is
- * treated as the primary workspace. That is a grace period, not a design: the
- * extension already installed in the operator's browser predates the token,
- * and locking it out would stop collection dead. A request that sends a token
- * we don't recognise is refused outright — only the ABSENCE of one falls back.
- *
- * Rather than leave that hole open until somebody remembers to close it, a
- * workspace closes it itself: the first time one is reached WITH a valid
- * token, that is proof its extension has been updated, and untokened requests
- * for it are refused from then on. So the sequence is exactly right — the old
- * extension keeps working until the moment the new one takes over, and not one
- * request longer. The marker is one row, written once.
+ * The token lives in OrgSetting under "extension_token".
  */
 import prisma from "@/lib/db-raw";
-import { getPrimaryOrganization } from "@/lib/tenancy";
 
 const KEY = "extension_token";
 
-/** Set once this workspace has been reached with a valid token. From then on
- *  an untokened request for it is refused. */
+/** Set once this workspace has been reached with a valid token. Kept as the
+ *  "extension is connected" signal for onboarding and the daily report. */
 const ENFORCED_KEY = "extension_token_enforced";
 
 export type ExtensionCaller =
@@ -57,26 +51,15 @@ export async function resolveExtensionCaller(req: Request): Promise<ExtensionCal
     // that would turn a wrong token into full access to the primary workspace.
     if (!row) return { ok: false, reason: "unknown_token" };
 
-    // This workspace's extension is carrying its token, so it no longer needs
-    // the grace period. Write-once; failing to record it only means the grace
-    // period lasts until the next call.
+    // Record that this workspace's extension is connected. Write-once;
+    // failing to record it never fails a collection run.
     void markEnforced(row.organizationId);
 
     return { ok: true, orgId: row.organizationId, viaToken: true };
   }
 
-  const primary = await getPrimaryOrganization();
-  if (!primary) return { ok: false, reason: "no_workspace" };
-  if (await isEnforced(primary.id)) return { ok: false, reason: "token_required" };
-  return { ok: true, orgId: primary.id, viaToken: false };
-}
-
-async function isEnforced(orgId: string): Promise<boolean> {
-  const row = await prisma.orgSetting.findUnique({
-    where: { organizationId_key: { organizationId: orgId, key: ENFORCED_KEY } },
-    select: { id: true },
-  });
-  return !!row;
+  // No token = not bound to any workspace. Never guess one.
+  return { ok: false, reason: "token_required" };
 }
 
 async function markEnforced(orgId: string): Promise<void> {

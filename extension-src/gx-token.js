@@ -1,16 +1,14 @@
 // Workspace token — what tells social.gershoncrm.com whose data this is.
 //
-// One extension, many customers. The build is identical everywhere; the token
-// pasted into it decides which workspace the clients it fetches come from and
-// which workspace the posts it collects are written to. Without one, the
-// server still falls back to the original workspace, which is a grace period
-// for installs that predate this file and not something to rely on.
+// One extension, many customers. The token is set AUTOMATICALLY by
+// gx-bridge.js from the dashboard tab you are signed in to (0.12.0). Every
+// call to the dashboard carries it. With no token, calls to the dashboard are
+// refused right here, before they leave the browser — there is no "original
+// workspace" fallback any more, on either side.
 //
-// It works by wrapping fetch rather than by editing sync-core.js. Every call
-// to the dashboard already goes through fetch, so wrapping it once here
-// catches all of them — the cookie save, the client list, the ingest — and
-// leaves the scrape logic completely untouched. Requests to linkedin.com and
-// x.com are passed through unchanged; the token goes nowhere near them.
+// It works by wrapping fetch rather than by editing sync-core.js, so the
+// scrape logic is untouched. Requests to linkedin.com and x.com are passed
+// through unchanged; the token goes nowhere near them.
 //
 // Loaded first in both contexts: gx-boot.js for the service worker, a script
 // tag ahead of popup.js in popup.html.
@@ -58,7 +56,18 @@
     if (url.indexOf(API_ORIGIN) !== 0) return nativeFetch(input, init);
 
     var token = await readToken();
-    if (!token) return nativeFetch(input, init);
+    if (!token) {
+      // The version check is public and harmless; everything else needs a workspace.
+      if (url.indexOf(API_ORIGIN + "/api/extension/version") === 0) return nativeFetch(input, init);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          code: "token_required",
+          error: "Not connected to a workspace. Open social.gershoncrm.com in this browser and sign in — the extension connects itself.",
+        }),
+        { status: 401, headers: { "content-type": "application/json" } }
+      );
+    }
 
     var opts = Object.assign({}, init || {});
     var headers = new Headers((init && init.headers) || (input && input.headers) || {});
@@ -68,8 +77,7 @@
   };
 
   // ---- popup UI ------------------------------------------------------------
-  // Injected from here rather than written into popup.html + popup.js, so that
-  // everything about the token lives in one file.
+  // Shows, in plain words, which workspace this browser collects for.
 
   if (typeof document === "undefined") return;
 
@@ -79,64 +87,49 @@
 
     var wrap = document.createElement("div");
     wrap.style.cssText =
-      "margin-top:10px;padding-top:10px;border-top:1px solid #f3f4f6;font-size:11px;color:#6b7280;";
+      "margin-top:10px;padding:10px;border-radius:8px;font-size:12px;line-height:1.45;";
 
-    var label = document.createElement("div");
-    label.textContent = "Workspace token";
-    label.style.cssText = "font-weight:600;color:#374151;margin-bottom:4px;";
-
-    var hint = document.createElement("div");
-    hint.style.cssText = "margin-bottom:6px;line-height:1.4;";
-    hint.textContent = "Settings → This computer, on the dashboard. Decides which workspace this browser collects for.";
-
-    var row = document.createElement("div");
-    row.style.cssText = "display:flex;gap:6px;";
-
-    var input = document.createElement("input");
-    input.type = "password";
-    input.placeholder = "gx_…";
-    input.style.cssText =
-      "flex:1;min-width:0;padding:6px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:11px;font-family:ui-monospace,monospace;";
-
-    var save = document.createElement("button");
-    save.textContent = "Save";
-    save.style.cssText =
-      "padding:6px 10px;border:none;border-radius:6px;background:#374151;color:#fff;font-size:11px;font-weight:600;cursor:pointer;";
-
-    var note = document.createElement("div");
-    note.style.cssText = "margin-top:5px;min-height:14px;";
-
-    readToken().then(function (t) {
-      if (t) {
-        input.value = t;
-        note.textContent = "✓ Set — collecting for the workspace this token belongs to.";
-        note.style.color = "#059669";
+    function render(r) {
+      var token = r && r.workspaceToken;
+      wrap.innerHTML = "";
+      var title = document.createElement("div");
+      title.style.cssText = "font-weight:700;margin-bottom:2px;";
+      var detail = document.createElement("div");
+      if (token) {
+        wrap.style.background = "#ecfdf5";
+        wrap.style.border = "1px solid #a7f3d0";
+        title.style.color = "#065f46";
+        title.textContent = "Collecting for: " + (r.workspaceName || "your workspace");
+        detail.style.color = "#047857";
+        detail.textContent = r.workspaceEmail
+          ? "Connected as " + r.workspaceEmail + ". Only this workspace's companies are collected."
+          : "Only this workspace's companies are collected.";
       } else {
-        note.textContent = "Not set — falling back to the original workspace.";
-        note.style.color = "#b45309";
+        wrap.style.background = "#fef2f2";
+        wrap.style.border = "1px solid #fecaca";
+        title.style.color = "#991b1b";
+        title.textContent = "Not connected — nothing will be collected";
+        detail.style.color = "#b91c1c";
+        detail.textContent =
+          "Open social.gershoncrm.com in this browser and sign in. The extension connects itself to your workspace.";
       }
-    });
+      wrap.appendChild(title);
+      wrap.appendChild(detail);
+    }
 
-    save.addEventListener("click", function () {
-      var value = input.value.trim();
-      chrome.storage.local.set({ workspaceToken: value }, function () {
-        cached = value;
-        if (value) {
-          note.textContent = "✓ Saved.";
-          note.style.color = "#059669";
-        } else {
-          note.textContent = "Cleared — falling back to the original workspace.";
-          note.style.color = "#b45309";
+    chrome.storage.local.get(
+      ["workspaceToken", "workspaceName", "workspaceEmail"],
+      render
+    );
+    try {
+      chrome.storage.onChanged.addListener(function (changes, area) {
+        if (area !== "local") return;
+        if (changes.workspaceToken || changes.workspaceName || changes.workspaceEmail) {
+          chrome.storage.local.get(["workspaceToken", "workspaceName", "workspaceEmail"], render);
         }
       });
-    });
+    } catch (e) {}
 
-    row.appendChild(input);
-    row.appendChild(save);
-    wrap.appendChild(label);
-    wrap.appendChild(hint);
-    wrap.appendChild(row);
-    wrap.appendChild(note);
     host.parentNode.insertBefore(wrap, host);
   });
 })();
