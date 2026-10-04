@@ -35,15 +35,16 @@
  * workspace is created at the moment of approval instead — see
  * /api/users/[id].
  *
- * This file talks to the RAW client on purpose. It runs before anybody is
- * signed in, so there is no tenant to scope to, and its job is partly to
- * decide which tenant the caller belongs to in the first place.
+ * NO PRISMA HERE (v4.26.1). Every query goes over Neon's HTTP driver
+ * (sql-http.ts). The first Prisma query in a cold Cloudflare isolate boots the
+ * 2 MB query-engine WASM, which blows the Worker CPU budget, and the sign-in
+ * callback answered Error 1102 "Worker exceeded resource limits" instead of
+ * landing the user on /dashboard. This file must stay Prisma-free — including
+ * value imports from "@prisma/client" (types only).
  */
-import prisma from "@/lib/db-raw";
-import { UserRole } from "@prisma/client";
+import type { UserRole } from "@prisma/client";
+import { query, newId } from "@/lib/sql-http";
 import { exchangeCode, fetchProfile, isAllowedAdminEmail } from "@/lib/linkedin-auth";
-import { getRegistrationMode } from "@/lib/registration";
-import { createOrganizationFor, getPrimaryOrganization } from "@/lib/tenancy";
 import type { LinkedInProfile } from "@/lib/linkedin-auth";
 
 export type ResolvedUser = {
@@ -65,6 +66,22 @@ export type RequestContext = {
 export type LoginOutcome =
   | { ok: true; user: ResolvedUser; created?: boolean; pending?: boolean }
   | { ok: false; error: string };
+
+type UserRow = {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  image: string | null;
+  organizationId: string | null;
+  isActive: boolean;
+  pendingApproval: boolean;
+  approvedAt: string | Date | null;
+  lastLoginIp: string | null;
+  linkedinSub: string | null;
+};
+
+type Org = { id: string; name: string; slug: string };
 
 export function readRequestContext(req: Request): RequestContext {
   const h = req.headers;
@@ -104,6 +121,104 @@ function safeJson(v: unknown): string | null {
   }
 }
 
+/* ---------------------------- SQL helpers ---------------------------- */
+
+const USER_COLS = `id, name, email, role::text AS role, image, "organizationId", "isActive",
+  "pendingApproval", "approvedAt", "lastLoginIp", "linkedinSub"`;
+
+async function findUserBy(column: "linkedinSub" | "email", value: string): Promise<UserRow | null> {
+  const rows = await query<UserRow>(
+    `SELECT ${USER_COLS} FROM users WHERE "${column}" = $1 LIMIT 1`,
+    [value],
+  );
+  return rows[0] ?? null;
+}
+
+/** UPDATE users SET … (+ loginCount + 1) WHERE id = $id RETURNING the user. */
+async function updateUser(id: string, data: Record<string, unknown>, bumpLogin = true): Promise<UserRow> {
+  const keys = Object.keys(data);
+  const params: unknown[] = [];
+  const sets = keys.map((k) => {
+    params.push(data[k]);
+    const p = `$${params.length}`;
+    return k === "role" ? `"role" = ${p}::"UserRole"` : `"${k}" = ${p}`;
+  });
+  params.push(new Date().toISOString());
+  sets.push(`"updatedAt" = $${params.length}`);
+  if (bumpLogin) sets.push(`"loginCount" = "loginCount" + 1`);
+  params.push(id);
+  const rows = await query<UserRow>(
+    `UPDATE users SET ${sets.join(", ")} WHERE id = $${params.length} RETURNING ${USER_COLS}`,
+    params,
+  );
+  if (!rows[0]) throw new Error("User disappeared during sign-in");
+  return rows[0];
+}
+
+async function insertUser(data: Record<string, unknown>): Promise<UserRow> {
+  const now = new Date().toISOString();
+  const full: Record<string, unknown> = { id: newId(), createdAt: now, updatedAt: now, ...data };
+  const keys = Object.keys(full);
+  const params = keys.map((k) => full[k]);
+  const values = keys.map((k, i) => (k === "role" ? `$${i + 1}::"UserRole"` : `$${i + 1}`));
+  const rows = await query<UserRow>(
+    `INSERT INTO users (${keys.map((k) => `"${k}"`).join(", ")}) VALUES (${values.join(", ")}) RETURNING ${USER_COLS}`,
+    params,
+  );
+  return rows[0];
+}
+
+async function getPrimaryOrganization(): Promise<Org | null> {
+  const rows = await query<Org>(
+    `SELECT id, name, slug FROM organizations WHERE "isPrimary" = true ORDER BY "createdAt" ASC LIMIT 1`,
+  );
+  return rows[0] ?? null;
+}
+
+function slugify(s: string): string {
+  return (
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48) || "workspace"
+  );
+}
+
+async function createOrganizationFor(name: string): Promise<Org> {
+  const root = slugify(name);
+  let slug = `${root}-${Date.now().toString(36)}`;
+  for (let i = 0; i < 25; i++) {
+    const candidate = i === 0 ? root : `${root}-${i + 1}`;
+    const clash = await query(`SELECT 1 FROM organizations WHERE slug = $1 LIMIT 1`, [candidate]);
+    if (clash.length === 0) {
+      slug = candidate;
+      break;
+    }
+  }
+  const now = new Date().toISOString();
+  const rows = await query<Org>(
+    `INSERT INTO organizations (id, name, slug, "isPrimary", "createdAt", "updatedAt")
+     VALUES ($1, $2, $3, false, $4, $4) RETURNING id, name, slug`,
+    [newId(), name.slice(0, 120), slug, now],
+  );
+  return rows[0];
+}
+
+/** Same rule as registration.ts: anything unreadable means "approval". */
+async function getRegistrationMode(): Promise<"approval" | "open"> {
+  try {
+    const rows = await query<{ value: string }>(`SELECT value FROM settings WHERE key = 'registration' LIMIT 1`);
+    if (!rows[0]) return "approval";
+    const parsed = JSON.parse(rows[0].value) as { mode?: string };
+    return parsed.mode === "open" ? "open" : "approval";
+  } catch {
+    return "approval";
+  }
+}
+
+/* ------------------------------ the flow ------------------------------ */
+
 export async function completeLinkedInLogin(
   code: string,
   redirectUri: string,
@@ -121,12 +236,10 @@ export async function completeLinkedInLogin(
   }
 
   const fields = profileFields(profile);
-  const now = new Date();
+  const now = new Date().toISOString();
 
   // 1) Already linked, or already invited under this email.
-  const user =
-    (await prisma.user.findUnique({ where: { linkedinSub: profile.sub } })) ??
-    (await prisma.user.findUnique({ where: { email } }));
+  const user = (await findUserBy("linkedinSub", profile.sub)) ?? (await findUserBy("email", email));
 
   if (user) {
     // An allow-listed operator (e.g. olivier@attia.com) belongs to the
@@ -137,31 +250,27 @@ export async function completeLinkedInLogin(
       const primary = await getPrimaryOrganization();
       const misplaced =
         !!primary &&
-        (user.pendingApproval || !user.isActive || user.organizationId !== primary.id || user.role !== UserRole.ADMIN);
+        (user.pendingApproval || !user.isActive || user.organizationId !== primary.id || user.role !== "ADMIN");
       if (primary && misplaced) {
         const before = { organizationId: user.organizationId, role: user.role, pendingApproval: user.pendingApproval };
-        const moved = await prisma.user.update({
-          where: { id: user.id },
-          data: {
-            organizationId: primary.id,
-            role: UserRole.ADMIN,
-            isActive: true,
-            pendingApproval: false,
-            approvedAt: user.approvedAt ?? now,
-            linkedinSub: profile.sub,
-            name: user.name || profile.name || email,
-            image: profile.picture ?? user.image,
-            ...fields,
-            lastLoginAt: now,
-            lastLoginIp: ctx.ip ?? user.lastLoginIp,
-            loginCount: { increment: 1 },
-          },
+        const moved = await updateUser(user.id, {
+          organizationId: primary.id,
+          role: "ADMIN",
+          isActive: true,
+          pendingApproval: false,
+          approvedAt: user.approvedAt ? new Date(user.approvedAt).toISOString() : now,
+          linkedinSub: profile.sub,
+          name: user.name || profile.name || email,
+          image: profile.picture ?? user.image,
+          ...fields,
+          lastLoginAt: now,
+          lastLoginIp: ctx.ip ?? user.lastLoginIp,
         });
         await audit(moved.id, "USER_UPDATED", moved.id, before, {
           organizationId: primary.id,
           role: "ADMIN",
           via: "owner-rehome",
-        });
+        }, primary.id);
         return { ok: true, user: toResolved(moved) };
       }
     }
@@ -177,72 +286,34 @@ export async function completeLinkedInLogin(
       return { ok: false, error: "Your access has been disabled. Contact the account admin." };
     }
 
-    const updated = await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        linkedinSub: profile.sub,
-        name: user.name || profile.name || email,
-        image: profile.picture ?? user.image,
-        ...fields,
-        lastLoginAt: now,
-        lastLoginIp: ctx.ip ?? user.lastLoginIp,
-        loginCount: { increment: 1 },
-      },
+    const updated = await updateUser(user.id, {
+      linkedinSub: profile.sub,
+      name: user.name || profile.name || email,
+      image: profile.picture ?? user.image,
+      ...fields,
+      lastLoginAt: now,
+      lastLoginIp: ctx.ip ?? user.lastLoginIp,
     });
     return { ok: true, user: toResolved(updated) };
   }
 
   // 2) Nobody matched. An allow-listed address CLAIMS the unclaimed admin row.
-  //    This is how you become an admin of the ORIGINAL workspace, which is why
-  //    it is limited to the allow-list and not open to the world.
   if (isAllowedAdminEmail(email)) {
-    const unclaimed = await prisma.user.findFirst({
-      where: { role: UserRole.ADMIN, linkedinSub: null, isActive: true },
-      orderBy: { createdAt: "asc" },
-    });
-
-    // The operator belongs to the original workspace, whether they are
-    // adopting its seeded admin row or being provisioned fresh.
+    const unclaimedRows = await query<UserRow>(
+      `SELECT ${USER_COLS} FROM users
+        WHERE role = 'ADMIN' AND "linkedinSub" IS NULL AND "isActive" = true
+        ORDER BY "createdAt" ASC LIMIT 1`,
+    );
+    const unclaimed = unclaimedRows[0] ?? null;
     const primary = await getPrimaryOrganization();
 
     if (unclaimed) {
       const before = { id: unclaimed.id, email: unclaimed.email, name: unclaimed.name };
-      const claimed = await prisma.user.update({
-        where: { id: unclaimed.id },
-        data: {
-          email,
-          linkedinSub: profile.sub,
-          name: profile.name || unclaimed.name,
-          image: profile.picture ?? unclaimed.image,
-          ...fields,
-          signupSource: "linkedin-claim",
-          signupIp: ctx.ip ?? null,
-          signupCountry: ctx.country ?? null,
-          signupUserAgent: ctx.userAgent ?? null,
-          approvedAt: now,
-          lastLoginAt: now,
-          lastLoginIp: ctx.ip ?? null,
-          loginCount: { increment: 1 },
-          ...(unclaimed.organizationId ? {} : { organizationId: primary?.id ?? null }),
-        },
-      });
-      await audit(claimed.id, "USER_UPDATED", claimed.id, before, {
-        email: claimed.email,
-        name: claimed.name,
-        via: "linkedin-claim",
-      });
-      return { ok: true, user: toResolved(claimed) };
-    }
-
-    const admin = await prisma.user.create({
-      data: {
-        name: profile.name || email,
+      const claimed = await updateUser(unclaimed.id, {
         email,
         linkedinSub: profile.sub,
-        image: profile.picture ?? null,
-        role: UserRole.ADMIN,
-        isActive: true,
-        organizationId: primary?.id ?? null,
+        name: profile.name || unclaimed.name,
+        image: profile.picture ?? unclaimed.image,
         ...fields,
         signupSource: "linkedin-claim",
         signupIp: ctx.ip ?? null,
@@ -251,14 +322,40 @@ export async function completeLinkedInLogin(
         approvedAt: now,
         lastLoginAt: now,
         lastLoginIp: ctx.ip ?? null,
-        loginCount: 1,
-      },
+        ...(unclaimed.organizationId ? {} : { organizationId: primary?.id ?? null }),
+      });
+      await audit(claimed.id, "USER_UPDATED", claimed.id, before, {
+        email: claimed.email,
+        name: claimed.name,
+        via: "linkedin-claim",
+      }, claimed.organizationId);
+      return { ok: true, user: toResolved(claimed) };
+    }
+
+    const admin = await insertUser({
+      name: profile.name || email,
+      email,
+      linkedinSub: profile.sub,
+      image: profile.picture ?? null,
+      role: "ADMIN",
+      isActive: true,
+      pendingApproval: false,
+      organizationId: primary?.id ?? null,
+      ...fields,
+      signupSource: "linkedin-claim",
+      signupIp: ctx.ip ?? null,
+      signupCountry: ctx.country ?? null,
+      signupUserAgent: ctx.userAgent ?? null,
+      approvedAt: now,
+      lastLoginAt: now,
+      lastLoginIp: ctx.ip ?? null,
+      loginCount: 1,
     });
     await audit(admin.id, "USER_CREATED", admin.id, null, {
       email,
       role: "ADMIN",
       via: "linkedin-provision",
-    });
+    }, admin.organizationId);
     return { ok: true, user: toResolved(admin), created: true };
   }
 
@@ -267,32 +364,28 @@ export async function completeLinkedInLogin(
   const mode = await getRegistrationMode();
   const pending = mode === "approval";
 
-  // Nothing to create for an account that cannot sign in yet, and a rejection
-  // should not leave an orphan organization behind. Approval creates it.
+  // A pending account cannot sign in, and a rejection should not leave an
+  // orphan organization behind. Approval creates it.
   const org = pending ? null : await createOrganizationFor(profile.name || email);
 
-  const created = await prisma.user.create({
-    data: {
-      name: profile.name || email,
-      email,
-      linkedinSub: profile.sub,
-      image: profile.picture ?? null,
-      // Admin OF THEIR OWN WORKSPACE. Every query they can make is confined to
-      // it, so this grants authority over their data and nobody else's.
-      role: pending ? UserRole.READ_ONLY : UserRole.ADMIN,
-      organizationId: org?.id ?? null,
-      isActive: !pending,
-      pendingApproval: pending,
-      approvedAt: pending ? null : now,
-      ...fields,
-      signupSource: "linkedin-self",
-      signupIp: ctx.ip ?? null,
-      signupCountry: ctx.country ?? null,
-      signupUserAgent: ctx.userAgent ?? null,
-      lastLoginAt: now,
-      lastLoginIp: ctx.ip ?? null,
-      loginCount: 1,
-    },
+  const created = await insertUser({
+    name: profile.name || email,
+    email,
+    linkedinSub: profile.sub,
+    image: profile.picture ?? null,
+    role: pending ? "READ_ONLY" : "ADMIN",
+    organizationId: org?.id ?? null,
+    isActive: !pending,
+    pendingApproval: pending,
+    approvedAt: pending ? null : now,
+    ...fields,
+    signupSource: "linkedin-self",
+    signupIp: ctx.ip ?? null,
+    signupCountry: ctx.country ?? null,
+    signupUserAgent: ctx.userAgent ?? null,
+    lastLoginAt: now,
+    lastLoginIp: ctx.ip ?? null,
+    loginCount: 1,
   });
 
   await audit(created.id, "USER_CREATED", created.id, null, {
@@ -303,7 +396,7 @@ export async function completeLinkedInLogin(
     pendingApproval: pending,
     workspace: org?.name ?? null,
     country: ctx.country ?? null,
-  });
+  }, org?.id ?? null);
 
   if (pending) {
     return {
@@ -322,31 +415,30 @@ async function audit(
   entityId: string,
   before: unknown,
   after: unknown,
+  organizationId: string | null = null,
 ) {
   try {
-    await prisma.auditLog.create({
-      data: {
+    await query(
+      `INSERT INTO audit_logs (id, "actorUserId", "actionType", "entityType", "entityId",
+         "beforeJson", "afterJson", "organizationId", "createdAt")
+       VALUES ($1, $2, $3::"AuditAction", 'User', $4, $5, $6, $7, $8)`,
+      [
+        newId(),
         actorUserId,
         actionType,
-        entityType: "User",
         entityId,
-        beforeJson: before === null ? null : safeJson(before),
-        afterJson: safeJson(after),
-      },
-    });
+        before === null ? null : safeJson(before),
+        safeJson(after),
+        organizationId,
+        new Date().toISOString(),
+      ],
+    );
   } catch {
     // An audit write must never be the reason a sign-in fails.
   }
 }
 
-function toResolved(u: {
-  id: string;
-  name: string;
-  email: string;
-  role: UserRole;
-  image: string | null;
-  organizationId: string | null;
-}): ResolvedUser {
+function toResolved(u: UserRow): ResolvedUser {
   return {
     id: u.id,
     name: u.name,

@@ -10,7 +10,7 @@
  * login exactly like a credentials login.
  */
 import { encode } from "next-auth/jwt";
-import { UserRole } from "@prisma/client";
+import type { UserRole } from "@prisma/client";
 
 const SESSION_MAX_AGE = 8 * 60 * 60; // 8h — must match authOptions.session.maxAge
 
