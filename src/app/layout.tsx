@@ -4,7 +4,8 @@ import "./globals.css";
 import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
-  title: "social.gershonCRM.com",
+  title: "Social by Gershon.AI",
+  applicationName: "Social by Gershon.AI",
   description: "Social Media Campaign Compliance & Reporting — Gershon Consulting",
 };
 

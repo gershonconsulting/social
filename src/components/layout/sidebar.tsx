@@ -8,6 +8,7 @@
  * content area stays the focus. Routes and order are unchanged from v2.6.0.
  */
 
+import { SocialMark, SocialWordmark } from "@/components/brand/social-mark";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -132,13 +133,8 @@ export function Sidebar() {
       {/* Brand */}
       <div className="px-5 pt-5 pb-4 border-b border-[#1F2229]">
         <Link href="/dashboard" className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center text-white font-bold text-base flex-shrink-0">
-            G
-          </div>
-          <div className="leading-tight">
-            <div className="text-sm font-semibold text-white tracking-tight">Gershon.AI</div>
-            <div className="text-xs text-[#8E949F]">Social</div>
-          </div>
+          <SocialMark size={32} className="flex-shrink-0" />
+          <SocialWordmark dark />
         </Link>
       </div>
 

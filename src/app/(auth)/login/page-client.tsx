@@ -6,6 +6,7 @@
  * folded away, for accounts that still have a password.
  */
 
+import { SocialMark, SocialWordmark } from "@/components/brand/social-mark";
 import { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -57,10 +58,8 @@ export default function LoginPage() {
       {/* Brand panel */}
       <section className="hidden lg:flex flex-col justify-between bg-[#111317] text-white px-16 py-14">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-red-600 flex items-center justify-center font-bold text-lg">G</div>
-          <div className="text-base font-semibold">
-            Gershon.AI <span className="text-[#8E949F] font-normal">Social</span>
-          </div>
+          <SocialMark size={36} />
+          <SocialWordmark dark />
         </div>
         <div className="max-w-[520px] space-y-5">
           <h1 className="text-[44px] leading-[1.1] font-semibold tracking-tight">
@@ -84,10 +83,8 @@ export default function LoginPage() {
       {/* Sign-in panel */}
       <section className="bg-[#F5F4F0] flex flex-col items-center justify-center px-4 py-12">
         <div className="lg:hidden flex items-center gap-2.5 mb-8">
-          <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center font-bold text-white">G</div>
-          <div className="text-base font-semibold text-gray-900">
-            Gershon.AI <span className="text-gray-500 font-normal">Social</span>
-          </div>
+          <SocialMark size={32} />
+          <SocialWordmark />
         </div>
 
         <div className="w-full max-w-[400px] bg-white border border-gray-200 rounded-2xl p-9 space-y-6">
@@ -106,7 +103,7 @@ export default function LoginPage() {
             href="/api/auth/linkedin/login"
             className="w-full flex items-center justify-center gap-2.5 h-12 px-4 bg-[#0A66C2] hover:bg-[#004182] text-white text-[15px] font-semibold rounded-lg transition-colors"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.42v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13zM7.12 20.45H3.55V9h3.57v11.45zM22.22 0H1.77C.8 0 0 .77 0 1.73v20.54C0 23.23.8 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.850-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.42v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13zM7.12 20.45H3.55V9h3.57v11.45zM22.22 0H1.77C.8 0 0 .77 0 1.73v20.54C0 23.23.8 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z"/></svg>
             Continue with LinkedIn
           </a>
 
@@ -165,12 +162,12 @@ export default function LoginPage() {
         </div>
 
         <a
-          href="/gershonai-extension.zip"
+          href="/social-extension.zip"
           download
           className="mt-6 inline-flex items-center gap-1.5 text-[13px] font-medium text-gray-600 hover:text-gray-900"
         >
           <Download size={14} />
-          Download the GershonAI Chrome extension
+          Download the Social Chrome extension
         </a>
       </section>
     </div>
