@@ -219,10 +219,17 @@ export function ClientDetailPageClient({ clientId }: { clientId: string }) {
   }, [clientId, router]);
 
   if (loading) {
+    // v4.30.1 — the Export menu is shown while loading too: on a company whose
+    // page hangs or never finishes, the data must still be one click away.
     return (
-      <div className="flex items-center justify-center py-24 text-gray-500">
-        <Loader2 size={20} className="animate-spin mr-2" />
-        Loading company…
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <ClientExportMenu clientId={clientId} />
+        </div>
+        <div className="flex items-center justify-center py-24 text-gray-500">
+          <Loader2 size={20} className="animate-spin mr-2" />
+          Loading company…
+        </div>
       </div>
     );
   }
