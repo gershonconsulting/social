@@ -10,6 +10,11 @@ export const runtime = "edge";
  *                 in Competitor Watch                      (optional)
  *   from, to      YYYY-MM-DD, inclusive, on the local post date (optional)
  *   format        csv (download, default) | count (JSON row count for the UI)
+ *   workspace     another workspace's id or name — PLATFORM ADMIN ONLY (the
+ *                 admin of the primary Gershon workspace, v4.31.0). Lets the
+ *                 operator pull a client workspace's data (e.g. VALOS and the
+ *                 competitors it tracks) for a campaign review. Everyone else
+ *                 gets 403; nobody can read another workspace any other way.
  *
  * No filter at all = the whole workspace. Scoped to the caller's workspace by
  * an explicit organizationId on every query — this route talks to Postgres over
@@ -22,6 +27,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentOrgId } from "@/lib/scoped-db";
 import { query } from "@/lib/sql-http";
 import { toCsv, type CsvValue } from "@/lib/export/csv";
+import { UserRole } from "@prisma/client";
+import { requireRole } from "@/lib/auth";
+import { adminScopeFor } from "@/lib/admin-scope";
 
 const CATEGORIES = new Set([
   "CLIENT", "PARTNER", "PROSPECT", "INTERNAL", "COMPETITION", "COMPANY", "CAMPAIGN", "RECYCLED",
@@ -53,12 +61,37 @@ function slug(s: string): string {
 
 export async function GET(req: NextRequest) {
   try {
-    const orgId = await getCurrentOrgId();
-    if (!orgId) {
+    const ownOrgId = await getCurrentOrgId();
+    if (!ownOrgId) {
       return NextResponse.json({ success: false, error: "No workspace for this account" }, { status: 403 });
     }
 
     const sp = req.nextUrl.searchParams;
+
+    // Cross-workspace read: platform admin only, checked against the DB-fresh
+    // role and workspace (requireRole / adminScopeFor), never the token.
+    let orgId = ownOrgId;
+    const wanted = (sp.get("workspace") || "").trim();
+    if (wanted) {
+      let isPlatformAdmin = false;
+      try {
+        const actor = await requireRole(UserRole.ADMIN);
+        isPlatformAdmin = (await adminScopeFor(actor)).isPlatformAdmin;
+      } catch {
+        isPlatformAdmin = false;
+      }
+      if (!isPlatformAdmin) {
+        return NextResponse.json({ success: false, error: "Platform admins only" }, { status: 403 });
+      }
+      const orgs = await query<{ id: string }>(
+        `SELECT id FROM organizations WHERE id = $1 OR lower(name) = lower($1) OR lower(slug) = lower($1) LIMIT 2`,
+        [wanted],
+      );
+      if (orgs.length !== 1) {
+        return NextResponse.json({ success: false, error: "Workspace not found (or ambiguous)" }, { status: 404 });
+      }
+      orgId = orgs[0].id;
+    }
     const dataset = (sp.get("dataset") || "posts").toLowerCase();
     if (!["posts", "followers", "companies"].includes(dataset)) {
       return NextResponse.json({ success: false, error: "dataset must be posts, followers or companies" }, { status: 400 });
