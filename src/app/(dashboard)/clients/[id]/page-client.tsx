@@ -16,6 +16,7 @@ import Link from "next/link";
 import { AlertCircle, Loader2, CheckCircle2, XCircle, AlertTriangle, ChevronDown, ChevronRight, Calendar } from "lucide-react";
 import { formatRelative } from "@/lib/utils";
 import { ClientSyncButton } from "@/components/clients/client-sync-button";
+import { ClientExportMenu } from "@/components/clients/client-export-menu";
 import { ClientNameEditor } from "@/components/clients/client-name-editor";
 import { ClientCategoryEditor } from "@/components/clients/client-category-editor";
 import { ComplianceDashboard } from "@/components/clients/compliance-dashboard";
@@ -251,6 +252,8 @@ export function ClientDetailPageClient({ clientId }: { clientId: string }) {
               >
                 Back to Companies
               </Link>
+              {/* The data is still downloadable when the page itself won't load. */}
+              <ClientExportMenu clientId={clientId} />
             </div>
           </div>
         </div>
@@ -304,6 +307,7 @@ export function ClientDetailPageClient({ clientId }: { clientId: string }) {
             <Calendar size={14} />
             Monthly report
           </Link>
+          <ClientExportMenu clientId={client.id} />
           <ClientSyncButton clientId={client.id} />
         </div>
       </div>
