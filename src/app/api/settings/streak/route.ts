@@ -2,6 +2,7 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { z } from "zod";
+import { listPipelines } from "@/lib/streak";
 
 const KEY_NAME = "streak";
 
@@ -24,6 +25,17 @@ export async function GET() {
       return NextResponse.json({ success: true, data: { configured: false } });
     }
     const parsed = JSON.parse(row.value) as Stored;
+    // v4.29.0: live check so Settings can show a real green check.
+    let verified = false;
+    let verifyError: string | null = null;
+    if (parsed.apiKey) {
+      try {
+        await listPipelines(parsed.apiKey);
+        verified = true;
+      } catch (e) {
+        verifyError = e instanceof Error ? e.message.slice(0, 200) : "Streak rejected the key";
+      }
+    }
     const masked = parsed.apiKey
       ? `${parsed.apiKey.slice(0, 4)}…${parsed.apiKey.slice(-4)}`
       : null;
@@ -31,6 +43,8 @@ export async function GET() {
       success: true,
       data: {
         configured: !!parsed.apiKey,
+        verified,
+        verifyError,
         apiKeyMasked: masked,
         pipelineKey: parsed.pipelineKey ?? null,
         currentStageKeys: (parsed.currentStageKeys ?? []).join(","),

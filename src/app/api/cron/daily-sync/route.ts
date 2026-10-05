@@ -7,10 +7,7 @@ export const runtime = 'edge';
  *      stored cookies/tokens). Best-effort: kept around because some
  *      platforms (Google Business, etc.) still go through it.
  *   2. Compliance recompute for all active clients.
- *   3. Phantombuster fallback — if any mandatory LINKEDIN/TWITTER
- *      PlatformConnection has lastSyncAt > 22h old (meaning the Chrome
- *      extension v0.10.0+ didn't refresh it yesterday), launch the
- *      Phantombuster phantoms to backfill.
+ *   3. (Phantombuster fallback — retired in v4.29.0.)
  *
  * The Chrome extension daily auto-sync (v0.10.0) is the primary data path —
  * runs inside the user's logged-in browser at their real residential IP, so
@@ -87,44 +84,11 @@ export async function GET(req: NextRequest) {
     report.compliance.error = e instanceof Error ? e.message : String(e);
   }
 
-  // Daily PB import: fetch whatever CSV PB has produced since the last
-  // import + upsert. Does NOT launch a new PB run — PB runs on its own
-  // schedule on PB's side. This keeps us inside the worker time budget
-  // while still getting fresh data daily even when the Chrome extension
-  // hasn't run.
-  try {
-    const url = new URL(req.url);
-    // Call pb-import-latest once per platform — running both in a single
-    // worker invocation exceeded the CF time budget (Twitter would succeed
-    // but the LinkedIn agent-fetch right after would time out). Two
-    // sequential same-origin fetches give each its own worker invocation
-    // with a clean CPU budget.
-    const platforms = ["TWITTER", "LINKEDIN"] as const;
-    const results: Array<unknown> = [];
-    let totalUpserted = 0;
-    for (const platform of platforms) {
-      try {
-        const r = await fetch(`${url.protocol}//${url.host}/api/cron/pb-import-latest?platform=${platform}`, {
-          headers: secret ? { Authorization: `Bearer ${secret}` } : {},
-        });
-        if (r.ok) {
-          const j = await r.json() as { data?: { perPlatform?: Array<{ platform: string; postsUpserted: number; error?: string }> } };
-          const per = j.data?.perPlatform ?? [];
-          results.push(...per);
-          totalUpserted += per.reduce((s, p) => s + (p.postsUpserted ?? 0), 0);
-        } else {
-          results.push({ platform, error: `HTTP ${r.status}` });
-        }
-      } catch (e) {
-        results.push({ platform, error: e instanceof Error ? e.message : String(e) });
-      }
-    }
-    report.fallback.ran = true;
-    report.fallback.results = results;
-    report.fallback.reason = `PB import: ${totalUpserted} posts upserted across ${platforms.length} platforms`;
-  } catch (e) {
-    report.fallback.error = e instanceof Error ? e.message : String(e);
-  }
+  // v4.29.0: Phantombuster retired. Both PB phantoms (Twitter Media
+  // Extractor, LinkedIn Activity Extractor) were deleted from the PB account
+  // on 2026-08-18, so this step had produced 0 posts every day since. The
+  // Chrome extension is the collection path; nothing calls PB any more.
+  report.fallback.reason = "Phantombuster retired (v4.29.0) — not called";
 
   // Mirrored companies in other workspaces pick up what was just collected.
   // Separate same-origin request = its own Worker budget. Best-effort.

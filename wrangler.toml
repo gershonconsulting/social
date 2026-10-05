@@ -2,3 +2,8 @@ name = "gershoncrm-social"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = ".vercel/output/static"
+
+# v4.29.0 — Cloudflare Workers AI powers Content Intelligence, Post Studio and
+# the Competitor brief. The binding IS the credential: no vendor API key.
+[ai]
+binding = "AI"

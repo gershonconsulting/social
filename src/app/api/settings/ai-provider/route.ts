@@ -1,85 +1,45 @@
 /**
- * Which AI vendor the Content Intelligence and Post Studio engines run on.
+ * Content Intelligence AI status — Cloudflare Workers AI (v4.29.0).
  *
- * Only matters when BOTH keys are saved — with one key configured the engines
- * fall through to it regardless of what is stored here, so pasting a single key
- * is enough to switch the features on.
+ * GET  → { provider, model, available, ok, error? } — `ok` comes from a tiny
+ *        live call so Settings can show a real green check, not a guess.
+ * POST → { model } saves a model override (must be an @cf/ model id).
  */
 
 export const runtime = "edge";
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  getAISettings,
-  getPreferredProvider,
-  getProviderSettings,
-  setPreferredProvider,
-} from "@/lib/content/provider";
+import { getAISettings, listModels, pingAI, setModel } from "@/lib/content/provider";
 
-const schema = z.object({ provider: z.enum(["anthropic", "openai"]) });
+const schema = z.object({ model: z.string().regex(/^@cf\//, "Model id must start with @cf/") });
 
 export async function GET() {
   try {
-    const [preferred, active, anthropic, openai] = await Promise.all([
-      getPreferredProvider(),
-      getAISettings(),
-      getProviderSettings("anthropic"),
-      getProviderSettings("openai"),
-    ]);
-
+    const [settings, ping, models] = await Promise.all([getAISettings(), pingAI(), listModels()]);
     return NextResponse.json({
       success: true,
       data: {
-        preferred,
-        // What a generation would actually use right now.
-        active: active.apiKey ? active.provider : null,
-        activeModel: active.apiKey ? active.model : null,
-        configured: {
-          anthropic: !!anthropic.apiKey,
-          openai: !!openai.apiKey,
-        },
+        provider: "cloudflare",
+        model: ping.ok ? ping.model : settings.model,
+        available: settings.available,
+        ok: ping.ok,
+        error: ping.error ?? null,
+        models: models.map((m) => m.id),
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to read the AI provider";
+    const message = err instanceof Error ? err.message : "Failed to read the AI status";
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json().catch(() => null);
-    const parsed = schema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { success: false, error: "provider must be \"anthropic\" or \"openai\"." },
-        { status: 400 }
-      );
-    }
-
-    const provider = parsed.data.provider;
-    const settings = await getProviderSettings(provider);
-    if (!settings.apiKey) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `No ${provider === "openai" ? "OpenAI" : "Anthropic"} key is saved yet. Add the key first, then make it active.`,
-          code: "NO_KEY_FOR_PROVIDER",
-        },
-        { status: 428 }
-      );
-    }
-
-    await setPreferredProvider(provider);
-
-    return NextResponse.json({
-      success: true,
-      message: `${provider === "openai" ? "OpenAI" : "Anthropic"} is now the active AI provider.`,
-      data: { provider, model: settings.model },
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to set the AI provider";
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+  const body = await req.json().catch(() => null);
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ success: false, error: parsed.error.issues[0]?.message ?? "Bad model" }, { status: 400 });
   }
+  await setModel(parsed.data.model);
+  return NextResponse.json({ success: true, message: `Model set to ${parsed.data.model}.`, data: { model: parsed.data.model } });
 }
