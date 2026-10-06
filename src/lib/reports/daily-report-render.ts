@@ -196,6 +196,33 @@ export function renderDailyReportHtml(r: DailyReport): string {
           )
           .join("");
 
+  const fixRows = r.pagesToFix
+    .map(
+      (f) => `
+    <tr>
+      <td style="padding:9px 12px;border-bottom:1px solid #fde68a;background:#fffbeb;">
+        <div style="font-weight:700;font-size:13px;">${esc(f.clientName)}
+          <span style="font-weight:600;font-size:11px;color:${f.kind === "unavailable" ? "#b91c1c" : "#b45309"};text-transform:uppercase;letter-spacing:0.6px;margin-left:6px;">${f.kind === "unavailable" ? "Page not available" : "Wrong company"}</span>
+        </div>
+        <div style="font-size:12px;color:#78350f;margin-top:3px;">${esc(f.detail)}</div>
+        ${f.url ? `<div style="font-size:12px;margin-top:3px;"><a href="${esc(f.url)}" style="color:#6b7280;">${esc(f.url)}</a></div>` : ""}
+      </td>
+      <td style="padding:9px 12px;border-bottom:1px solid #fde68a;background:#fffbeb;text-align:right;white-space:nowrap;vertical-align:middle;">
+        <a href="${SITE}/clients/${encodeURIComponent(f.clientId)}" style="display:inline-block;padding:7px 12px;background:#111;color:#fff;font-size:12px;font-weight:700;text-decoration:none;border-radius:6px;">Change the link →</a>
+      </td>
+    </tr>`,
+    )
+    .join("");
+
+  const fixBlock =
+    r.pagesToFix.length === 0
+      ? ""
+      : `<div style="padding:18px 24px;border-bottom:1px solid #e5e7eb;">
+    <div style="font-size:12px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#b45309;margin-bottom:4px;">LinkedIn links to fix (${r.pagesToFix.length})</div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">These links open no company page, or another company's page. Nothing is collected correctly for them until the link is changed.</div>
+    <table style="width:100%;border-collapse:collapse;"><tbody>${fixRows}</tbody></table>
+  </div>`;
+
   const p = r.progress;
   const progressColor = p.level === "warn" ? "#b45309" : "#065f46";
   const progressBg = p.level === "warn" ? "#fffbeb" : "#f0fdf4";
@@ -211,6 +238,8 @@ export function renderDailyReportHtml(r: DailyReport): string {
   </div>
 
   ${statusBlock(r)}
+
+  ${fixBlock}
 
   <div style="padding:16px 24px;background:${progressBg};border-bottom:1px solid #e5e7eb;">
     <div style="font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#6b7280;">Progress vs the day before</div>
@@ -271,11 +300,13 @@ export function renderDailyReportHtml(r: DailyReport): string {
 
 /** platform-report-email convention: "<Platform> Report — <Date range>". */
 export function dailyReportSubject(r: DailyReport): string {
+  const n = r.pagesToFix?.length ?? 0;
+  const fix = n > 0 ? ` · ${n} LinkedIn ${n === 1 ? "link" : "links"} to fix` : "";
   const base = `Social Report — ${r.day.short}`;
-  if (r.status.level === "critical") return `⛔ NO COLLECTION — ${base}`;
-  if (r.extension.level === "critical") return `⚠️ Extension out of date — ${base}`;
-  if (r.status.level === "warn") return `⚠️ ${base} — collection ran short`;
+  if (r.status.level === "critical") return `⛔ NO COLLECTION — ${base}${fix}`;
+  if (r.extension.level === "critical") return `⚠️ Extension out of date — ${base}${fix}`;
+  if (r.status.level === "warn") return `⚠️ ${base} — collection ran short${fix}`;
   const posts = r.metrics.find((m) => m.key === "posts")?.yesterday ?? 0;
   const companies = r.metrics.find((m) => m.key === "companies")?.yesterday ?? 0;
-  return `${base} — ${posts} posts from ${companies} ${companies === 1 ? "company" : "companies"}`;
+  return `${base} — ${posts} posts from ${companies} ${companies === 1 ? "company" : "companies"}${fix}`;
 }

@@ -24,6 +24,7 @@
  */
 
 import prisma from "@/lib/db";
+import { isPageProblem, PAGE_UNAVAILABLE } from "@/lib/linkedin-page-check";
 import { EXTENSION_LATEST } from "@/lib/extension-version";
 import { readExtSeen, semverLt, type ExtSeen } from "@/lib/extension/seen";
 import { readHeartbeat } from "@/lib/extension/heartbeat";
@@ -82,6 +83,15 @@ export interface DailyReport {
   movers: { name: string; id: string; category: string; yesterday: number; dayBefore: number }[];
   wentQuiet: { name: string; id: string; dayBefore: number }[];
   errors: { clientName: string; platform: string; error: string; lastSyncAt: string | null }[];
+  /** LinkedIn links that open no page, or another company's page (extension 0.13.2+). */
+  pagesToFix: {
+    clientId: string;
+    clientName: string;
+    url: string | null;
+    kind: "unavailable" | "mismatch";
+    detail: string;
+    lastSyncAt: string | null;
+  }[];
   activeCompanies: number;
 }
 
@@ -190,7 +200,7 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
   const yTo = etMidnight(0, now);
   const dFrom = etMidnight(2, now);
 
-  const [byDay, added, hb, extSeen, activeCompanies, freshY, freshD, compY, compD, errConns] =
+  const [byDay, added, hb, extSeen, activeCompanies, freshY, freshD, compY, compD, errConns, pageConns] =
     await Promise.all([
       collectionByDay(now, 8),
       companiesAddedByDay(now, 8),
@@ -210,7 +220,25 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
           client: { select: { name: true, status: true } },
         },
         orderBy: { lastSyncAt: "desc" },
-        take: 15,
+        take: 40,
+      }),
+      prisma.platformConnection.findMany({
+        where: {
+          isEnabled: true,
+          platform: "LINKEDIN",
+          OR: [
+            { lastSyncError: { startsWith: "PAGE_UNAVAILABLE" } },
+            { lastSyncError: { startsWith: "PAGE_MISMATCH" } },
+          ],
+        },
+        select: {
+          externalAccountUrl: true,
+          lastSyncError: true,
+          lastSyncAt: true,
+          client: { select: { id: true, name: true, status: true } },
+        },
+        orderBy: { lastSyncAt: "desc" },
+        take: 50,
       }),
     ]);
 
@@ -287,7 +315,7 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
     },
   ];
 
-  // ── Run status ────────────────────────────────────────────────────────────
+  // ── Run status ────────────────────────────────────────────────────────────────────────────
   const hbY = hbDay(yKey);
   const ranYesterday = hbY ? hbY.runs > 0 : null; // null = heartbeat has no record for that day
   const avgPosts = avg(week.map((w) => w.posts)) ?? 0;
@@ -332,7 +360,7 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
     };
   }
 
-  // ── Progress verdict ──────────────────────────────────────────────────────
+  // ── Progress verdict ──────────────────────────────────────────────────────────────────────
   let improved = 0;
   let declined = 0;
   let flat = 0;
@@ -356,10 +384,10 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
     flat,
   };
 
-  // ── Extension version ─────────────────────────────────────────────────────
+  // ── Extension version ───────────────────────────────────────────────────────────────────
   const extension = buildExtensionBlock(extSeen, now);
 
-  // ── Movers / went quiet ───────────────────────────────────────────────────
+  // ── Movers / went quiet ─────────────────────────────────────────────────────────────────
   const dMap = new Map(compD.map((c) => [c.id, c.n]));
   const yMap = new Map(compY.map((c) => [c.id, c.n]));
   const movers = compY
@@ -372,8 +400,25 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
     .sort((a, b) => b.dayBefore - a.dayBefore)
     .slice(0, 8);
 
+  const pagesToFix = pageConns
+    .filter((c) => c.client)
+    .map((c) => {
+      const err = c.lastSyncError ?? "";
+      const unavailable = err.startsWith(PAGE_UNAVAILABLE);
+      return {
+        clientId: c.client!.id,
+        clientName: c.client!.name,
+        url: c.externalAccountUrl ?? null,
+        kind: (unavailable ? "unavailable" : "mismatch") as "unavailable" | "mismatch",
+        detail: unavailable
+          ? "LinkedIn shows no company page at this link."
+          : err.replace(/^PAGE_MISMATCH:\s*/, "").replace(/^the link opens/, "The link opens") + ".",
+        lastSyncAt: c.lastSyncAt?.toISOString() ?? null,
+      };
+    });
+
   const errors = errConns
-    .filter((c) => c.client?.status === "ACTIVE")
+    .filter((c) => c.client?.status === "ACTIVE" && !isPageProblem(c.lastSyncError))
     .map((c) => ({
       clientName: c.client?.name ?? "Unknown",
       platform: c.platform as string,
@@ -392,6 +437,7 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
     movers,
     wentQuiet,
     errors,
+    pagesToFix,
     activeCompanies,
   };
 }
