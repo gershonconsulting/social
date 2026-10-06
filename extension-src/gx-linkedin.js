@@ -1,4 +1,12 @@
-// LinkedIn company-page reader for LinkedIn's new page layout. (extension 0.13.1)
+// LinkedIn company-page reader for LinkedIn's new page layout. (extension 0.13.2)
+//
+// 0.13.2 — WRONG OR DEAD LINKS ARE NAMED. A tracked company whose LinkedIn link
+// leads nowhere ("This page doesn't exist", /company/unavailable/) used to come
+// back as "no posts on this company page", indistinguishable from a quiet
+// company. It now returns an error starting with PAGE_UNAVAILABLE, which the
+// daily report lists under "LinkedIn links to fix". Every post also carries the
+// name printed on the page (rawPayload.pageName) so the server can flag a link
+// that opens a different company's page (PAGE_MISMATCH).
 //
 // In autumn 2026 LinkedIn moved company pages to a new layout: the old post
 // containers (div.feed-shared-update-v2) and their class names are gone, and
@@ -81,6 +89,27 @@ self.linkedinDomScraper = function (scrollPasses) {
       return;
     }
 
+    var UNAVAILABLE_TEXT = /this page (doesn[\u2019']?t|does not) exist|page not found|this (linkedin )?page (isn[\u2019']?t|is not) available|this page is (no longer|not) available|company (is )?unavailable/i;
+    function unavailable() {
+      var u = location.href || "";
+      if (/\/company\/unavailable\b|\/404\b|linkedin\.com\/?(\?|#|$)|\/feed\/?(\?|#|$)/i.test(u)) return u;
+      var head = ((document.body && document.body.innerText) || "").slice(0, 3000);
+      return UNAVAILABLE_TEXT.test(head) ? u : null;
+    }
+    function pageName() {
+      try {
+        var h = document.querySelector("h1");
+        var t = h ? (h.innerText || "").trim() : "";
+        if (!t) t = String(document.title || "").split(/\s[|:]\s|:\s/)[0].trim();
+        return t.replace(/\s+/g, " ").slice(0, 120);
+      } catch (_) { return ""; }
+    }
+    var dead = unavailable();
+    if (dead) {
+      resolve({ posts: [], error: "PAGE_UNAVAILABLE: LinkedIn shows no company page at this link (it opened " + dead.slice(0, 120) + ")" });
+      return;
+    }
+
     var passes = 0;
     var timer = setInterval(function () {
       try { window.scrollBy(0, 1800); } catch (_) {}
@@ -138,7 +167,7 @@ self.linkedinDomScraper = function (scrollPasses) {
             likeCount: tailNums[0] || 0,
             commentCount: tailNums.length >= 2 ? tailNums[1] : 0,
             shareCount: tailNums.length >= 3 ? tailNums[2] : 0,
-            rawPayload: { source: "extension-v0.13.1-sdui", dateText: lines[di].slice(0, 60), counts: tailNums }
+            rawPayload: { source: "extension-v0.13.2-sdui", dateText: lines[di].slice(0, 60), counts: tailNums }
           });
         } catch (_) {}
       }
@@ -168,7 +197,7 @@ self.linkedinDomScraper = function (scrollPasses) {
             hasMedia: !!card.querySelector("video, .update-components-image, .update-components-video"),
             publishedAtUtc: (parseDate(timeStr.split("•")[0]) || new Date()).toISOString(),
             likeCount: 0, commentCount: 0, shareCount: 0,
-            rawPayload: { source: "extension-v0.13.1-legacy", timeText: timeStr.slice(0, 60) }
+            rawPayload: { source: "extension-v0.13.2-legacy", timeText: timeStr.slice(0, 60) }
           });
         } catch (_) {}
       }
@@ -179,9 +208,19 @@ self.linkedinDomScraper = function (scrollPasses) {
       try {
         var posts = readNew();
         if (!posts.length) posts = readOld();
-        if (posts.length) { resolve({ posts: posts }); return; }
+        if (posts.length) {
+          var name = pageName();
+          if (name) posts.forEach(function (p) { p.rawPayload = Object.assign({}, p.rawPayload || {}, { pageName: name, pageUrl: location.href.slice(0, 200) }); });
+          resolve({ posts: posts });
+          return;
+        }
+        var deadNow = unavailable();
+        if (deadNow) {
+          resolve({ posts: [], error: "PAGE_UNAVAILABLE: LinkedIn shows no company page at this link (it opened " + deadNow.slice(0, 120) + ")" });
+          return;
+        }
         var bodyText = (document.body && document.body.innerText || "");
-        if (/no posts yet|hasn'?t posted|isn'?t available/i.test(bodyText.slice(0, 4000))) {
+        if (/no posts yet|hasn'?t posted/i.test(bodyText.slice(0, 4000))) {
           resolve({ posts: [], error: "no posts on this company page" });
         } else if (/Feed post/.test(bodyText)) {
           resolve({ posts: [], error: "posts are on the page but none could be read (LinkedIn layout changed again)" });

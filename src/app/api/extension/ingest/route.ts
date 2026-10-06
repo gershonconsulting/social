@@ -1,5 +1,6 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
+import { pageNameMatches, PAGE_MISMATCH } from "@/lib/linkedin-page-check";
 import prisma from "@/lib/db-raw";
 import { Platform } from "@prisma/client";
 import { recordIngestRun } from "@/lib/extension/heartbeat";
@@ -158,7 +159,9 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      if (platform === Platform.LINKEDIN) {
+      // A dead link says nothing about whether the LinkedIn reader works, so it
+      // stays out of the "LinkedIn changed its page" alarm.
+      if (platform === Platform.LINKEDIN && !(r.error ?? "").startsWith("PAGE_UNAVAILABLE")) {
         liHealth.push({
           connectionId: r.connectionId,
           n: r.error ? 0 : Array.isArray(r.posts) ? r.posts.length : 0,
@@ -284,12 +287,32 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // Extension 0.13.2+: each LinkedIn post carries the name printed on the
+      // page it came from. A name that has nothing in common with the company
+      // we track means the link opens somebody else's page — flag it so the
+      // daily report lists it under "LinkedIn links to fix".
+      let pageFlag: string | null = null;
+      if (platform === Platform.LINKEDIN) {
+        const raw = posts.find((p) => p.rawPayload && typeof p.rawPayload === "object")?.rawPayload as
+          | { pageName?: unknown }
+          | undefined;
+        const pageName = typeof raw?.pageName === "string" ? raw.pageName.trim() : "";
+        if (pageName) {
+          try {
+            const c = await db.client.findFirst({ where: { id: r.clientId }, select: { name: true } });
+            if (c?.name && !pageNameMatches(c.name, pageName)) {
+              pageFlag = `${PAGE_MISMATCH}: the link opens the LinkedIn page of “${pageName.slice(0, 100)}”, not “${c.name.slice(0, 100)}”`;
+            }
+          } catch {}
+        }
+      }
+
       try {
         await prisma.platformConnection.update({
           where: { id: r.connectionId },
           data: {
             connectionStatus: "CONNECTED",
-            lastSyncError: null,
+            lastSyncError: pageFlag,
             lastSyncAt: new Date(),
           },
         });
