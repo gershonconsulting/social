@@ -205,16 +205,44 @@ async function createOrganizationFor(name: string): Promise<Org> {
   return rows[0];
 }
 
-/** Same rule as registration.ts: anything unreadable means "approval". */
+/**
+ * Same rule as registration.ts.
+ *
+ * v4.32.0 — Olivier 2026-10-05: "No restrictions. Anyone can become new users
+ * until further notice." The default is now "open", and a one-shot switch
+ * (marker setting `registration_opened_v4_32`) flips an explicitly stored
+ * "approval" to "open" exactly once. After that the Admin > Users toggle is
+ * authoritative again, so "further notice" is one click there.
+ * A DB error still means "approval" — never fail open on a broken read.
+ */
 async function getRegistrationMode(): Promise<"approval" | "open"> {
   try {
+    await openRegistrationOnce();
     const rows = await query<{ value: string }>(`SELECT value FROM settings WHERE key = 'registration' LIMIT 1`);
-    if (!rows[0]) return "approval";
+    if (!rows[0]) return "open";
     const parsed = JSON.parse(rows[0].value) as { mode?: string };
-    return parsed.mode === "open" ? "open" : "approval";
+    return parsed.mode === "approval" ? "approval" : "open";
   } catch {
     return "approval";
   }
+}
+
+const OPEN_MARKER = "registration_opened_v4_32";
+
+async function openRegistrationOnce(): Promise<void> {
+  const marker = await query<{ key: string }>(`SELECT key FROM settings WHERE key = $1 LIMIT 1`, [OPEN_MARKER]);
+  if (marker[0]) return;
+  const now = new Date().toISOString();
+  await query(
+    `INSERT INTO settings (id, key, value, "createdAt", "updatedAt") VALUES ($1, 'registration', $2, $3, $3)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, "updatedAt" = EXCLUDED."updatedAt"`,
+    [newId(), JSON.stringify({ mode: "open" }), now],
+  );
+  await query(
+    `INSERT INTO settings (id, key, value, "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $4)
+     ON CONFLICT (key) DO NOTHING`,
+    [newId(), OPEN_MARKER, JSON.stringify({ at: now }), now],
+  );
 }
 
 /* ------------------------------ the flow ------------------------------ */
@@ -273,6 +301,32 @@ export async function completeLinkedInLogin(
         }, primary.id);
         return { ok: true, user: toResolved(moved) };
       }
+    }
+
+    // Registration is open: an account left pending from the approval era is
+    // let in on this sign-in — own workspace, ADMIN of it, exactly what the
+    // Admin > Users "Approve" button would have done.
+    if (user.pendingApproval && (await getRegistrationMode()) === "open") {
+      const org = user.organizationId ? null : await createOrganizationFor(user.name || profile.name || email);
+      const before = { pendingApproval: true, isActive: user.isActive, organizationId: user.organizationId };
+      const approved = await updateUser(user.id, {
+        pendingApproval: false,
+        isActive: true,
+        approvedAt: now,
+        ...(org ? { organizationId: org.id, role: "ADMIN" } : {}),
+        linkedinSub: profile.sub,
+        name: user.name || profile.name || email,
+        image: profile.picture ?? user.image,
+        ...fields,
+        lastLoginAt: now,
+        lastLoginIp: ctx.ip ?? user.lastLoginIp,
+      });
+      await audit(approved.id, "USER_UPDATED", approved.id, before, {
+        pendingApproval: false,
+        workspace: org?.name ?? null,
+        via: "open-registration-auto-approve",
+      }, approved.organizationId);
+      return { ok: true, user: toResolved(approved) };
     }
 
     if (user.pendingApproval) {

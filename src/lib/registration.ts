@@ -21,17 +21,30 @@ import prisma from "@/lib/db";
 export type RegistrationMode = "approval" | "open";
 
 const SETTING_KEY = "registration";
-const DEFAULT_MODE: RegistrationMode = "approval";
+// v4.32.0 — Olivier 2026-10-05: open to everyone until further notice.
+// Safe since v4.4.0: a signup gets its own empty workspace, never Gershon's data.
+const DEFAULT_MODE: RegistrationMode = "open";
 
 export async function getRegistrationMode(): Promise<RegistrationMode> {
   try {
+    // One-shot v4.32.0 opening (same marker as linkedin-login-flow.ts), so the
+    // Admin > Users toggle shows "open" even before the next signup.
+    const opened = await prisma.setting.findUnique({ where: { key: "registration_opened_v4_32" } });
+    if (!opened) {
+      await setRegistrationMode("open");
+      await prisma.setting.upsert({
+        where: { key: "registration_opened_v4_32" },
+        create: { key: "registration_opened_v4_32", value: JSON.stringify({ at: new Date().toISOString() }) },
+        update: {},
+      });
+    }
     const row = await prisma.setting.findUnique({ where: { key: SETTING_KEY } });
     if (!row) return DEFAULT_MODE;
     const parsed = JSON.parse(row.value) as { mode?: string };
-    return parsed.mode === "open" ? "open" : "approval";
+    return parsed.mode === "approval" ? "approval" : "open";
   } catch {
-    // Unreadable or malformed setting must never mean "let everyone in".
-    return DEFAULT_MODE;
+    // A broken read must never mean "let everyone in".
+    return "approval";
   }
 }
 
