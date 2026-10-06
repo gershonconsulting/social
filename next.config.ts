@@ -2,6 +2,11 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
+  // /companies was linked from old emails and bookmarks but never existed;
+  // the Companies section lives at /clients (audit 2026-10-06).
+  async redirects() {
+    return [{ source: "/companies", destination: "/clients", permanent: false }];
+  },
   webpack: (config) => {
     // Stub out Node.js built-ins that next-auth's oauth dependency may require.
     // We only use CredentialsProvider + JWT, so OAuth code paths never run.

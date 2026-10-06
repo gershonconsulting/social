@@ -11,6 +11,7 @@ import { purgeValosFromGershonOnce } from "@/lib/workspaces/purge-valos-from-ger
 import { ExtensionInstallBanner } from "@/components/layout/extension-install-banner";
 import { CollectionHealthBanner } from "@/components/layout/collection-health-banner";
 import { EXTENSION_LATEST } from "@/lib/extension-version";
+import { ApiRetry } from "@/components/layout/api-retry";
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
 const BUILD_DATE = process.env.NEXT_PUBLIC_BUILD_DATE || new Date().toISOString();
@@ -68,6 +69,8 @@ export default async function DashboardLayout({
       {/* Invisible: reports the installed Chrome-extension version to the
           server so the daily progress report can warn about a stale build. */}
       <ExtensionSeenReporter />
+      {/* Retries transient Cloudflare 5xx on GET /api/* (v4.33.0). */}
+      <ApiRetry />
       <div className="flex h-screen overflow-hidden bg-[#F5F4F0]">
         <Sidebar />
         <main className="flex-1 overflow-y-auto">

@@ -15,9 +15,6 @@
  *
  * Configured for the Cloudflare Pages edge runtime:
  *
- * Two changes vs. the previous WebSocket-Pool wiring (which was the source
- * of the random 1101 / 1102 cold-isolate failures we kept band-aiding):
- *
  *   1. neonConfig.poolQueryViaFetch = true — makes every query run over a
  *      fresh HTTPS fetch instead of a persistent WebSocket. The WebSocket
  *      pool was sticking around in the global isolate cache; when the
@@ -26,9 +23,8 @@
  *      poolQueryViaFetch, there's nothing to keep alive — every query is
  *      stateless.
  *
- *   2. No globalForPrisma cache. We create a fresh PrismaClient per
- *      module-resolution. With HTTP transport there's nothing to reuse,
- *      and the cache is exactly what made stale isolates fail.
+ *   2. v4.33.0: ONE client per isolate, kept on globalThis and shared by
+ *      every route bundle — see the note above shared() below.
  *
  * Initialization is still lazy (via Proxy) so the module can be imported
  * at build time without DATABASE_URL being present.
@@ -66,16 +62,34 @@ function buildClient(): PrismaClient {
   return new PrismaClient({ adapter });
 }
 
-// Lazy proxy — actual client is constructed on first property access at
-// runtime (defers DATABASE_URL evaluation until a request fires). Unlike
-// the previous version we do NOT cache across isolates: each new isolate
-// gets its own client, and since HTTP queries are stateless that costs us
-// nothing.
-let cached: PrismaClient | null = null;
+// ONE client per isolate, shared by every route bundle (v4.33.0).
+//
+// next-on-pages compiles each route into its own bundle, each with its own
+// copy of this module. A module-scoped cache therefore meant one PrismaClient
+// — and one instance of the 2 MB query-engine WASM, with the whole schema
+// loaded into it — PER ROUTE that an isolate happened to serve. Audit of
+// 2026-10-06 reproduced it on demand: three different API routes in a row
+// succeed, the fourth dies with 1102 "Worker exceeded resource limits", and
+// every request to that isolate afterwards is 1101 "Worker threw exception".
+// That is the "most unreliable platform" symptom: pages that load several
+// APIs (Dashboard, Logs, Settings) exhaust the isolate's memory.
+//
+// globalThis IS shared between those bundles inside one isolate, so the
+// client lives there. With poolQueryViaFetch every query is a stateless
+// HTTPS fetch, so sharing it holds no socket that could go stale (the reason
+// the old global cache was removed).
+const GLOBAL_KEY = "__gershonPrismaRaw__";
+type G = typeof globalThis & { [GLOBAL_KEY]?: PrismaClient };
+
+function shared(): PrismaClient {
+  const g = globalThis as G;
+  if (!g[GLOBAL_KEY]) g[GLOBAL_KEY] = buildClient();
+  return g[GLOBAL_KEY] as PrismaClient;
+}
+
 const prisma: PrismaClient = new Proxy({} as PrismaClient, {
   get(_target, prop) {
-    if (!cached) cached = buildClient();
-    const client = cached;
+    const client = shared();
     const value = (client as unknown as Record<string | symbol, unknown>)[prop];
     return typeof value === "function" ? (value as Function).bind(client) : value;
   },
