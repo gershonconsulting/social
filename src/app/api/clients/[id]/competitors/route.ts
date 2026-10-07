@@ -26,6 +26,19 @@ function parseWindow(req: NextRequest): number {
   return ALLOWED_WINDOWS.includes(raw) ? raw : 90;
 }
 
+/**
+ * v4.35.0: Competitor Watch belongs to a workspace's OWN company (INTERNAL).
+ * On a client's page it filed the client's competitors into the workspace's
+ * own Competition list (how VALOS's competitors landed in Gershon's account).
+ * A client that wants competitor tracking gets its own workspace.
+ */
+function notInternal() {
+  return NextResponse.json(
+    { success: false, error: "NOT_INTERNAL", message: "Competitor Watch is only available on your own company (Internal)." },
+    { status: 403 },
+  );
+}
+
 function fail(err: unknown, fallback: string) {
   const message = err instanceof Error ? err.message : fallback;
   const status = message === "NO_ORGANIZATION" || message === "UNAUTHORIZED" ? 401 : 500;
@@ -42,6 +55,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const windowDays = parseWindow(req);
     const client = await loadClient(id);
     if (!client) return NextResponse.json({ success: false, error: "Company not found" }, { status: 404 });
+    if (client.clientType !== ClientType.INTERNAL) return notInternal();
 
     const orgId = await requireOrgId();
     const ids = await getCompetitorIds(orgId, id);
@@ -125,6 +139,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params;
     const client = await loadClient(id);
     if (!client) return NextResponse.json({ success: false, error: "Company not found" }, { status: 404 });
+    if (client.clientType !== ClientType.INTERNAL) return notInternal();
 
     const orgId = await requireOrgId();
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
