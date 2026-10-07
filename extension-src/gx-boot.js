@@ -4,5 +4,6 @@
 // fetches; gx-linkedin.js replaces the LinkedIn page reader for LinkedIn's new
 // layout and gx-collect.js wraps self.runFullSync and the tab calls, so both
 // run after background.js (which loads sync-core.js) has defined them.
+// gx-personal.js (0.13.3) sends /in/ profile links to their activity page.
 // Pointing the manifest here keeps background.js and sync-core.js untouched.
-importScripts("gx-token.js", "background.js", "gx-linkedin.js", "gx-collect.js");
+importScripts("gx-token.js", "background.js", "gx-linkedin.js", "gx-collect.js", "gx-personal.js");

@@ -300,7 +300,15 @@ export async function POST(req: NextRequest) {
         if (pageName) {
           try {
             const c = await db.client.findFirst({ where: { id: r.clientId }, select: { name: true } });
-            if (c?.name && !pageNameMatches(c.name, pageName)) {
+            // A company tracked through a PERSON's profile (WALLIX → its CEO's
+            // /in/ page) prints the person's name, not the company's: never a
+            // mismatch (v4.35.1).
+            const conn = await prisma.platformConnection.findFirst({
+              where: { id: r.connectionId },
+              select: { externalAccountUrl: true },
+            });
+            const personal = /linkedin\.com\/in\//i.test(conn?.externalAccountUrl || "");
+            if (!personal && c?.name && !pageNameMatches(c.name, pageName)) {
               pageFlag = `${PAGE_MISMATCH}: the link opens the LinkedIn page of “${pageName.slice(0, 100)}”, not “${c.name.slice(0, 100)}”`;
             }
           } catch {}
