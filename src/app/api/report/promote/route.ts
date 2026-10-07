@@ -17,6 +17,12 @@ import { GET as followersGET } from "@/app/api/followers/route";
  * `x-promote-key: <key>`. If the secret is unset (or too short) every call is
  * refused — an unset key never means "no check" here.
  *
+ * The key is generated and stored by the "Rotate Promote key" workflow in
+ * gershonconsulting/client (.github/workflows/rotate-promote-key.yml), which
+ * writes the same value to SOCIAL_PROMOTE_KEY on gershoncrm-client and to
+ * PROMOTE_API_KEY on gershoncrm-social. Nobody types it. After a rotation this
+ * project needs one redeploy to pick the new value up.
+ *
  * Scope: the PRIMARY workspace only (Gershon's own). The request carries no
  * session, so the delegated handlers run on the raw client; the tenant fence
  * is therefore applied here, before delegating:
