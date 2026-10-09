@@ -5,5 +5,7 @@
 // layout and gx-collect.js wraps self.runFullSync and the tab calls, so both
 // run after background.js (which loads sync-core.js) has defined them.
 // gx-personal.js (0.13.3) sends /in/ profile links to their activity page.
+// gx-session-watch.js (0.14.0) is the LinkedIn sign-out watchdog; it loads
+// before gx-collect.js so its login tab uses the real chrome.tabs.create.
 // Pointing the manifest here keeps background.js and sync-core.js untouched.
-importScripts("gx-token.js", "background.js", "gx-linkedin.js", "gx-collect.js", "gx-personal.js");
+importScripts("gx-token.js", "background.js", "gx-linkedin.js", "gx-session-watch.js", "gx-collect.js", "gx-personal.js");

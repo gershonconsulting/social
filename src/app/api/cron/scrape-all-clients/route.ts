@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { Platform } from "@prisma/client";
 import { getOrgCookies } from "@/lib/x-session";
+import { SERVER_LINKEDIN_SESSION_CALLS, SERVER_LINKEDIN_DISABLED_MESSAGE } from "@/lib/linkedin-server-guard";
 
 /**
  * GET /api/cron/scrape-all-clients
@@ -274,6 +275,11 @@ export async function GET(req: NextRequest) {
         const url = conn.externalAccountUrl ?? "";
         if (!url) continue;
         let r: ScrapeResult;
+        if (conn.platform === Platform.LINKEDIN && !SERVER_LINKEDIN_SESSION_CALLS) {
+          // v4.36.0: LinkedIn comes from the extension only — see lib/linkedin-server-guard.ts.
+          results.push({ client: c.name, clientId: c.id, platform: "LINKEDIN", url, upserted: 0, status: 0, error: SERVER_LINKEDIN_DISABLED_MESSAGE });
+          continue;
+        }
         if (conn.platform === Platform.LINKEDIN) {
           const li = await loadCookies(c.organizationId, "LINKEDIN");
           r = await scrapeLinkedInOne(c.id, conn.id, c.name, url, li.cookies, c.organizationId);

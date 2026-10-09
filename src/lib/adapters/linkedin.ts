@@ -24,6 +24,7 @@
 import { PlatformAdapter, buildUnavailableResult, toLocalDateString, toLocalTime, truncateSnippet } from "./base";
 import { AdapterConfig, AdapterFetchResult, NormalizedPost } from "@/types";
 import prisma from "@/lib/db";
+import { SERVER_LINKEDIN_SESSION_CALLS, SERVER_LINKEDIN_DISABLED_MESSAGE } from "@/lib/linkedin-server-guard";
 
 const VOYAGER_BASE = "https://www.linkedin.com/voyager/api";
 const LINKEDIN_API_BASE = "https://api.linkedin.com/v2";
@@ -137,7 +138,10 @@ export class LinkedInAdapter implements PlatformAdapter {
   ): Promise<AdapterFetchResult> {
     const session = parseSession(config.tokenReference);
 
-    // Cookie-auth path (preferred — actually works without LinkedIn API approval)
+    // Cookie-auth path. v4.36.0: off — see lib/linkedin-server-guard.ts.
+    if (session && !SERVER_LINKEDIN_SESSION_CALLS) {
+      return buildUnavailableResult("SERVER_LINKEDIN_DISABLED", SERVER_LINKEDIN_DISABLED_MESSAGE, false);
+    }
     if (session) {
       const conn = await prisma.platformConnection.findUnique({
         where: { id: config.connectionId },

@@ -2,6 +2,7 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import { resolveRequestOrg } from "@/lib/session-org";
 import { getOrgCookies } from "@/lib/x-session";
+import { SERVER_LINKEDIN_SESSION_CALLS, SERVER_LINKEDIN_DISABLED_MESSAGE } from "@/lib/linkedin-server-guard";
 
 /**
  * GET /api/cookies/verify
@@ -40,6 +41,12 @@ async function probeLinkedIn(cookies: Record<string,string>, capturedAt: string 
     testResult: "untested",
   };
   if (!cookies.li_at) return probe;
+  // v4.36.0: never replay the session from the server (lib/linkedin-server-guard.ts).
+  // This probe ran every time Settings was opened.
+  if (!SERVER_LINKEDIN_SESSION_CALLS) {
+    probe.testMessage = SERVER_LINKEDIN_DISABLED_MESSAGE;
+    return probe;
+  }
   // LinkedIn started redirecting Voyager calls from datacenter IPs into a
   // login-flow loop (the previous probe surfaced as 'Too many redirects' —
   // the same /voyager/api/me URL bouncing 16+ times). Use redirect:'manual'

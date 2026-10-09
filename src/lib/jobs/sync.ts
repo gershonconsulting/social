@@ -5,6 +5,7 @@
 
 import prisma from "@/lib/db";
 import { getAdapter } from "@/lib/adapters/registry";
+import { SERVER_LINKEDIN_SESSION_CALLS } from "@/lib/linkedin-server-guard";
 import { getSupportedPlatforms } from "@/lib/adapters/registry";
 import { recomputeCompliance } from "@/lib/compliance/engine";
 import { AdapterConfig } from "@/types";
@@ -34,6 +35,14 @@ export async function syncPlatformConnection(
     where: { id: connectionId },
     include: { client: true },
   });
+
+  // v4.36.0: LinkedIn is collected by the Chrome extension only. Calling it
+  // from here replays the captured session from a datacenter IP, which gets
+  // the account signed out. Skip without touching the connection's status,
+  // so the extension's own lastSyncAt / health stays the truth.
+  if (connection.platform === "LINKEDIN" && !SERVER_LINKEDIN_SESSION_CALLS) {
+    return { success: true, postsUpserted: 0 };
+  }
 
   const adapter = getAdapter(connection.platform);
 
