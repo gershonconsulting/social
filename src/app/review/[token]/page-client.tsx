@@ -14,6 +14,7 @@ type Item = {
   id: string; title: string | null; text: string; textX: string | null; platforms: string; status: string; scheduledAt: string | null;
   version: number; approvedAt: string | null; approvedBy: string | null; updatedAt: string; comments: Comment[];
   deliveries: { platform: string; status: string; postUrl: string | null; postedAt: string | null }[];
+  media: { id: string; key: string; position: number; width: number | null; height: number | null }[];
 };
 type Data = { client: string; logoUrl: string | null; agency: string; items: Item[] };
 
@@ -142,8 +143,8 @@ function Post({ i, token, name, onDone, actionable, compact }: { i: Item; token:
         <span className="text-[11px] text-gray-500 ml-auto">Version {i.version}{i.scheduledAt ? ` · planned ${fmt(i.scheduledAt)}` : ""}</span>
       </div>
       <div className={`p-4 grid gap-3 ${nets.length > 1 && !compact ? "md:grid-cols-2" : ""}`}>
-        {nets.includes("LINKEDIN") && <Preview net="LinkedIn" color="#0A66C2" text={i.text} compact={compact} />}
-        {nets.includes("TWITTER") && (!compact || !nets.includes("LINKEDIN")) && <Preview net="X" color="#000" text={i.textX?.trim() || i.text} compact={compact} />}
+        {nets.includes("LINKEDIN") && <Preview net="LinkedIn" color="#0A66C2" text={i.text} media={i.media} compact={compact} />}
+        {nets.includes("TWITTER") && (!compact || !nets.includes("LINKEDIN")) && <Preview net="X" color="#000" text={i.textX?.trim() || i.text} media={i.media} compact={compact} />}
       </div>
       {i.deliveries.some((d) => d.postUrl) && (
         <div className="px-4 pb-3 flex gap-3 text-xs">
@@ -201,7 +202,27 @@ function Post({ i, token, name, onDone, actionable, compact }: { i: Item; token:
   );
 }
 
-function Preview({ net, color, text, compact }: { net: string; color: string; text: string; compact?: boolean }) {
+function Pictures({ media, compact }: { media: Item["media"]; compact?: boolean }) {
+  if (!media?.length) return null;
+  const shown = compact ? media.slice(0, 1) : media;
+  return (
+    <div className={`mt-2 grid gap-1 ${shown.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+      {shown.map((m) => (
+        <a key={m.id} href={`/api/media/${m.id}?k=${m.key}`} target="_blank" rel="noreferrer">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/media/${m.id}?k=${m.key}`}
+            alt=""
+            loading="lazy"
+            className={`w-full rounded-md bg-gray-100 ${shown.length > 1 || compact ? "h-36 object-cover" : "max-h-96 object-contain"}`}
+          />
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function Preview({ net, color, text, media, compact }: { net: string; color: string; text: string; media: Item["media"]; compact?: boolean }) {
   return (
     <div className="border border-gray-200 rounded-lg p-3">
       <div className="flex items-center gap-1.5 mb-2">
@@ -209,6 +230,7 @@ function Preview({ net, color, text, compact }: { net: string; color: string; te
         <span className="text-xs text-gray-500">{net} preview</span>
       </div>
       <p className={`text-sm text-gray-900 whitespace-pre-wrap break-words ${compact ? "line-clamp-3" : ""}`}>{text}</p>
+      <Pictures media={media} compact={compact} />
     </div>
   );
 }

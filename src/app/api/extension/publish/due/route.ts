@@ -4,7 +4,7 @@ export const runtime = "edge";
  * (v4.37.0, extension 0.15.0)
  *
  * GET (extension token) ?skip=TWITTER,LINKEDIN   (networks this browser is signed out of)
- *   → { enabled, post: { id, platform, target, text, scheduledAt } | null }
+ *   → { enabled, post: { id, platform, target, text, scheduledAt, media: [{url,mime,name}] } | null }
  *
  * One delivery per call, CLAIMED atomically (SCHEDULED → POSTING), so nothing
  * is published twice even with two browsers. The extension loops until it
@@ -14,6 +14,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveExtensionCaller } from "@/lib/extension-auth";
 import prisma from "@/lib/db-raw";
 import { getPublisherState, getSettings, savePublisherState, sweep } from "@/lib/publishing";
+
+function parseMedia(j: string | null): { url: string; mime: string; name: string }[] {
+  if (!j) return [];
+  try {
+    const a = JSON.parse(j);
+    return Array.isArray(a) ? a : [];
+  } catch {
+    return [];
+  }
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -49,7 +59,10 @@ export async function GET(req: NextRequest) {
       if (claimed.count === 1) {
         return NextResponse.json({
           success: true,
-          data: { enabled: true, post: { id: d.id, platform: d.platform, target: d.target, text: d.text, scheduledAt: d.scheduledAt } },
+          data: {
+            enabled: true,
+            post: { id: d.id, platform: d.platform, target: d.target, text: d.text, scheduledAt: d.scheduledAt, media: parseMedia(d.mediaJson) },
+          },
         });
       }
     }

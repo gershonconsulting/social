@@ -149,6 +149,7 @@ model Organization {
   orgSettings         OrgSetting[]
   contentItems        ContentItem[]
   contentComments     ContentComment[]
+  contentMedia        ContentMedia[]
   scheduledPosts      ScheduledPost[]
 
   @@index([isPrimary])
@@ -595,6 +596,7 @@ model ContentItem {
 
   comments   ContentComment[]
   deliveries ScheduledPost[]
+  media      ContentMedia[]
 
   @@index([organizationId, status])
   @@index([organizationId, clientId])
@@ -634,6 +636,8 @@ model ScheduledPost {
   /// X: @handle without "@". LinkedIn: the company page or profile URL to post as.
   target         String?
   text           String    @db.Text
+  /// Pictures snapshotted at scheduling time: [{ url, mime, name }].
+  mediaJson      String?   @db.Text
   status         String    @default("SCHEDULED")
   scheduledAt    DateTime
   claimedAt      DateTime?
@@ -652,4 +656,30 @@ model ScheduledPost {
   @@index([organizationId, scheduledAt])
   @@index([contentId])
   @@map("scheduled_posts")
+}
+
+// Pictures attached to a ContentItem (v4.38.0). Resized in the browser to
+// JPEG ≤ 2048 px before upload and kept in the database (base64), so there is
+// no extra storage service to run. Served by /api/media/<id>?k=<key>; the
+// random key is what makes the URL unguessable (the extension and the client
+// review page load pictures through it).
+model ContentMedia {
+  id             String      @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  contentId      String
+  content        ContentItem @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  key            String
+  position       Int         @default(0)
+  mime           String      @default("image/jpeg")
+  name           String?
+  width          Int?
+  height         Int?
+  sizeBytes      Int         @default(0)
+  dataB64        String      @db.Text
+  createdAt      DateTime    @default(now())
+
+  @@index([contentId, position])
+  @@index([organizationId])
+  @@map("content_media")
 }

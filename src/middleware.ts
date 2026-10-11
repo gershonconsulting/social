@@ -52,6 +52,8 @@ const MACHINE_PATHS = [
   "/api/test/",
   // v4.37.0 — the client review portal: the private token in the path is the access.
   "/api/review/",
+  // v4.38.0 — post pictures: the random key in the URL is the access.
+  "/api/media/",
 ];
 
 /** Sign-in itself, including every OAuth callback. */

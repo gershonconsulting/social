@@ -52,8 +52,25 @@ export type PublishSettings = {
   graceMinutes: number;
   /** Who gets team alerts (client feedback, problems). Empty = first admin. */
   alertEmail: string | null;
+  /** Every post needs at least one picture before it can go to review, be approved or scheduled. */
+  requireImage: boolean;
 };
-export const DEFAULT_SETTINGS: PublishSettings = { enabled: true, longPostsX: false, graceMinutes: 120, alertEmail: null };
+export const DEFAULT_SETTINGS: PublishSettings = { enabled: true, longPostsX: false, graceMinutes: 120, alertEmail: null, requireImage: true };
+
+// ── Pictures ─────────────────────────────────────────────────────────────────
+
+/** X takes at most 4 pictures per post, so that is the limit for both networks. */
+export const MAX_IMAGES = 4;
+/** X's limit per picture; pictures are resized in the browser well below it. */
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+export const IMAGE_MIMES = ["image/jpeg", "image/png", "image/gif"];
+
+export function mediaUrl(m: { id: string; key: string }): string {
+  return `${SITE}/api/media/${m.id}?k=${m.key}`;
+}
+export type MediaMeta = { id: string; key: string; position: number; mime: string; name: string | null; width: number | null; height: number | null; sizeBytes: number };
+/** Everything about a picture except its bytes — for lists. */
+export const MEDIA_SELECT = { id: true, key: true, position: true, mime: true, name: true, width: true, height: true, sizeBytes: true } as const;
 
 export type NetSession = { signedIn: boolean; as: string | null; signedOutSince: string | null; emailedFor: string | null };
 export type PublisherState = {
@@ -95,6 +112,7 @@ export async function saveSettings(orgId: string, patch: Partial<PublishSettings
   const next = { ...(await getSettings(orgId)), ...patch };
   next.graceMinutes = Math.min(1440, Math.max(15, Math.round(Number(next.graceMinutes) || 120)));
   next.alertEmail = next.alertEmail && /.+@.+\..+/.test(next.alertEmail) ? next.alertEmail.trim() : null;
+  next.requireImage = next.requireImage !== false;
   await writeSetting(orgId, SETTINGS_KEY, JSON.stringify(next));
   return next;
 }
@@ -150,11 +168,16 @@ export function textFor(item: { text: string; textX: string | null }, net: Net):
   return net === "TWITTER" && item.textX?.trim() ? item.textX.trim() : item.text;
 }
 
-/** Problems that block approval/scheduling, e.g. too long for X. */
-export function textProblems(item: { text: string; textX: string | null; platforms: string }, s: PublishSettings): string[] {
+/**
+ * Problems that block review/approval/scheduling: too long for a network, or
+ * no picture when the workspace requires one (pass mediaCount to check it).
+ */
+export function textProblems(item: { text: string; textX: string | null; platforms: string }, s: PublishSettings, mediaCount?: number): string[] {
   const nets = parsePlatforms(item.platforms);
   const out: string[] = [];
   if (!nets.length) out.push("Pick at least one network.");
+  if (mediaCount !== undefined && s.requireImage && mediaCount === 0) out.push("Add a picture — every post needs one.");
+  if (mediaCount !== undefined && mediaCount > MAX_IMAGES) out.push(`At most ${MAX_IMAGES} pictures per post.`);
   if (nets.includes("LINKEDIN") && Array.from(item.text).length > LINKEDIN_MAX) out.push(`Too long for LinkedIn (${Array.from(item.text).length} / ${LINKEDIN_MAX}).`);
   if (nets.includes("TWITTER")) {
     const t = textFor(item, "TWITTER");
@@ -319,8 +342,12 @@ export async function scheduleItem(orgId: string, itemId: string, when: Date): P
     return ["Only approved content can be scheduled."];
   }
   const settings = await getSettings(orgId);
-  const problems = textProblems(item, settings);
+  const media = await prisma.contentMedia.findMany({ where: { contentId: item.id }, select: MEDIA_SELECT, orderBy: { position: "asc" } });
+  const problems = textProblems(item, settings, media.length);
   if (problems.length) return problems;
+  const mediaJson = media.length
+    ? JSON.stringify(media.map((m) => ({ url: mediaUrl(m), mime: m.mime, name: m.name || `picture-${m.position + 1}.jpg` })))
+    : null;
   const nets = parsePlatforms(item.platforms);
   const target = item.clientId ? await getTarget(orgId, item.clientId) : { xHandle: null, linkedinUrl: null };
   if (nets.includes("TWITTER") && !target.xHandle) problems.push("No X account set for this client (Publishing → Accounts).");
@@ -341,6 +368,7 @@ export async function scheduleItem(orgId: string, itemId: string, when: Date): P
         platform: net,
         target: net === "TWITTER" ? target.xHandle : target.linkedinUrl,
         text: textFor(item, net),
+        mediaJson,
         status: "SCHEDULED",
         scheduledAt: when,
       },
@@ -348,6 +376,30 @@ export async function scheduleItem(orgId: string, itemId: string, when: Date): P
   }
   await prisma.contentItem.update({ where: { id: item.id }, data: { status: "SCHEDULED", scheduledAt: when } });
   return [];
+}
+
+/**
+ * The wording or the pictures changed: it is a new version, and anything
+ * approved or with the client goes back to DRAFT (approval covers exactly what
+ * was approved). Whatever has not gone out yet is unscheduled.
+ */
+export async function markChanged(orgId: string, itemId: string, by: string, note: string): Promise<void> {
+  const item = await prisma.contentItem.findFirst({ where: { id: itemId, organizationId: orgId } });
+  if (!item) return;
+  if (item.status === "SCHEDULED" || item.status === "FAILED") await unscheduleItem(orgId, item.id);
+  const back = ["IN_REVIEW", "APPROVED", "SCHEDULED", "FAILED"].includes(item.status);
+  await prisma.contentItem.update({
+    where: { id: item.id },
+    data: {
+      version: item.version + 1,
+      ...(back ? { status: "DRAFT", approvedAt: null, approvedBy: null, approvedRole: null, scheduledAt: null } : {}),
+    },
+  });
+  await addEvent(orgId, item.id, item.version + 1, "edited", "team", by, note);
+}
+
+export async function mediaCount(itemId: string): Promise<number> {
+  return prisma.contentMedia.count({ where: { contentId: itemId } });
 }
 
 export async function unscheduleItem(orgId: string, itemId: string): Promise<void> {

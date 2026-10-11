@@ -15,12 +15,13 @@ import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { CalendarDays, Check, Loader2, MessageSquare, Plus, Send, Users } from "lucide-react";
 import {
-  Counter, fmt, ItemBadge, liLength, LiveStrip, NET_LABEL, NetChip, nets, xLength,
-  type ClientLite, type Item, type LiveAll, type Net,
+  act, Counter, fmt, ItemBadge, liLength, LiveStrip, mediaSrc, NET_LABEL, NetChip, nets, PicturePicker, prepareImage, uploadImage, xLength,
+  type ClientLite, type Item, type LiveAll, type Net, type Prepared,
 } from "@/components/publishing/shared";
 import { ItemPanel } from "@/components/publishing/item-panel";
 
-type Feed = { items: Item[]; clients: ClientLite[]; live: LiveAll; limits: { x: number; linkedin: number }; canWrite: boolean };
+type Limits = { x: number; linkedin: number; images: number; requireImage: boolean };
+type Feed = { items: Item[]; clients: ClientLite[]; live: LiveAll; limits: Limits; canWrite: boolean };
 
 const COLUMNS: { key: string; label: string; hint: string; match: (i: Item) => boolean }[] = [
   { key: "draft", label: "Drafts", hint: "Being written", match: (i) => i.status === "DRAFT" },
@@ -129,12 +130,18 @@ export function PublishingContentClient() {
                         {nets(i.platforms).map((n) => <NetChip key={n} n={n} />)}
                         <span className="text-[11px] font-medium text-gray-700 truncate">{i.clientId ? clientName.get(i.clientId) : "No client"}</span>
                       </div>
+                      {i.media && i.media[0] && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={mediaSrc(i.media[0])} alt="" loading="lazy" className="w-full h-24 object-cover rounded-md mb-1.5 bg-gray-100" />
+                      )}
                       {i.title && <div className="text-xs font-semibold text-gray-900 truncate">{i.title}</div>}
                       <div className="text-xs text-gray-700 line-clamp-3 whitespace-pre-wrap break-words">{i.text}</div>
                       <div className="flex items-center gap-2 mt-2 text-[10.5px] text-gray-500">
                         {col.key === "problems" && <ItemBadge s={i.status} />}
                         {i.scheduledAt && <span>{fmt(i.scheduledAt)}</span>}
                         {(i._count?.comments ?? 0) > 0 && <span className="inline-flex items-center gap-0.5"><MessageSquare size={10} />{i._count?.comments}</span>}
+                        {(i.media?.length ?? 0) > 1 && <span>🖼 {i.media?.length}</span>}
+                        {(i.media?.length ?? 0) === 0 && feed?.limits.requireImage && <span className="text-orange-600">no picture</span>}
                         <span className="ml-auto">v{i.version}</span>
                       </div>
                     </button>
@@ -157,7 +164,7 @@ function Composer({
   clients, limits, defaultClient, onDone, onCancel,
 }: {
   clients: ClientLite[];
-  limits: { x: number; linkedin: number };
+  limits: Limits;
   defaultClient: string;
   onDone: (id: string | null) => void;
   onCancel: () => void;
@@ -169,7 +176,23 @@ function Composer({
   const [platforms, setPlatforms] = useState<Net[]>(["LINKEDIN", "TWITTER"]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [pics, setPics] = useState<Prepared[]>([]);
+  const [preparing, setPreparing] = useState(false);
   const xText = textX.trim() || text;
+  const needPic = limits.requireImage && pics.length === 0;
+
+  async function addFiles(files: File[]) {
+    setErr(null);
+    setPreparing(true);
+    const room = limits.images - pics.length;
+    const out: Prepared[] = [];
+    for (const f of files.slice(0, Math.max(0, room))) {
+      try { out.push(await prepareImage(f)); } catch (e) { setErr(e instanceof Error ? e.message : "Could not read a picture."); }
+    }
+    if (files.length > room) setErr(`At most ${limits.images} pictures per post.`);
+    setPics((p) => [...p, ...out]);
+    setPreparing(false);
+  }
   const tooLong =
     (platforms.includes("LINKEDIN") && liLength(text) > limits.linkedin) || (platforms.includes("TWITTER") && xLength(xText) > limits.x);
 
@@ -177,15 +200,25 @@ function Composer({
     setBusy(true);
     setErr(null);
     try {
+      // Saved as a draft first, pictures attached, then sent / approved — so
+      // the server checks the post with its pictures.
       const r = await fetch("/api/publishing/content", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId: clientId || null, title, text, textX, platforms, submit: mode === "submit", approve: mode === "approve" }),
+        body: JSON.stringify({ clientId: clientId || null, title, text, textX, platforms }),
       });
       const j = await r.json();
       if (!j?.success) throw new Error(j?.error || "Could not save.");
-      if (j.warning) alert(j.warning);
-      onDone(j.data?.id ?? null);
+      const id: string = j.data.id;
+      for (const p of pics) {
+        const e = await uploadImage(id, p);
+        if (e) throw new Error(`Saved as a draft, but a picture failed: ${e}`);
+      }
+      if (mode !== "draft") {
+        const e = await act(id, mode === "submit" ? "submit" : "approve");
+        if (e) throw new Error(`Saved as a draft: ${e}`);
+      }
+      onDone(id);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not save.");
     }
@@ -222,15 +255,32 @@ function Composer({
           <textarea value={textX} onChange={(e) => setTextX(e.target.value)} rows={3} className="w-full text-sm border border-gray-300 rounded-lg p-2" />
         </>
       )}
+      <div className="mt-3">
+        <div className="text-[11px] font-medium text-gray-600 mb-1">
+          Pictures — the same ones go to LinkedIn and X (up to {limits.images}; the first one leads){limits.requireImage ? " · required" : ""}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {pics.map((p, i) => (
+            <div key={p.preview} className="relative w-24 h-24">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.preview} alt="" className="w-24 h-24 object-cover rounded-lg border border-gray-200" />
+              {i === 0 && <span className="absolute bottom-1 left-1 text-[9px] bg-black/70 text-white px-1 rounded">first</span>}
+              <button onClick={() => setPics((all) => all.filter((x) => x !== p))} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gray-900 text-white text-xs leading-5" aria-label="Remove">×</button>
+            </div>
+          ))}
+          <PicturePicker onFiles={addFiles} disabled={busy || preparing} left={limits.images - pics.length} />
+          {preparing && <Loader2 size={14} className="animate-spin text-gray-400 self-center" />}
+        </div>
+      </div>
       {err && <div className="text-sm rounded-lg px-3 py-2 my-2 bg-red-50 text-red-800">{err}</div>}
       <div className="flex flex-wrap items-center gap-2 mt-3">
-        <button disabled={busy || !text.trim() || !platforms.length} onClick={() => save("draft")} className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg disabled:opacity-50">
+        <button disabled={busy || preparing || !text.trim() || !platforms.length} onClick={() => save("draft")} className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg disabled:opacity-50">
           Save draft
         </button>
-        <button disabled={busy || !text.trim() || !clientId || tooLong || !platforms.length} onClick={() => save("submit")} className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-violet-600 rounded-lg disabled:opacity-50" title={!clientId ? "Pick the client first" : ""}>
+        <button disabled={busy || preparing || !text.trim() || !clientId || tooLong || needPic || !platforms.length} onClick={() => save("submit")} className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-violet-600 rounded-lg disabled:opacity-50" title={!clientId ? "Pick the client first" : needPic ? "Add a picture first" : ""}>
           <Send size={14} /> Send to client for review
         </button>
-        <button disabled={busy || !text.trim() || tooLong || !platforms.length} onClick={() => save("approve")} className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-sky-800 bg-sky-50 border border-sky-200 rounded-lg disabled:opacity-50">
+        <button disabled={busy || preparing || !text.trim() || tooLong || needPic || !platforms.length} onClick={() => save("approve")} className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-sky-800 bg-sky-50 border border-sky-200 rounded-lg disabled:opacity-50">
           <Check size={14} /> Approve internally
         </button>
         <button onClick={onCancel} className="text-sm text-gray-500 underline ml-auto">Cancel</button>

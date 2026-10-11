@@ -32,6 +32,7 @@ export async function PUT(req: NextRequest) {
   if (typeof b.longPostsX === "boolean") patch.longPostsX = b.longPostsX;
   if (b.graceMinutes !== undefined) patch.graceMinutes = Number(b.graceMinutes);
   if (b.alertEmail !== undefined) patch.alertEmail = b.alertEmail || null;
+  if (typeof b.requireImage === "boolean") patch.requireImage = b.requireImage;
   await saveSettings(c.orgId, patch);
   return NextResponse.json({ success: true, data: { ...(await payload(c.orgId)), canWrite: c.canWrite } });
 }

@@ -37,6 +37,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
           orderBy: { createdAt: "asc" },
         },
         deliveries: { select: { platform: true, status: true, postUrl: true, postedAt: true } },
+        media: { select: { id: true, key: true, position: true, width: true, height: true }, orderBy: { position: "asc" } },
       },
       orderBy: { updatedAt: "desc" },
       take: 100,

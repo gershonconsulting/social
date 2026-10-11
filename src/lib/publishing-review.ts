@@ -8,7 +8,7 @@
  */
 import prisma from "@/lib/db-raw";
 import {
-  addEvent, alertTeam, esc, getSettings, getTarget, quote, reviewToken, reviewUrl, sendMail, textProblems, SITE,
+  addEvent, alertTeam, mediaCount, esc, getSettings, getTarget, quote, reviewToken, reviewUrl, sendMail, textProblems, SITE,
 } from "@/lib/publishing";
 
 export async function submitForReview(orgId: string, itemId: string, by: string): Promise<string | null> {
@@ -16,7 +16,7 @@ export async function submitForReview(orgId: string, itemId: string, by: string)
   if (!item) return "Content not found.";
   if (!item.clientId) return "Pick the client first — the review goes to their reviewer.";
   if (!["DRAFT", "CHANGES_REQUESTED", "IN_REVIEW"].includes(item.status)) return "This content is already approved.";
-  const problems = textProblems(item, await getSettings(orgId));
+  const problems = textProblems(item, await getSettings(orgId), await mediaCount(item.id));
   if (problems.length) return problems.join(" ");
 
   await prisma.contentItem.update({ where: { id: item.id }, data: { status: "IN_REVIEW", submittedAt: new Date() } });

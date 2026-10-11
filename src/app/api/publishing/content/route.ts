@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
 import {
-  ITEM_STATUSES, LINKEDIN_MAX, addEvent, getPublisherState, getSettings, liveStatus, parsePlatforms, sweep, textProblems, xMax,
+  ITEM_STATUSES, LINKEDIN_MAX, MAX_IMAGES, MEDIA_SELECT, addEvent, getPublisherState, getSettings, liveStatus, parsePlatforms, sweep, textProblems, xMax,
 } from "@/lib/publishing";
 import { submitForReview } from "@/lib/publishing-review";
 
@@ -40,7 +40,11 @@ export async function GET(req: NextRequest) {
     const [items, clients, settings, publisher] = await Promise.all([
       prisma.contentItem.findMany({
         where,
-        include: { deliveries: { orderBy: { platform: "asc" } }, _count: { select: { comments: { where: { kind: "comment" } } } } },
+        include: {
+          deliveries: { orderBy: { platform: "asc" } },
+          media: { select: MEDIA_SELECT, orderBy: { position: "asc" } },
+          _count: { select: { comments: { where: { kind: "comment" } } } },
+        },
         orderBy: [{ updatedAt: "desc" }],
         take: 500,
       }),
@@ -61,7 +65,7 @@ export async function GET(req: NextRequest) {
         settings,
         publisher,
         live: liveStatus(publisher),
-        limits: { x: xMax(settings), linkedin: LINKEDIN_MAX },
+        limits: { x: xMax(settings), linkedin: LINKEDIN_MAX, images: MAX_IMAGES, requireImage: settings.requireImage },
         canWrite: c.canWrite,
       },
     });
@@ -87,7 +91,7 @@ export async function POST(req: NextRequest) {
       clientId = cl.id;
     }
     const draft = { text, textX: (b?.textX || "").trim() || null, platforms: platforms.join(",") };
-    const problems = textProblems(draft, await getSettings(c.orgId));
+    const problems = textProblems(draft, await getSettings(c.orgId), 0);
     if (problems.length && (b?.submit || b?.approve)) {
       return NextResponse.json({ success: false, error: problems.join(" ") }, { status: 400 });
     }

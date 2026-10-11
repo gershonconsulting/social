@@ -15,7 +15,7 @@ import { CheckCircle2, Loader2, Send } from "lucide-react";
 import { LiveStrip, type LiveAll } from "@/components/publishing/shared";
 
 type Data = {
-  settings: { enabled: boolean; longPostsX: boolean; graceMinutes: number; alertEmail: string | null };
+  settings: { enabled: boolean; longPostsX: boolean; graceMinutes: number; alertEmail: string | null; requireImage: boolean };
   publisher: { lastSeenAt: string | null; version: string | null; lastPostAt: string | null; lastError: string | null; x: { as: string | null }; linkedin: { as: string | null } };
   live: LiveAll;
   waiting: number;
@@ -108,6 +108,10 @@ export function PublishingCard() {
               <label className="flex items-center gap-2 text-sm text-gray-800">
                 <input disabled={ro} type="checkbox" checked={d.settings.longPostsX} onChange={(e) => save({ longPostsX: e.target.checked })} />
                 X Premium — allow X posts longer than 280 characters
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-800">
+                <input disabled={ro} type="checkbox" checked={d.settings.requireImage} onChange={(e) => save({ requireImage: e.target.checked })} />
+                Every post needs a picture (before review, approval and scheduling)
               </label>
             </div>
           </div>

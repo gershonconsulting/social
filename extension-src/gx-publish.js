@@ -21,9 +21,9 @@
 //      delivery whose time has come — one at a time, claimed by the server, so
 //      nothing goes out twice — and loops until none is left, so LinkedIn and
 //      X go out back to back. For each delivery, in a separate unfocused window:
-//        X:        x.com/intent/post?text=… → check the text and the Post button
+//        X:        x.com/intent/post?text=… → attach the pictures → check the text, pictures and Post button
 //                  → click → find the post on the profile → report its URL.
-//        LinkedIn: the company page's admin (or the feed for a profile) →
+//        LinkedIn: the company page admin (or the feed for a profile) → pictures →
 //                  "Start a post" → paste the text → click Post → take the
 //                  post's link from LinkedIn's "Post successful" toast, or find
 //                  it on the page's posts → report it.
@@ -260,6 +260,54 @@
     return { winId: w.id, tabId: w.tabs && w.tabs[0] && w.tabs[0].id };
   }
 
+  // ── Pictures (0.15.0) ───────────────────────────────────────────────────
+  // The dashboard hands each delivery its pictures as URLs. They are fetched
+  // here, then handed to the network's own file input inside the page, so the
+  // network uploads them exactly as if they had been picked by hand.
+  function bufToB64(buf) {
+    var bytes = new Uint8Array(buf);
+    var s = "";
+    for (var i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  async function fetchMedia(list) {
+    var out = [];
+    for (var i = 0; i < (list || []).length; i++) {
+      var m = list[i];
+      var r = await fetch(m.url, { cache: "no-store" });
+      if (!r.ok) throw new Error("Could not download picture " + (i + 1) + " (HTTP " + r.status + ").");
+      out.push({ b64: bufToB64(await r.arrayBuffer()), mime: m.mime || "image/jpeg", name: m.name || "picture-" + (i + 1) + ".jpg" });
+    }
+    return out;
+  }
+  // Runs in the page: give the files to the first matching file input.
+  function attachFiles(files, selectors) {
+    var input = null;
+    for (var i = 0; i < selectors.length && !input; i++) input = document.querySelector(selectors[i]);
+    if (!input) return { ok: false, why: "no file input" };
+    var dt = new DataTransfer();
+    files.forEach(function (f) {
+      var bin = atob(f.b64);
+      var arr = new Uint8Array(bin.length);
+      for (var j = 0; j < bin.length; j++) arr[j] = bin.charCodeAt(j);
+      dt.items.add(new File([arr], f.name, { type: f.mime }));
+    });
+    input.files = dt.files;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    return { ok: true, count: dt.files.length };
+  }
+  // Runs in the page: how many large pictures sit in the composer.
+  function countComposerPictures(scopeSel) {
+    var scope = (scopeSel && document.querySelector(scopeSel)) || document;
+    var imgs = Array.from(scope.querySelectorAll("img, video"));
+    return imgs.filter(function (im) {
+      var r = im.getBoundingClientRect();
+      var src = im.getAttribute("src") || "";
+      return r.width >= 90 && r.height >= 60 && !/profile|avatar|emoji/i.test(src + " " + (im.className || ""));
+    }).length;
+  }
+
   // ── X ───────────────────────────────────────────────────────────────────
   function xReadComposer() {
     var url = location.href;
@@ -309,6 +357,23 @@
     if (!st.hasButton) { await report(d.id, "failed_before_click", null, "The X composer did not load."); return; }
     if (norm(st.text).indexOf(want.slice(0, 25)) !== 0) { await report(d.id, "failed_before_click", null, "The X composer did not receive the text."); return; }
     if (!st.enabled) { await report(d.id, "failed_before_click", null, "X disabled the Post button (too long for this account, or the text was refused)."); return; }
+
+    if (d.media && d.media.length) {
+      var files;
+      try { files = await fetchMedia(d.media); } catch (e) { await report(d.id, "failed_before_click", null, e.message); return; }
+      var at = await run(w.tabId, attachFiles, [files, ['input[data-testid="fileInput"]', 'input[type="file"][accept*="image"]']]);
+      if (!at || !at.ok) { await report(d.id, "failed_before_click", null, "Could not attach the pictures on X."); return; }
+      // X disables Post while it uploads; wait for every picture and the button.
+      var ready = false;
+      for (var u = 0; u < 60 && !ready; u++) {
+        await sleep(1000);
+        var n = await run(w.tabId, countComposerPictures, ['[data-testid="attachments"]']);
+        var c2 = await run(w.tabId, xReadComposer);
+        if (n >= files.length && c2 && c2.enabled) ready = true;
+      }
+      if (!ready) { await report(d.id, "failed_before_click", null, "X did not finish taking the pictures."); return; }
+      st = await run(w.tabId, xReadComposer);
+    }
 
     var preUrl = st.url;
     clicked = !!(await run(w.tabId, xClickPost));
@@ -378,6 +443,33 @@
     }
     return { ok: true, text: ed.innerText || "" };
   }
+  // Runs in the LinkedIn page: open the picture picker inside the post box.
+  function liOpenMediaPicker() {
+    var dlg = document.querySelector('[role="dialog"]') || document;
+    var b = Array.from(dlg.querySelectorAll("button")).find(function (x) {
+      return /add (a )?(photo|media|picture|image)/i.test((x.getAttribute("aria-label") || "") + " " + (x.innerText || ""));
+    });
+    if (b) { b.click(); return true; }
+    return false;
+  }
+  // Runs in the LinkedIn page: move through the picture editor back to the post box.
+  function liMediaEditorStep() {
+    var dlg = document.querySelector('[role="dialog"]');
+    if (!dlg) return { composer: false, pictures: 0 };
+    var editor = document.querySelector('[role="dialog"] .ql-editor[contenteditable="true"]');
+    if (editor) {
+      var imgs = Array.from(dlg.querySelectorAll("img, video")).filter(function (im) {
+        var r = im.getBoundingClientRect();
+        return r.width >= 90 && r.height >= 60;
+      });
+      return { composer: true, pictures: imgs.length };
+    }
+    var next = Array.from(dlg.querySelectorAll("button")).find(function (x) {
+      return /^\s*(next|done)\s*$/i.test(x.innerText || "") && !x.disabled;
+    });
+    if (next) next.click();
+    return { composer: false, pictures: 0, clicked: !!next };
+  }
   function liPostButton() {
     var dlg = document.querySelector('[role="dialog"]') || document;
     var b = dlg.querySelector("button.share-actions__primary-action") ||
@@ -439,6 +531,23 @@
       return;
     }
 
+    if (d.media && d.media.length) {
+      var lfiles;
+      try { lfiles = await fetchMedia(d.media); } catch (e) { await report(d.id, "failed_before_click", null, e.message); return; }
+      await run(w.tabId, liOpenMediaPicker);
+      await sleep(1500);
+      var la = await run(w.tabId, attachFiles, [lfiles, ['[role="dialog"] input[type="file"]', 'input[type="file"][accept*="image"]', 'input[type="file"]']]);
+      if (!la || !la.ok) { await report(d.id, "failed_before_click", null, "Could not attach the pictures on LinkedIn."); return; }
+      // LinkedIn shows its picture editor; "Next" / "Done" brings the post box back.
+      var back = false;
+      for (var e2 = 0; e2 < 40 && !back; e2++) {
+        await sleep(1000);
+        var stp = await run(w.tabId, liMediaEditorStep);
+        if (stp && stp.composer && stp.pictures >= 1) back = true;
+      }
+      if (!back) { await report(d.id, "failed_before_click", null, "LinkedIn did not take the pictures."); return; }
+    }
+
     var want = norm(d.text).slice(0, 40);
     var filled = null;
     for (var f = 0; f < 3; f++) {
@@ -450,6 +559,10 @@
     }
     if (!filled) { await report(d.id, "failed_before_click", null, "The LinkedIn post box did not receive the text."); return; }
     if (!filled.hasButton || !filled.enabled) { await report(d.id, "failed_before_click", null, "LinkedIn's Post button is not available."); return; }
+    if (d.media && d.media.length) {
+      var still = await run(w.tabId, countComposerPictures, ['[role="dialog"]']);
+      if (!still) { await report(d.id, "failed_before_click", null, "The pictures disappeared from the LinkedIn post box."); return; }
+    }
 
     clicked = !!(await run(w.tabId, liClickPost));
     w.clicked = clicked;

@@ -54,6 +54,7 @@ export type Item = {
   createdAt: string;
   updatedAt: string;
   deliveries: Delivery[];
+  media?: Media[];
   comments?: Comment[];
   _count?: { comments: number };
 };
@@ -181,3 +182,101 @@ export const EVENT_LABEL: Record<string, string> = {
   published: "Published on every network",
   failed: "Publishing failed",
 };
+
+// ── Pictures (v4.38.0) ───────────────────────────────────────────────────────
+
+export type Media = { id: string; key: string; position: number; mime: string; name: string | null; width: number | null; height: number | null; sizeBytes: number };
+
+export function mediaSrc(m: { id: string; key: string }): string {
+  return `/api/media/${m.id}?k=${m.key}`;
+}
+
+export type Prepared = { dataB64: string; mime: string; name: string; width: number; height: number; preview: string };
+
+const MAX_SIDE = 2048;
+const MAX_BYTES = 5 * 1024 * 1024;
+
+function blobToB64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).replace(/^data:[^,]+,/, ""));
+    r.onerror = () => reject(new Error("Could not read the picture."));
+    r.readAsDataURL(blob);
+  });
+}
+
+/**
+ * Get a picture ready for LinkedIn and X in the browser: GIFs are kept as
+ * they are (animation), everything else becomes a JPEG at most 2048 px on its
+ * longest side — sharp on both networks and a few hundred KB.
+ */
+export async function prepareImage(file: File): Promise<Prepared> {
+  if (!/^image\//.test(file.type)) throw new Error(`${file.name} is not a picture.`);
+  const bmp = await createImageBitmap(file);
+  const w0 = bmp.width, h0 = bmp.height;
+  if (file.type === "image/gif" && file.size <= MAX_BYTES) {
+    return { dataB64: await blobToB64(file), mime: "image/gif", name: file.name, width: w0, height: h0, preview: URL.createObjectURL(file) };
+  }
+  const scale = Math.min(1, MAX_SIDE / Math.max(w0, h0));
+  const w = Math.round(w0 * scale), h = Math.round(h0 * scale);
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#ffffff"; // transparent PNGs get a white background, not black
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(bmp, 0, 0, w, h);
+  let q = 0.88;
+  let blob: Blob | null = null;
+  for (let i = 0; i < 4; i++) {
+    blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", q));
+    if (blob && blob.size <= MAX_BYTES) break;
+    q -= 0.15;
+  }
+  if (!blob) throw new Error(`Could not prepare ${file.name}.`);
+  const name = file.name.replace(/\.[^.]+$/, "") + ".jpg";
+  return { dataB64: await blobToB64(blob), mime: "image/jpeg", name, width: w, height: h, preview: URL.createObjectURL(blob) };
+}
+
+export async function uploadImage(contentId: string, p: Prepared): Promise<string | null> {
+  try {
+    const r = await fetch(`/api/publishing/content/${contentId}/media`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dataB64: p.dataB64, mime: p.mime, name: p.name, width: p.width, height: p.height }),
+    });
+    const j = await r.json();
+    return j?.success ? null : j?.error || "Upload failed.";
+  } catch {
+    return "Upload failed.";
+  }
+}
+
+/** Picks pictures by click or drag-and-drop. */
+export function PicturePicker({ onFiles, disabled, left }: { onFiles: (f: File[]) => void; disabled?: boolean; left: number }) {
+  return (
+    <label
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        if (!disabled) onFiles(Array.from(e.dataTransfer.files || []).filter((f) => f.type.startsWith("image/")));
+      }}
+      className={`flex flex-col items-center justify-center w-24 h-24 rounded-lg border-2 border-dashed text-[11px] text-center leading-tight ${disabled || left <= 0 ? "border-gray-200 text-gray-300" : "border-gray-300 text-gray-500 hover:border-gray-500 cursor-pointer"}`}
+    >
+      <span className="text-xl leading-none">+</span>
+      Add picture
+      <span className="text-[10px] opacity-70">{left} left</span>
+      <input
+        type="file"
+        accept="image/jpeg,image/png,image/gif,image/webp,image/heic"
+        multiple
+        disabled={disabled || left <= 0}
+        className="hidden"
+        onChange={(e) => {
+          onFiles(Array.from(e.target.files || []));
+          e.target.value = "";
+        }}
+      />
+    </label>
+  );
+}

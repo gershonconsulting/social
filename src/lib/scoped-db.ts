@@ -61,6 +61,7 @@ const SCOPED_MODELS = new Set([
   "OrgSetting",
   "ContentItem",
   "ContentComment",
+  "ContentMedia",
   "ScheduledPost",
 ]);
 

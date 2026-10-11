@@ -22,7 +22,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
 import {
-  addEvent, getSettings, parsePlatforms, reviewToken, reviewUrl, rollUp, scheduleItem, textProblems, unscheduleItem,
+  MEDIA_SELECT, addEvent, getSettings, parsePlatforms, reviewToken, reviewUrl, rollUp, scheduleItem, textProblems, unscheduleItem,
 } from "@/lib/publishing";
 import { submitForReview } from "@/lib/publishing-review";
 
@@ -37,7 +37,11 @@ function postIdFrom(url: string | null | undefined): string | null {
 async function load(orgId: string, id: string) {
   return prisma.contentItem.findFirst({
     where: { id, organizationId: orgId },
-    include: { deliveries: { orderBy: { platform: "asc" } }, comments: { orderBy: { createdAt: "asc" } } },
+    include: {
+      deliveries: { orderBy: { platform: "asc" } },
+      comments: { orderBy: { createdAt: "asc" } },
+      media: { select: MEDIA_SELECT, orderBy: { position: "asc" } },
+    },
   });
 }
 
@@ -99,7 +103,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       }
       case "approve": {
         if (!["DRAFT", "IN_REVIEW", "CHANGES_REQUESTED"].includes(item.status)) return bad("Already approved.");
-        const problems = textProblems(item, await getSettings(c.orgId));
+        const problems = textProblems(item, await getSettings(c.orgId), item.media.length);
         if (problems.length) return bad(problems.join(" "));
         await prisma.contentItem.update({ where: { id: item.id }, data: { status: "APPROVED", approvedAt: now, approvedBy: c.name, approvedRole: "team" } });
         await addEvent(c.orgId, item.id, item.version, "approved", "team", c.name, "Approved internally");
