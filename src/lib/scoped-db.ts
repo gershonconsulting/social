@@ -59,6 +59,9 @@ const SCOPED_MODELS = new Set([
   "SyncJob",
   "AuditLog",
   "OrgSetting",
+  "ContentItem",
+  "ContentComment",
+  "ScheduledPost",
 ]);
 
 const READ_OPS = new Set([

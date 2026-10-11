@@ -50,6 +50,8 @@ const MACHINE_PATHS = [
   "/api/admin/sheets-sync",
   "/api/admin/streak-sync",
   "/api/test/",
+  // v4.37.0 — the client review portal: the private token in the path is the access.
+  "/api/review/",
 ];
 
 /** Sign-in itself, including every OAuth callback. */

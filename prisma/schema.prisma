@@ -147,6 +147,9 @@ model Organization {
   syncJobs            SyncJob[]
   auditLogs           AuditLog[]
   orgSettings         OrgSetting[]
+  contentItems        ContentItem[]
+  contentComments     ContentComment[]
+  scheduledPosts      ScheduledPost[]
 
   @@index([isPrimary])
   @@map("organizations")
@@ -551,4 +554,102 @@ model AuditLog {
   @@index([createdAt])
   @@index([organizationId])
   @@map("audit_logs")
+}
+
+// ─── Publishing (v4.37.0 — replaces HeroPost + CloudCampaign review) ─────────
+//
+// ContentItem   one piece of content for one client, going to one or more
+//               networks at the same time (LinkedIn + X).
+//   DRAFT → IN_REVIEW (sent to the client) ⇄ CHANGES_REQUESTED → APPROVED
+//   → SCHEDULED → PUBLISHED | PARTIAL | FAILED
+//   Editing approved text sends it back to DRAFT: approved means "this exact
+//   wording". Statuses are plain strings so new states need no enum migration.
+// ContentComment the copywriter ↔ client thread on an item (and its history:
+//               submitted / changes requested / approved / edited).
+// ScheduledPost one delivery = one network for one item. Created when the item
+//               is scheduled; published by the Chrome extension from the
+//               signed-in browser; verified on the profile and by collection.
+//   SCHEDULED → POSTING → POSTED (verifiedAt) | FAILED | MISSED
+
+model ContentItem {
+  id             String    @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  clientId       String?
+  title          String?
+  text           String    @db.Text
+  /// Optional shorter X version; the main text is used when empty.
+  textX          String?   @db.Text
+  /// Comma list: "LINKEDIN,TWITTER".
+  platforms      String    @default("LINKEDIN,TWITTER")
+  status         String    @default("DRAFT")
+  scheduledAt    DateTime?
+  version        Int       @default(1)
+  submittedAt    DateTime?
+  approvedAt     DateTime?
+  approvedBy     String?
+  approvedRole   String?
+  createdBy      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  comments   ContentComment[]
+  deliveries ScheduledPost[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, clientId])
+  @@index([organizationId, scheduledAt])
+  @@map("content_items")
+}
+
+model ContentComment {
+  id             String      @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  contentId      String
+  content        ContentItem @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  authorName     String?
+  /// "team" | "client"
+  authorRole     String      @default("team")
+  /// "comment" | "submitted" | "changes_requested" | "approved" | "edited" | "scheduled" | "published"
+  kind           String      @default("comment")
+  body           String?     @db.Text
+  version        Int         @default(1)
+  createdAt      DateTime    @default(now())
+
+  @@index([contentId, createdAt])
+  @@index([organizationId])
+  @@map("content_comments")
+}
+
+model ScheduledPost {
+  id             String    @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  contentId      String?
+  content        ContentItem? @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  clientId       String?
+  /// "TWITTER" | "LINKEDIN"
+  platform       String
+  /// X: @handle without "@". LinkedIn: the company page or profile URL to post as.
+  target         String?
+  text           String    @db.Text
+  status         String    @default("SCHEDULED")
+  scheduledAt    DateTime
+  claimedAt      DateTime?
+  attempts       Int       @default(0)
+  postedAt       DateTime?
+  postUrl        String?
+  externalPostId String?
+  verifiedAt     DateTime?
+  verifiedVia    String?
+  lastError      String?
+  alertedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([organizationId, status])
+  @@index([organizationId, scheduledAt])
+  @@index([contentId])
+  @@map("scheduled_posts")
 }

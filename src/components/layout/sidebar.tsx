@@ -28,6 +28,7 @@ import {
   StopCircle,
   Rocket,
   Puzzle,
+  Send,
 } from "lucide-react";
 import { useDemoMode, setDemoMode } from "@/lib/use-demo-mode";
 import { FilterPanel } from "./filter-panel";
@@ -62,6 +63,21 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       },
       { href: "/networks", icon: Network, label: "Networks" },
       { href: "/analytics", icon: BarChart3, label: "Analytics" },
+    ],
+  },
+  {
+    label: "Publishing",
+    items: [
+      {
+        href: "/publishing",
+        icon: Send,
+        label: "Publishing",
+        children: [
+          { href: "/publishing", label: "Content & review" },
+          { href: "/publishing/calendar", label: "Calendar" },
+          { href: "/publishing/accounts", label: "Accounts & review links" },
+        ],
+      },
     ],
   },
   {
@@ -164,7 +180,9 @@ export function Sidebar() {
                   {item.children && isActive && (
                     <div className="mt-0.5 mb-1 ml-[30px] pl-2.5 border-l border-[#2A2E37] space-y-0.5">
                       {item.children.map((sub) => {
-                        const subActive = pathname === sub.href || pathname.startsWith(sub.href + "/");
+                        // A child that shares its parent's href is active on that exact page only.
+                        const subActive =
+                          pathname === sub.href || (sub.href !== item.href && pathname.startsWith(sub.href + "/"));
                         return (
                           <Link
                             key={sub.href}
