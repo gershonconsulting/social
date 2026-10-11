@@ -59,8 +59,8 @@ export const DEFAULT_SETTINGS: PublishSettings = { enabled: true, longPostsX: fa
 
 // ── Pictures ─────────────────────────────────────────────────────────────────
 
-/** X takes at most 4 pictures per post, so that is the limit for both networks. */
-export const MAX_IMAGES = 4;
+/** One picture per post, the same on LinkedIn and X (Olivier, 2026-10-11). */
+export const MAX_IMAGES = 1;
 /** X's limit per picture; pictures are resized in the browser well below it. */
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const IMAGE_MIMES = ["image/jpeg", "image/png", "image/gif"];
@@ -177,7 +177,7 @@ export function textProblems(item: { text: string; textX: string | null; platfor
   const out: string[] = [];
   if (!nets.length) out.push("Pick at least one network.");
   if (mediaCount !== undefined && s.requireImage && mediaCount === 0) out.push("Add a picture — every post needs one.");
-  if (mediaCount !== undefined && mediaCount > MAX_IMAGES) out.push(`At most ${MAX_IMAGES} pictures per post.`);
+  if (mediaCount !== undefined && mediaCount > MAX_IMAGES) out.push("Only one picture per post.");
   if (nets.includes("LINKEDIN") && Array.from(item.text).length > LINKEDIN_MAX) out.push(`Too long for LinkedIn (${Array.from(item.text).length} / ${LINKEDIN_MAX}).`);
   if (nets.includes("TWITTER")) {
     const t = textFor(item, "TWITTER");

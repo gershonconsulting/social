@@ -19,6 +19,7 @@ import {
   type ClientLite, type Item, type LiveAll, type Net, type Prepared,
 } from "@/components/publishing/shared";
 import { ItemPanel } from "@/components/publishing/item-panel";
+import { InventoryPanel } from "@/components/publishing/inventory-panel";
 
 type Limits = { x: number; linkedin: number; images: number; requireImage: boolean };
 type Feed = { items: Item[]; clients: ClientLite[]; live: LiveAll; limits: Limits; canWrite: boolean };
@@ -40,8 +41,10 @@ export function PublishingContentClient() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const load = useCallback(async () => {
+    setRefreshKey((k) => k + 1);
     try {
       const r = await fetch("/api/publishing/content", { cache: "no-store" });
       const j = await r.json();
@@ -98,6 +101,7 @@ export function PublishingContentClient() {
       />
 
       <LiveStrip live={feed?.live ?? null} />
+      <InventoryPanel refreshKey={refreshKey} onPick={setClientFilter} active={clientFilter} />
       {err && <div className="text-sm rounded-lg px-3 py-2 mb-4 bg-red-50 text-red-800">{err}</div>}
 
       {composing && feed && (
@@ -139,8 +143,12 @@ export function PublishingContentClient() {
                       <div className="flex items-center gap-2 mt-2 text-[10.5px] text-gray-500">
                         {col.key === "problems" && <ItemBadge s={i.status} />}
                         {i.scheduledAt && <span>{fmt(i.scheduledAt)}</span>}
+                        {(i.status === "IN_REVIEW" || i.status === "CHANGES_REQUESTED") && (() => {
+                          const d = Math.floor((Date.now() - new Date(i.status === "IN_REVIEW" ? i.submittedAt || i.updatedAt : i.updatedAt).getTime()) / 86400000);
+                          const late = i.status === "IN_REVIEW" ? d >= 2 : d >= 1;
+                          return <span className={late ? "text-orange-700 font-medium" : ""}>{d === 0 ? "today" : `${d}d waiting`}</span>;
+                        })()}
                         {(i._count?.comments ?? 0) > 0 && <span className="inline-flex items-center gap-0.5"><MessageSquare size={10} />{i._count?.comments}</span>}
-                        {(i.media?.length ?? 0) > 1 && <span>🖼 {i.media?.length}</span>}
                         {(i.media?.length ?? 0) === 0 && feed?.limits.requireImage && <span className="text-orange-600">no picture</span>}
                         <span className="ml-auto">v{i.version}</span>
                       </div>
@@ -184,13 +192,11 @@ function Composer({
   async function addFiles(files: File[]) {
     setErr(null);
     setPreparing(true);
-    const room = limits.images - pics.length;
-    const out: Prepared[] = [];
-    for (const f of files.slice(0, Math.max(0, room))) {
-      try { out.push(await prepareImage(f)); } catch (e) { setErr(e instanceof Error ? e.message : "Could not read a picture."); }
+    // One picture per post: a new pick replaces the current one.
+    const f = files[0];
+    if (f) {
+      try { setPics([await prepareImage(f)]); } catch (e) { setErr(e instanceof Error ? e.message : "Could not read the picture."); }
     }
-    if (files.length > room) setErr(`At most ${limits.images} pictures per post.`);
-    setPics((p) => [...p, ...out]);
     setPreparing(false);
   }
   const tooLong =
@@ -257,18 +263,17 @@ function Composer({
       )}
       <div className="mt-3">
         <div className="text-[11px] font-medium text-gray-600 mb-1">
-          Pictures — the same ones go to LinkedIn and X (up to {limits.images}; the first one leads){limits.requireImage ? " · required" : ""}
+          Picture — one per post, the same on LinkedIn and X{limits.requireImage ? " · required" : ""}
         </div>
         <div className="flex flex-wrap gap-2">
-          {pics.map((p, i) => (
+          {pics.map((p) => (
             <div key={p.preview} className="relative w-24 h-24">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={p.preview} alt="" className="w-24 h-24 object-cover rounded-lg border border-gray-200" />
-              {i === 0 && <span className="absolute bottom-1 left-1 text-[9px] bg-black/70 text-white px-1 rounded">first</span>}
               <button onClick={() => setPics((all) => all.filter((x) => x !== p))} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gray-900 text-white text-xs leading-5" aria-label="Remove">×</button>
             </div>
           ))}
-          <PicturePicker onFiles={addFiles} disabled={busy || preparing} left={limits.images - pics.length} />
+          <PicturePicker onFiles={addFiles} disabled={busy || preparing} replace={pics.length > 0} />
           {preparing && <Loader2 size={14} className="animate-spin text-gray-400 self-center" />}
         </div>
       </div>

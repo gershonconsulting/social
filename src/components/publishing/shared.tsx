@@ -238,12 +238,12 @@ export async function prepareImage(file: File): Promise<Prepared> {
   return { dataB64: await blobToB64(blob), mime: "image/jpeg", name, width: w, height: h, preview: URL.createObjectURL(blob) };
 }
 
-export async function uploadImage(contentId: string, p: Prepared): Promise<string | null> {
+export async function uploadImage(contentId: string, p: Prepared, replace = false): Promise<string | null> {
   try {
     const r = await fetch(`/api/publishing/content/${contentId}/media`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dataB64: p.dataB64, mime: p.mime, name: p.name, width: p.width, height: p.height }),
+      body: JSON.stringify({ dataB64: p.dataB64, mime: p.mime, name: p.name, width: p.width, height: p.height, replace }),
     });
     const j = await r.json();
     return j?.success ? null : j?.error || "Upload failed.";
@@ -252,28 +252,26 @@ export async function uploadImage(contentId: string, p: Prepared): Promise<strin
   }
 }
 
-/** Picks pictures by click or drag-and-drop. */
-export function PicturePicker({ onFiles, disabled, left }: { onFiles: (f: File[]) => void; disabled?: boolean; left: number }) {
+/** Picks the post's picture by click or drag-and-drop (one per post; picking again replaces it). */
+export function PicturePicker({ onFiles, disabled, replace }: { onFiles: (f: File[]) => void; disabled?: boolean; replace?: boolean }) {
   return (
     <label
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
-        if (!disabled) onFiles(Array.from(e.dataTransfer.files || []).filter((f) => f.type.startsWith("image/")));
+        if (!disabled) onFiles(Array.from(e.dataTransfer.files || []).filter((f) => f.type.startsWith("image/")).slice(0, 1));
       }}
-      className={`flex flex-col items-center justify-center w-24 h-24 rounded-lg border-2 border-dashed text-[11px] text-center leading-tight ${disabled || left <= 0 ? "border-gray-200 text-gray-300" : "border-gray-300 text-gray-500 hover:border-gray-500 cursor-pointer"}`}
+      className={`flex flex-col items-center justify-center w-24 h-24 rounded-lg border-2 border-dashed text-[11px] text-center leading-tight ${disabled ? "border-gray-200 text-gray-300" : "border-gray-300 text-gray-500 hover:border-gray-500 cursor-pointer"}`}
     >
-      <span className="text-xl leading-none">+</span>
-      Add picture
-      <span className="text-[10px] opacity-70">{left} left</span>
+      <span className="text-xl leading-none">{replace ? "↻" : "+"}</span>
+      {replace ? "Replace picture" : "Add picture"}
       <input
         type="file"
         accept="image/jpeg,image/png,image/gif,image/webp,image/heic"
-        multiple
-        disabled={disabled || left <= 0}
+        disabled={disabled}
         className="hidden"
         onChange={(e) => {
-          onFiles(Array.from(e.target.files || []));
+          onFiles(Array.from(e.target.files || []).slice(0, 1));
           e.target.value = "";
         }}
       />

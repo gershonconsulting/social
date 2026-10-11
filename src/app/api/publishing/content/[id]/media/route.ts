@@ -1,12 +1,12 @@
 export const runtime = "edge";
 /**
- * POST /api/publishing/content/:id/media — add a picture to a post. (v4.38.0)
+ * POST /api/publishing/content/:id/media — set a post's picture. (v4.38.1)
  *
- * Body: { dataB64, mime, name?, width?, height? }. The page resizes the
- * picture to ≤ 2048 px JPEG before sending it, so a picture is a few hundred
- * KB. At most 4 per post (X's limit), 5 MB each.
+ * Body: { dataB64, mime, name?, width?, height?, replace? }. The page resizes
+ * the picture to ≤ 2048 px JPEG before sending it, so it is a few hundred KB
+ * (5 MB max). ONE picture per post: replace=true swaps the current one.
  *
- * Adding a picture to something already with the client, approved or
+ * Changing the picture of something already with the client, approved or
  * scheduled makes it a new version that needs approving again.
  */
 import { NextRequest, NextResponse } from "next/server";
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       return NextResponse.json({ success: false, error: "Already published — pictures can't change now." }, { status: 409 });
     }
     const b = (await req.json().catch(() => null)) as
-      | { dataB64?: string; mime?: string; name?: string; width?: number; height?: number }
+      | { dataB64?: string; mime?: string; name?: string; width?: number; height?: number; replace?: boolean }
       | null;
     const mime = (b?.mime || "").toLowerCase();
     const data = (b?.dataB64 || "").replace(/^data:[^,]+,/, "");
@@ -40,8 +40,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const size = Math.floor((data.length * 3) / 4) - (data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0);
     if (size > MAX_IMAGE_BYTES) return NextResponse.json({ success: false, error: "The picture is over 5 MB." }, { status: 400 });
 
-    const count = await prisma.contentMedia.count({ where: { contentId: item.id } });
-    if (count >= MAX_IMAGES) return NextResponse.json({ success: false, error: `At most ${MAX_IMAGES} pictures per post.` }, { status: 400 });
+    let count = await prisma.contentMedia.count({ where: { contentId: item.id } });
+    if (count >= MAX_IMAGES && b?.replace) {
+      await prisma.contentMedia.deleteMany({ where: { contentId: item.id } });
+      count = 0;
+    }
+    if (count >= MAX_IMAGES) return NextResponse.json({ success: false, error: "Only one picture per post — replace it instead." }, { status: 400 });
 
     const m = await prisma.contentMedia.create({
       data: {
@@ -59,7 +63,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       select: MEDIA_SELECT,
     });
     if (["IN_REVIEW", "APPROVED", "SCHEDULED", "FAILED"].includes(item.status)) {
-      await markChanged(c.orgId, item.id, c.name, "Picture added");
+      await markChanged(c.orgId, item.id, c.name, b?.replace ? "Picture replaced" : "Picture added");
     }
     return NextResponse.json({ success: true, data: { ...m, url: mediaUrl(m) } });
   } catch (e) {

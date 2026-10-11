@@ -67,17 +67,16 @@ export function ItemPanel({
   async function addPictures(files: File[]) {
     setBusy(true);
     setErr(null);
-    const room = (limits.images ?? 4) - (item?.media?.length ?? 0);
-    for (const f of files.slice(0, Math.max(0, room))) {
+    // One picture per post: picking again replaces it.
+    const f = files[0];
+    if (f) {
       try {
-        const e = await uploadImage(id, await prepareImage(f));
-        if (e) { setErr(e); break; }
+        const e = await uploadImage(id, await prepareImage(f), (item?.media?.length ?? 0) > 0);
+        if (e) setErr(e);
       } catch (e) {
         setErr(e instanceof Error ? e.message : "Could not read the picture.");
-        break;
       }
     }
-    if (files.length > room) setErr(`At most ${limits.images ?? 4} pictures per post.`);
     await load();
     onChanged();
     setBusy(false);
@@ -191,30 +190,25 @@ export function ItemPanel({
           )}
           <div>
             <div className="text-[11px] font-medium text-gray-600 mb-1">
-              Pictures — LinkedIn and X (the first one leads)
+              Picture — one per post, the same on LinkedIn and X
               {limits.requireImage && !(item.media?.length) && <span className="text-orange-600"> · required before review or scheduling</span>}
             </div>
             <div className="flex flex-wrap gap-2">
-              {(item.media || []).map((m, i) => (
+              {(item.media || []).map((m) => (
                 <div key={m.id} className="relative w-24 h-24 group">
                   <a href={mediaSrc(m)} target="_blank" rel="noreferrer">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={mediaSrc(m)} alt="" className="w-24 h-24 object-cover rounded-lg border border-gray-200" />
                   </a>
-                  {i === 0 ? (
-                    <span className="absolute bottom-1 left-1 text-[9px] bg-black/70 text-white px-1 rounded">first</span>
-                  ) : editable ? (
-                    <button onClick={() => pictureAction(m.id, "PATCH")} className="absolute bottom-1 left-1 text-[9px] bg-white/90 border border-gray-300 px-1 rounded opacity-0 group-hover:opacity-100">make first</button>
-                  ) : null}
                   {editable && (
                     <button onClick={() => pictureAction(m.id, "DELETE")} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gray-900 text-white text-xs leading-5" aria-label="Remove picture">×</button>
                   )}
                 </div>
               ))}
-              {editable && <PicturePicker onFiles={addPictures} disabled={busy} left={(limits.images ?? 4) - (item.media?.length ?? 0)} />}
+              {editable && <PicturePicker onFiles={addPictures} disabled={busy} replace={(item.media?.length ?? 0) > 0} />}
             </div>
             {editable && item.approvedAt && (item.media?.length ?? 0) > 0 && (
-              <div className="text-[11px] text-amber-700 mt-1">Changing pictures makes a new version that needs approving again.</div>
+              <div className="text-[11px] text-amber-700 mt-1">Changing the picture makes a new version that needs approving again.</div>
             )}
           </div>
           {editable && dirty && (

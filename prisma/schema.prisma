@@ -658,7 +658,7 @@ model ScheduledPost {
   @@map("scheduled_posts")
 }
 
-// Pictures attached to a ContentItem (v4.38.0). Resized in the browser to
+// The picture of a ContentItem (v4.38.0; one per post since v4.38.1). Resized in the browser to
 // JPEG ≤ 2048 px before upload and kept in the database (base64), so there is
 // no extra storage service to run. Served by /api/media/<id>?k=<key>; the
 // random key is what makes the URL unguessable (the extension and the client

@@ -1,0 +1,23 @@
+name: Publishing daily (inventory + review reminders)
+
+# 08:50 New York (12:50 UTC; 13:50 UTC in winter is fine too — idempotent per day).
+# Reminds clients about posts waiting > 2 days and emails the team when a
+# client has less than one week of approved content ready.
+on:
+  schedule:
+    - cron: '50 12 * * *'
+  workflow_dispatch:
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inventory + reminders
+        run: |
+          response=$(curl -s -o /tmp/out.json -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.CF_CRON_SECRET }}" \
+            "https://social.gershoncrm.com/api/cron/publishing-daily")
+          echo "HTTP $response"
+          head -c 3000 /tmp/out.json; echo ""
+          if [ "$response" != "200" ]; then exit 1; fi
