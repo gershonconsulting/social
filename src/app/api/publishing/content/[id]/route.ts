@@ -75,9 +75,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         const data: Record<string, unknown> = {};
         if (typeof b.title === "string") data.title = b.title.trim() || null;
         if (typeof b.clientId === "string" || b.clientId === null) {
-          if (!b.clientId) return bad("Pick a campaign company first.");
+          if (!b.clientId) return bad("Pick a campaign or internal company first.");
           const cl = await prisma.client.findFirst({ where: { id: String(b.clientId), organizationId: c.orgId, ...PUBLISHING_CLIENT_WHERE }, select: { id: true } });
-          if (!cl) return bad("Publishing is only for campaign companies.");
+          if (!cl) return bad("Publishing is only for campaign and internal companies.");
           data.clientId = cl.id;
         }
         const text = typeof b.text === "string" ? b.text.replace(/\r\n/g, "\n").trim() : item.text;

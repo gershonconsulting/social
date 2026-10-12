@@ -58,9 +58,9 @@ export async function inventory(orgId: string, now = Date.now()): Promise<Invent
     where: { organizationId: orgId, clientId: { not: null }, status: { in: ["DRAFT", "IN_REVIEW", "CHANGES_REQUESTED", "APPROVED", "SCHEDULED"] } },
     select: { clientId: true, status: true, scheduledAt: true, submittedAt: true, updatedAt: true },
   });
-  // Every campaign company is tracked even with an empty library — an empty
-  // library is exactly the case to warn about. Publishing is campaign-only, so
-  // nothing else appears here or in its reminders (v4.39.1).
+  // Every campaign and internal company is tracked even with an empty library
+  // — an empty library is exactly the case to warn about. Nothing else appears
+  // here or in its reminders (v4.39.2).
   const clients = await prisma.client.findMany({
     where: {
       organizationId: orgId,

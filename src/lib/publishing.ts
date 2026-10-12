@@ -33,10 +33,11 @@ import { resolveFrom } from "@/lib/email/sender";
 
 export const SITE = "https://social.gershoncrm.com";
 
-/** Publishing is only for CAMPAIGN companies (Olivier, 2026-10-12). Every
+/** Publishing is for CAMPAIGN companies and our own INTERNAL ones — Gershon
+ *  posts for itself too (Olivier, 2026-10-12). Every
  *  company picker, the Accounts page, the content inventory, its reminders and
  *  the create/edit checks use this one filter. */
-export const PUBLISHING_CLIENT_TYPES = ["CAMPAIGN"] as ClientType[];
+export const PUBLISHING_CLIENT_TYPES = ["CAMPAIGN", "INTERNAL"] as ClientType[];
 export const PUBLISHING_CLIENT_WHERE = { clientType: { in: PUBLISHING_CLIENT_TYPES } };
 export const PLATFORMS = ["LINKEDIN", "TWITTER"] as const;
 export type Net = (typeof PLATFORMS)[number];

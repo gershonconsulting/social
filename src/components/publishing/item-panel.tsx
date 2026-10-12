@@ -157,7 +157,7 @@ export function ItemPanel({
         <section className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
             <select disabled={!editable} value={clientId} onChange={(e) => setClientId(e.target.value)} className="text-sm border border-gray-300 rounded-lg px-2 py-1.5">
-              <option value="">— Campaign company —</option>
+              <option value="">— Company —</option>
               {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <input disabled={!editable} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Internal title (optional)" className="text-sm border border-gray-300 rounded-lg px-2 py-1.5" />

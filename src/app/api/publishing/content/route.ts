@@ -85,9 +85,9 @@ export async function POST(req: NextRequest) {
     const text = (b?.text || "").replace(/\r\n/g, "\n").trim();
     if (!text) return NextResponse.json({ success: false, error: "Write something first." }, { status: 400 });
     const platforms = parsePlatforms(b?.platforms ?? "LINKEDIN,TWITTER");
-    if (!b?.clientId) return NextResponse.json({ success: false, error: "Pick a campaign company first." }, { status: 400 });
+    if (!b?.clientId) return NextResponse.json({ success: false, error: "Pick a campaign or internal company first." }, { status: 400 });
     const cl = await prisma.client.findFirst({ where: { id: b.clientId, organizationId: c.orgId, ...PUBLISHING_CLIENT_WHERE }, select: { id: true } });
-    if (!cl) return NextResponse.json({ success: false, error: "Publishing is only for campaign companies." }, { status: 400 });
+    if (!cl) return NextResponse.json({ success: false, error: "Publishing is only for campaign and internal companies." }, { status: 400 });
     const clientId: string = cl.id;
     const draft = { text, textX: (b?.textX || "").trim() || null, platforms: platforms.join(",") };
     const problems = textProblems(draft, await getSettings(c.orgId), 0);

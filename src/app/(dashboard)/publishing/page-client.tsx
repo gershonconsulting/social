@@ -235,7 +235,7 @@ function Composer({
     <section className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
       <div className="grid md:grid-cols-3 gap-2 mb-2">
         <select value={clientId} onChange={(e) => setClientId(e.target.value)} className="text-sm border border-gray-300 rounded-lg px-2 py-1.5">
-          <option value="">— Campaign company —</option>
+          <option value="">— Company —</option>
           {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Internal title (optional)" className="text-sm border border-gray-300 rounded-lg px-2 py-1.5" />
