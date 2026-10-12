@@ -10,7 +10,7 @@ export const runtime = "edge";
  *   "failed_before_click" nothing reached the network → retried (3 tries), then FAILED
  */
 import { NextRequest, NextResponse } from "next/server";
-import { resolveExtensionCaller } from "@/lib/extension-auth";
+import { deliveryScope, resolvePublishCaller } from "@/lib/publish-caller";
 import prisma from "@/lib/db-raw";
 import {
   MAX_ATTEMPTS, NET_LABEL, addEvent, alertTeam, esc, getPublisherState, quote, rollUp, savePublisherState, SITE, type Net,
@@ -23,18 +23,18 @@ function postIdFrom(url: string | null | undefined): string | null {
 
 export async function POST(req: NextRequest) {
   try {
-    const caller = await resolveExtensionCaller(req);
+    const caller = await resolvePublishCaller(req);
     if (!caller.ok) {
       return NextResponse.json({ success: false, code: caller.reason, error: "Extension not bound to a workspace" }, { status: 401 });
     }
     const b = (await req.json().catch(() => null)) as { id?: string; outcome?: string; postUrl?: string | null; error?: string | null } | null;
     if (!b?.id) return NextResponse.json({ success: false, error: "id required" }, { status: 400 });
-    const d = await prisma.scheduledPost.findFirst({ where: { id: b.id, organizationId: caller.orgId } });
+    const d = await prisma.scheduledPost.findFirst({ where: { id: b.id, ...(await deliveryScope(caller.orgId, caller.clientId)) } });
     if (!d) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
 
     const now = new Date();
     const error = (b.error || "").slice(0, 500) || null;
-    const st = await getPublisherState(caller.orgId);
+    const st = await getPublisherState(caller.orgId, caller.clientId);
     let status: string;
 
     if (b.outcome === "posted" || b.outcome === "clicked_unconfirmed") {
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
         );
       }
     }
-    await savePublisherState(caller.orgId, st);
+    await savePublisherState(caller.orgId, st, caller.clientId);
     if (d.contentId) {
       await rollUp(d.contentId);
       if (status === "FAILED") {

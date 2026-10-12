@@ -10,7 +10,7 @@ export const runtime = "edge";
  * strip on the Publishing pages and Settings.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { resolveExtensionCaller } from "@/lib/extension-auth";
+import { resolvePublishCaller } from "@/lib/publish-caller";
 import prisma from "@/lib/db-raw";
 import { getPublisherState, getSettings, normalizeHandle, savePublisherState, sweep, type NetSession } from "@/lib/publishing";
 
@@ -30,19 +30,19 @@ function merge(prev: NetSession, next: In, now: string, isX: boolean): NetSessio
 
 export async function POST(req: NextRequest) {
   try {
-    const caller = await resolveExtensionCaller(req);
+    const caller = await resolvePublishCaller(req);
     if (!caller.ok) {
       return NextResponse.json({ success: false, code: caller.reason, error: "Extension not bound to a workspace" }, { status: 401 });
     }
     const b = (await req.json().catch(() => null)) as { x?: In; linkedin?: In; version?: string; error?: string | null } | null;
     const now = new Date().toISOString();
-    const st = await getPublisherState(caller.orgId);
+    const st = await getPublisherState(caller.orgId, caller.clientId);
     st.lastSeenAt = now;
     st.version = b?.version ?? st.version;
     st.x = merge(st.x, b?.x, now, true);
     st.linkedin = merge(st.linkedin, b?.linkedin, now, false);
     if (b?.error !== undefined) st.lastError = b.error;
-    await savePublisherState(caller.orgId, st);
+    await savePublisherState(caller.orgId, st, caller.clientId);
     await sweep(caller.orgId).catch(() => null);
 
     const settings = await getSettings(caller.orgId);
@@ -52,14 +52,15 @@ export async function POST(req: NextRequest) {
       select: { name: true },
     });
     const f = (u?.name || "").trim().split(/\s+/)[0] || "";
-    const lead = f.length > 1 ? f + ", " : "";
+    // A client's own browser is not Gershon's: no Gershon name in its voice. (v4.42.0)
+    const lead = caller.clientId ? "" : f.length > 1 ? f + ", " : "";
     return NextResponse.json({
       success: true,
       data: {
         enabled: settings.enabled,
         voice: {
-          x: `${lead}I need you now. Project: Social. Task: X signed you out. Please sign back in so scheduled posts can go out.`,
-          linkedin: `${lead}I need you now. Project: Social. Task: LinkedIn signed you out. Please sign back in so scheduled posts can go out.`,
+          x: caller.clientId ? "X signed you out. Please sign back in so your scheduled posts can go out." : `${lead}I need you now. Project: Social. Task: X signed you out. Please sign back in so scheduled posts can go out.`,
+          linkedin: caller.clientId ? "LinkedIn signed you out. Please sign back in so your scheduled posts can go out." : `${lead}I need you now. Project: Social. Task: LinkedIn signed you out. Please sign back in so scheduled posts can go out.`,
         },
       },
     });

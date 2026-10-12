@@ -56,7 +56,8 @@
   }
 
   async function bound() {
-    try { var r = await chrome.storage.local.get(["workspaceToken", "workspaceEmail"]); return r && r.workspaceToken ? r : null; }
+    // 0.17.0: not for a client's publishing key — that browser belongs to the client.
+    try { var r = await chrome.storage.local.get(["workspaceToken", "workspaceEmail"]); return r && r.workspaceToken && r.workspaceToken.indexOf("gp_") !== 0 ? r : null; }
     catch (e) { return null; }
   }
 

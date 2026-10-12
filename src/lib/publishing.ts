@@ -124,14 +124,68 @@ export async function saveSettings(orgId: string, patch: Partial<PublishSettings
   await writeSetting(orgId, SETTINGS_KEY, JSON.stringify(next));
   return next;
 }
-export async function getPublisherState(orgId: string): Promise<PublisherState> {
-  const s = await readJson(orgId, PUBLISHER_KEY, EMPTY_STATE);
+/** clientId given → the state of THAT company's own publishing browser (v4.42.0). */
+export async function getPublisherState(orgId: string, clientId?: string | null): Promise<PublisherState> {
+  const s = await readJson(orgId, clientId ? `${PUBLISHER_KEY}:${clientId}` : PUBLISHER_KEY, EMPTY_STATE);
   s.x = { ...NO_SESSION, ...(s.x || {}) };
   s.linkedin = { ...NO_SESSION, ...(s.linkedin || {}) };
   return s;
 }
-export async function savePublisherState(orgId: string, s: PublisherState): Promise<void> {
-  await writeSetting(orgId, PUBLISHER_KEY, JSON.stringify(s));
+export async function savePublisherState(orgId: string, s: PublisherState, clientId?: string | null): Promise<void> {
+  await writeSetting(orgId, clientId ? `${PUBLISHER_KEY}:${clientId}` : PUBLISHER_KEY, JSON.stringify(s));
+}
+
+// ── Who publishes a company's posts (v4.42.0) ────────────────────────────────
+//
+// Gershon is the master workspace: content for every company is written,
+// reviewed and approved here. Publishing is then done EITHER by Gershon's own
+// publishing browser ("workspace", the default) OR by the client's own Chrome
+// extension, signed in to the client's own LinkedIn page and X account
+// ("client"). A client extension connects with a key that belongs to that one
+// company: it can fetch only that company's approved, due posts and report
+// their results — nothing else in the workspace.
+
+export type PublishRoute = "workspace" | "client";
+const routeKey = (clientId: string) => `publish_route:${clientId}`;
+const publishKeyKey = (clientId: string) => `publish_key:${clientId}`;
+
+export async function getRoute(orgId: string, clientId: string): Promise<PublishRoute> {
+  const row = await prisma.orgSetting.findUnique({ where: { organizationId_key: { organizationId: orgId, key: routeKey(clientId) } } });
+  return row?.value === "client" ? "client" : "workspace";
+}
+export async function setRoute(orgId: string, clientId: string, route: PublishRoute): Promise<void> {
+  await writeSetting(orgId, routeKey(clientId), route);
+}
+/** Companies whose posts only their own browser may publish. */
+export async function clientRoutedIds(orgId: string): Promise<string[]> {
+  const rows = await prisma.orgSetting.findMany({
+    where: { organizationId: orgId, key: { startsWith: "publish_route:" }, value: "client" },
+    select: { key: true },
+  });
+  return rows.map((r) => r.key.slice("publish_route:".length));
+}
+export async function publishKey(orgId: string, clientId: string, rotate = false): Promise<string> {
+  if (!rotate) {
+    const row = await prisma.orgSetting.findUnique({ where: { organizationId_key: { organizationId: orgId, key: publishKeyKey(clientId) } } });
+    if (row?.value) return row.value;
+  }
+  const b = new Uint8Array(24);
+  crypto.getRandomValues(b);
+  const k = "gp_" + Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  await writeSetting(orgId, publishKeyKey(clientId), k);
+  return k;
+}
+export function connectUrl(key: string): string {
+  return `${SITE}/connect/${key}`;
+}
+export async function resolvePublishKey(key: string): Promise<{ orgId: string; clientId: string } | null> {
+  if (!/^gp_[a-f0-9]{48}$/.test(key)) return null;
+  const row = await prisma.orgSetting.findFirst({ where: { key: { startsWith: "publish_key:" }, value: key } });
+  if (!row?.organizationId) return null;
+  const clientId = row.key.slice("publish_key:".length);
+  // A key only works while the company is set to publish through its own browser.
+  if ((await getRoute(row.organizationId, clientId)) !== "client") return null;
+  return { orgId: row.organizationId, clientId };
 }
 
 export type Live = { level: "live" | "signed_out" | "offline" | "never"; label: string };
@@ -446,6 +500,7 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
   const now = Date.now();
   const touched = new Set<string>();
   let missed = 0, failed = 0, verified = 0;
+  const routedEarly = new Set(await clientRoutedIds(orgId));
 
   const late = await prisma.scheduledPost.findMany({
     where: { organizationId: orgId, status: "SCHEDULED", scheduledAt: { lt: new Date(now - settings.graceMinutes * 60000) } },
@@ -461,7 +516,7 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
       orgId,
       `A ${NET_LABEL[d.platform as Net] ?? d.platform} post did not go out`,
       `<p>Scheduled for <b>${nyTime(d.scheduledAt)}</b> on <b>${NET_LABEL[d.platform as Net] ?? d.platform}</b> — <b>not published</b>.</p>${quote(d.text)}
-       <p>Reason: ${esc(d.lastError || "the publishing browser (Chrome with the Social extension) was offline or signed out.")}</p>`,
+       <p>Reason: ${esc(d.lastError || (d.clientId && routedEarly.has(d.clientId) ? "the client's own publishing browser (Chrome with the Social extension) was offline or signed out." : "the publishing browser (Chrome with the Social extension) was offline or signed out."))}</p>`,
       `${SITE}/publishing/calendar`,
     );
   }
@@ -515,21 +570,32 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
 
   for (const id of touched) await rollUp(id);
 
-  // One email per sign-out lasting more than 10 minutes, per network.
-  const st = await getPublisherState(orgId);
+  // One email per sign-out lasting more than 10 minutes, per network — for
+  // the workspace browser and for each company's own browser (v4.42.0).
+  const routed = await clientRoutedIds(orgId);
+  for (const pubClient of [null, ...routed] as (string | null)[]) {
+  const st = await getPublisherState(orgId, pubClient);
+  const whose = pubClient
+    ? `${(await prisma.client.findFirst({ where: { id: pubClient }, select: { name: true } }))?.name || "The client"}'s own publishing browser`
+    : "the publishing browser";
   let changed = false;
   for (const [key, label] of [["x", "X"], ["linkedin", "LinkedIn"]] as const) {
     const s = st[key];
     if (!s.signedIn && s.signedOutSince && s.emailedFor !== s.signedOutSince && now - new Date(s.signedOutSince).getTime() > 10 * 60000) {
       const pending = await prisma.scheduledPost.count({
-        where: { organizationId: orgId, status: "SCHEDULED", platform: key === "x" ? "TWITTER" : "LINKEDIN" },
+        where: {
+          organizationId: orgId,
+          status: "SCHEDULED",
+          platform: key === "x" ? "TWITTER" : "LINKEDIN",
+          ...(pubClient ? { clientId: pubClient } : routed.length ? { OR: [{ clientId: null }, { clientId: { notIn: routed } }] } : {}),
+        },
       });
       if (pending === 0) continue; // nothing waiting; the LinkedIn watchdog already covers collection
       if (
         await alertTeam(
           orgId,
           `${label} signed you out — ${pending} scheduled post${pending === 1 ? " is" : "s are"} on hold`,
-          `<p>${label} signed the publishing browser out at <b>${nyTime(new Date(s.signedOutSince))}</b>.</p>
+          `<p>${label} signed ${whose} out at <b>${nyTime(new Date(s.signedOutSince))}</b>.</p>
            <p>On the publishing computer the ${label} login page is already open — 1Password fills it in one click.</p>`,
           `${SITE}/publishing/calendar`,
         )
@@ -539,7 +605,8 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
       }
     }
   }
-  if (changed) await savePublisherState(orgId, st);
+  if (changed) await savePublisherState(orgId, st, pubClient);
+  }
 
   return { missed, failed, verified };
 }

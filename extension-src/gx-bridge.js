@@ -14,7 +14,34 @@
 // Signed out → the current binding is kept. A different person signs in →
 // the binding follows them.
 
+// 0.17.0 — CLIENT PUBLISHING. A page at /connect/gp_… is a client's
+// publishing link (sent by Gershon from Publishing → Accounts). Opening it
+// stores that key: from then on this browser publishes ONLY that company's
+// approved posts and collects nothing. No sign-in needed on the dashboard.
+
 (function () {
+  var connect = location.pathname.match(/^\/connect\/(gp_[a-f0-9]{48})\/?$/);
+  if (connect) {
+    var key = connect[1];
+    fetch("/api/connect/" + key, { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || !j.success) return;
+        chrome.storage.local.set({
+          workspaceToken: key,
+          workspaceId: "publish:" + key.slice(3, 11),
+          workspaceName: j.data.client || "",
+          workspaceEmail: "",
+          workspaceMode: "publish",
+          workspaceBoundAt: new Date().toISOString(),
+        }, function () {
+          try { window.postMessage({ type: "GERSHONAI_BOUND", workspaceName: j.data.client, publishing: true, changed: true }, location.origin); } catch (e) {}
+        });
+      })
+      .catch(function () {});
+    return; // never replace a client key with a dashboard binding on this page
+  }
+
   function bind() {
     fetch("/api/extension/bind", { credentials: "include", cache: "no-store" })
       .then(function (r) { return r.ok ? r.json() : null; })
@@ -28,6 +55,7 @@
             workspaceId: d.workspaceId,
             workspaceName: d.workspaceName || "",
             workspaceEmail: d.email || "",
+            workspaceMode: "workspace",
             workspaceBoundAt: new Date().toISOString(),
           }, function () {
             try {

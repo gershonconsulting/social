@@ -54,6 +54,8 @@ const MACHINE_PATHS = [
   "/api/review/",
   // v4.38.0 — post pictures: the random key in the URL is the access.
   "/api/media/",
+  // v4.42.0 — a client's publishing-extension connect page: the key in the path is the access.
+  "/api/connect/",
 ];
 
 /** Sign-in itself, including every OAuth callback. */

@@ -15,6 +15,8 @@ type Row = {
   id: string; name: string; clientType: string;
   xHandle: string | null; linkedinUrl: string | null; reviewerName: string | null; reviewerEmail: string | null;
   reviewUrl: string; pending: number;
+  route: "workspace" | "client";
+  client: { connectUrl: string; live: { overall: { level: string; label: string } }; lastSeenAt: string | null; version: string | null } | null;
 };
 
 export function PublishingAccountsClient() {
@@ -115,6 +117,57 @@ function AccountRow({ r, canWrite, onSaved }: { r: Row; canWrite: boolean; onSav
         {busy && <Loader2 size={12} className="animate-spin text-gray-400" />}
         {msg && <span className="text-gray-600">{msg}</span>}
       </div>
+      <Route r={r} canWrite={canWrite} busy={busy} call={call} />
+    </div>
+  );
+}
+
+/** Who publishes this company's posts (v4.42.0). */
+function Route({ r, canWrite, busy, call }: { r: Row; canWrite: boolean; busy: boolean; call: (m: "PUT" | "POST", b: Record<string, unknown>) => Promise<void> }) {
+  const [copied, setCopied] = useState(false);
+  const lv = r.client?.live.overall.level;
+  const tone = lv === "live" ? "bg-emerald-600" : lv === "signed_out" ? "bg-orange-500" : "bg-red-600";
+  return (
+    <div className="mt-3 pt-3 border-t border-gray-100 text-xs">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="font-medium text-gray-700">Publishes through</span>
+        {(["workspace", "client"] as const).map((v) => (
+          <label key={v} className="inline-flex items-center gap-1 text-gray-700">
+            <input
+              type="radio"
+              disabled={!canWrite || busy}
+              checked={r.route === v}
+              onChange={() => {
+                if (v === "client" && !confirm(`${r.name}'s posts will be published ONLY by ${r.name}'s own Chrome extension, signed in to their LinkedIn and X. Gershon's browser stops publishing them. Continue?`)) return;
+                void call("PUT", { route: v });
+              }}
+            />
+            {v === "workspace" ? "Gershon's publishing browser" : `${r.name}'s own Chrome extension`}
+          </label>
+        ))}
+      </div>
+      {r.route === "client" && r.client && (
+        <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`text-[10px] font-bold uppercase text-white px-1.5 py-0.5 rounded ${tone}`}>{lv === "live" ? "Connected" : lv === "signed_out" ? "Signed out" : lv === "offline" ? "Offline" : "Not connected yet"}</span>
+            <span className="text-gray-600">{r.client.live.overall.label.replace(/the publishing browser/g, `${r.name}'s browser`)}</span>
+            {r.client.version && <span className="text-gray-400">· extension {r.client.version}</span>}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-gray-600">Send this link to {r.name}. Opened in their Chrome, it installs and connects the extension:</span>
+            <code className="truncate max-w-[340px] text-gray-700">{r.client.connectUrl}</code>
+            <button onClick={() => { try { void navigator.clipboard.writeText(r.client!.connectUrl); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {} }} className="inline-flex items-center gap-1 underline text-gray-700">
+              <Copy size={11} /> {copied ? "Copied" : "Copy"}
+            </button>
+            {canWrite && (
+              <button disabled={busy} onClick={() => { if (confirm(`Replace ${r.name}'s publishing key? Their extension stops until they open the new link.`)) void call("POST", { action: "rotate_key" }); }} className="inline-flex items-center gap-1 underline text-gray-500">
+                <RefreshCw size={11} /> New key
+              </button>
+            )}
+          </div>
+          <div className="text-[11px] text-gray-500">The extension only receives {r.name}'s approved posts when they are due, and reports back here. It sees nothing else in this workspace.</div>
+        </div>
+      )}
     </div>
   );
 }

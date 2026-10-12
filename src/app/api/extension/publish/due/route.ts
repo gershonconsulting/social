@@ -11,7 +11,7 @@ export const runtime = "edge";
  * gets null, so LinkedIn and X go out back to back.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { resolveExtensionCaller } from "@/lib/extension-auth";
+import { deliveryScope, resolvePublishCaller } from "@/lib/publish-caller";
 import prisma from "@/lib/db-raw";
 import { getPublisherState, getSettings, savePublisherState, sweep } from "@/lib/publishing";
 
@@ -27,14 +27,16 @@ function parseMedia(j: string | null): { url: string; mime: string; name: string
 
 export async function GET(req: NextRequest) {
   try {
-    const caller = await resolveExtensionCaller(req);
+    // A client's own browser (gp_ key) only ever sees that company's posts;
+    // the workspace browser never sees companies set to publish on their own. (v4.42.0)
+    const caller = await resolvePublishCaller(req);
     if (!caller.ok) {
       return NextResponse.json({ success: false, code: caller.reason, error: "Extension not bound to a workspace" }, { status: 401 });
     }
     const orgId = caller.orgId;
-    const st = await getPublisherState(orgId);
+    const st = await getPublisherState(orgId, caller.clientId);
     st.lastSeenAt = new Date().toISOString();
-    await savePublisherState(orgId, st);
+    await savePublisherState(orgId, st, caller.clientId);
     await sweep(orgId).catch(() => null);
     const settings = await getSettings(orgId);
     if (!settings.enabled) return NextResponse.json({ success: true, data: { enabled: false, post: null } });
@@ -43,7 +45,7 @@ export async function GET(req: NextRequest) {
     const now = Date.now();
     const candidates = await prisma.scheduledPost.findMany({
       where: {
-        organizationId: orgId,
+        ...(await deliveryScope(orgId, caller.clientId)),
         status: "SCHEDULED",
         platform: skip.length ? { notIn: skip } : undefined,
         scheduledAt: { lte: new Date(now), gte: new Date(now - settings.graceMinutes * 60000) },

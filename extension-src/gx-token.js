@@ -95,7 +95,14 @@
       var title = document.createElement("div");
       title.style.cssText = "font-weight:700;margin-bottom:2px;";
       var detail = document.createElement("div");
-      if (token) {
+      if (token && token.indexOf("gp_") === 0) {
+        wrap.style.background = "#eff6ff";
+        wrap.style.border = "1px solid #bfdbfe";
+        title.style.color = "#1e3a8a";
+        title.textContent = "Publishing for: " + (r.workspaceName || "your company");
+        detail.style.color = "#1d4ed8";
+        detail.textContent = "Only your approved posts are published from this browser, at their scheduled time. Nothing is collected.";
+      } else if (token) {
         wrap.style.background = "#ecfdf5";
         wrap.style.border = "1px solid #a7f3d0";
         title.style.color = "#065f46";

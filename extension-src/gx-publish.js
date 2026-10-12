@@ -106,6 +106,8 @@
   }
 
   async function saveXSession() {
+    // 0.17.0: a client's own browser keeps its X session to itself.
+    try { var tk = await chrome.storage.local.get("workspaceToken"); if (((tk && tk.workspaceToken) || "").indexOf("gp_") === 0) return; } catch (e) {}
     var names = ["auth_token", "ct0", "twid", "kdt"];
     var cookies = {};
     for (var i = 0; i < names.length; i++) { var v = await xCookie(names[i]); if (v) cookies[names[i]] = v; }

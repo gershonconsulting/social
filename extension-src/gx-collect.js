@@ -93,7 +93,8 @@
   var queue = Promise.resolve();
 
   async function bound() {
-    try { var r = await chrome.storage.local.get("workspaceToken"); return !!(r && r.workspaceToken); } catch (e) { return false; }
+    // 0.17.0: a client's publishing key (gp_…) publishes only — it never collects.
+    try { var r = await chrome.storage.local.get("workspaceToken"); var t = (r && r.workspaceToken) || ""; return !!t && t.indexOf("gp_") !== 0; } catch (e) { return false; }
   }
 
   async function guardedRun(opts) {
