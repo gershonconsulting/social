@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CalendarDays, Check, Copy, ExternalLink, Loader2, MessageSquare, RotateCcw, Send, Trash2, Undo2, X } from "lucide-react";
 import {
   act, Counter, DELIVERY_STYLE, EVENT_LABEL, fmt, ItemBadge, liLength, mediaSrc, NET_LABEL, NetChip, nets, PicturePicker, prepareImage,
-  toLocalInput, uploadImage, xLength,
+  toLocalInput, uploadImage, xLength, SuggestXButton,
   type ClientLite, type Item, type Net,
 } from "./shared";
 
@@ -182,8 +182,9 @@ export function ItemPanel({
           </div>
           {platforms.includes("TWITTER") && (
             <div>
-              <div className="text-[11px] font-medium text-gray-600 mb-1">
-                X version {xLength(text) > limits.x ? <span className="text-red-600">(needed — the main text is too long for X)</span> : "(optional — the main text is used if empty)"}
+              <div className="text-[11px] font-medium text-gray-600 mb-1 flex items-center justify-between gap-2">
+                <span>X version {xLength(text) > limits.x ? <span className="text-red-600">(needed — the main text is too long for X)</span> : "(optional — the main text is used if empty)"}</span>
+                {editable && <SuggestXButton text={text} onSuggest={setTextX} />}
               </div>
               <textarea disabled={!editable} value={textX} onChange={(e) => setTextX(e.target.value)} rows={3} className="w-full text-sm border border-gray-300 rounded-lg p-2 disabled:bg-gray-50" />
             </div>

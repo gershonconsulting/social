@@ -6,6 +6,7 @@
  */
 
 import Link from "next/link";
+import { useState } from "react";
 import { CheckCircle2, WifiOff, XCircle } from "lucide-react";
 
 export type Net = "LINKEDIN" | "TWITTER";
@@ -276,5 +277,45 @@ export function PicturePicker({ onFiles, disabled, replace }: { onFiles: (f: Fil
         }}
       />
     </label>
+  );
+}
+
+/**
+ * "Suggest with Intelligence" for the X version (v4.40.0). Sends the main text
+ * to /api/publishing/suggest-x, which always answers within the X limit.
+ */
+export function SuggestXButton({ text, onSuggest, disabled }: { text: string; onSuggest: (t: string) => void; disabled?: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  async function go() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await fetch("/api/publishing/suggest-x", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.success) setErr(j?.error || `HTTP ${r.status}`);
+      else onSuggest(j.data.text);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <span className="inline-flex items-center gap-2">
+      <button
+        type="button"
+        onClick={go}
+        disabled={disabled || busy || !text.trim()}
+        className="text-[11px] font-medium px-2 py-0.5 rounded-md border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+      >
+        {busy ? "Writing…" : "✨ Suggest X version"}
+      </button>
+      {err && <span className="text-[11px] text-red-600">{err}</span>}
+    </span>
   );
 }

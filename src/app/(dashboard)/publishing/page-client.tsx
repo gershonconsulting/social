@@ -15,7 +15,7 @@ import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { CalendarDays, Check, Loader2, MessageSquare, Plus, Send, Users } from "lucide-react";
 import {
-  act, Counter, fmt, ItemBadge, liLength, LiveStrip, mediaSrc, NET_LABEL, NetChip, nets, PicturePicker, prepareImage, uploadImage, xLength,
+  act, Counter, fmt, ItemBadge, liLength, LiveStrip, mediaSrc, NET_LABEL, NetChip, nets, PicturePicker, prepareImage, uploadImage, xLength, SuggestXButton,
   type ClientLite, type Item, type LiveAll, type Net, type Prepared,
 } from "@/components/publishing/shared";
 import { ItemPanel } from "@/components/publishing/item-panel";
@@ -255,8 +255,9 @@ function Composer({
       </div>
       {platforms.includes("TWITTER") && (
         <>
-          <div className="text-[11px] font-medium text-gray-600 mb-1">
-            X version {xLength(text) > limits.x ? <span className="text-red-600">(needed — the post is too long for X)</span> : "(optional — the post above is used if empty)"}
+          <div className="text-[11px] font-medium text-gray-600 mb-1 flex items-center justify-between gap-2">
+            <span>X version {xLength(text) > limits.x ? <span className="text-red-600">(needed — the post is too long for X)</span> : "(optional — the post above is used if empty)"}</span>
+            <SuggestXButton text={text} onSuggest={setTextX} />
           </div>
           <textarea value={textX} onChange={(e) => setTextX(e.target.value)} rows={3} className="w-full text-sm border border-gray-300 rounded-lg p-2" />
         </>
