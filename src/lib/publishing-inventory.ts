@@ -22,7 +22,7 @@
  */
 import prisma from "@/lib/db-raw";
 import { objectivesFor } from "@/lib/campaigns/objectives";
-import { alertTeam, esc, getTarget, quote, reviewToken, reviewUrl, sendMail, SITE } from "@/lib/publishing";
+import { alertTeam, esc, getTarget, quote, reviewToken, reviewUrl, sendMail, SITE, PUBLISHING_CLIENT_WHERE } from "@/lib/publishing";
 
 export const TARGET_DAYS = 7;
 export const REVIEW_REMIND_AFTER_DAYS = 2;
@@ -58,15 +58,15 @@ export async function inventory(orgId: string, now = Date.now()): Promise<Invent
     where: { organizationId: orgId, clientId: { not: null }, status: { in: ["DRAFT", "IN_REVIEW", "CHANGES_REQUESTED", "APPROVED", "SCHEDULED"] } },
     select: { clientId: true, status: true, scheduledAt: true, submittedAt: true, updatedAt: true },
   });
-  const withContent = new Set(items.map((i) => i.clientId!));
-  // Every campaign / internal company is tracked even with an empty library —
-  // an empty library is exactly the case to warn about.
+  // Every campaign company is tracked even with an empty library — an empty
+  // library is exactly the case to warn about. Publishing is campaign-only, so
+  // nothing else appears here or in its reminders (v4.39.1).
   const clients = await prisma.client.findMany({
     where: {
       organizationId: orgId,
       archivedAt: null,
       status: { not: "ARCHIVED" },
-      OR: [{ clientType: { in: ["CAMPAIGN", "INTERNAL"] } }, { id: { in: Array.from(withContent) } }],
+      ...PUBLISHING_CLIENT_WHERE,
     },
     select: { id: true, name: true, clientType: true },
     orderBy: { name: "asc" },

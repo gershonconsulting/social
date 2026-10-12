@@ -14,6 +14,7 @@ import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
 import {
   ITEM_STATUSES, LINKEDIN_MAX, MAX_IMAGES, MEDIA_SELECT, addEvent, getPublisherState, getSettings, liveStatus, parsePlatforms, sweep, textProblems, xMax,
+  PUBLISHING_CLIENT_WHERE,
 } from "@/lib/publishing";
 import { submitForReview } from "@/lib/publishing-review";
 
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest) {
         take: 500,
       }),
       prisma.client.findMany({
-        where: { organizationId: c.orgId, archivedAt: null, status: { not: "ARCHIVED" } },
+        where: { organizationId: c.orgId, archivedAt: null, status: { not: "ARCHIVED" }, ...PUBLISHING_CLIENT_WHERE },
         select: { id: true, name: true, clientType: true },
         orderBy: { name: "asc" },
       }),
@@ -84,12 +85,10 @@ export async function POST(req: NextRequest) {
     const text = (b?.text || "").replace(/\r\n/g, "\n").trim();
     if (!text) return NextResponse.json({ success: false, error: "Write something first." }, { status: 400 });
     const platforms = parsePlatforms(b?.platforms ?? "LINKEDIN,TWITTER");
-    let clientId: string | null = null;
-    if (b?.clientId) {
-      const cl = await prisma.client.findFirst({ where: { id: b.clientId, organizationId: c.orgId }, select: { id: true } });
-      if (!cl) return NextResponse.json({ success: false, error: "Unknown client." }, { status: 400 });
-      clientId = cl.id;
-    }
+    if (!b?.clientId) return NextResponse.json({ success: false, error: "Pick a campaign company first." }, { status: 400 });
+    const cl = await prisma.client.findFirst({ where: { id: b.clientId, organizationId: c.orgId, ...PUBLISHING_CLIENT_WHERE }, select: { id: true } });
+    if (!cl) return NextResponse.json({ success: false, error: "Publishing is only for campaign companies." }, { status: 400 });
+    const clientId: string = cl.id;
     const draft = { text, textX: (b?.textX || "").trim() || null, platforms: platforms.join(",") };
     const problems = textProblems(draft, await getSettings(c.orgId), 0);
     if (problems.length && (b?.submit || b?.approve)) {

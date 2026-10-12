@@ -23,6 +23,7 @@ import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
 import {
   MEDIA_SELECT, addEvent, getSettings, parsePlatforms, reviewToken, reviewUrl, rollUp, scheduleItem, textProblems, unscheduleItem,
+  PUBLISHING_CLIENT_WHERE,
 } from "@/lib/publishing";
 import { submitForReview } from "@/lib/publishing-review";
 
@@ -74,11 +75,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         const data: Record<string, unknown> = {};
         if (typeof b.title === "string") data.title = b.title.trim() || null;
         if (typeof b.clientId === "string" || b.clientId === null) {
-          if (b.clientId) {
-            const cl = await prisma.client.findFirst({ where: { id: String(b.clientId), organizationId: c.orgId }, select: { id: true } });
-            if (!cl) return bad("Unknown client.");
-          }
-          data.clientId = b.clientId || null;
+          if (!b.clientId) return bad("Pick a campaign company first.");
+          const cl = await prisma.client.findFirst({ where: { id: String(b.clientId), organizationId: c.orgId, ...PUBLISHING_CLIENT_WHERE }, select: { id: true } });
+          if (!cl) return bad("Publishing is only for campaign companies.");
+          data.clientId = cl.id;
         }
         const text = typeof b.text === "string" ? b.text.replace(/\r\n/g, "\n").trim() : item.text;
         const textX = typeof b.textX === "string" ? b.textX.trim() || null : item.textX;

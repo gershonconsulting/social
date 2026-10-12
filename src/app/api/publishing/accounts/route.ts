@@ -10,7 +10,7 @@ export const runtime = "edge";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
-import { getTarget, reviewToken, reviewUrl, saveTarget } from "@/lib/publishing";
+import { getTarget, reviewToken, reviewUrl, saveTarget, PUBLISHING_CLIENT_WHERE } from "@/lib/publishing";
 
 async function row(orgId: string, cl: { id: string; name: string; clientType: string }) {
   const [t, token, pending] = await Promise.all([
@@ -26,7 +26,7 @@ export async function GET() {
   if (c instanceof NextResponse) return c;
   try {
     const clients = await prisma.client.findMany({
-      where: { organizationId: c.orgId, archivedAt: null, status: { not: "ARCHIVED" }, clientType: { in: ["CAMPAIGN", "INTERNAL", "CLIENT"] } },
+      where: { organizationId: c.orgId, archivedAt: null, status: { not: "ARCHIVED" }, ...PUBLISHING_CLIENT_WHERE },
       select: { id: true, name: true, clientType: true },
       orderBy: [{ clientType: "asc" }, { name: "asc" }],
     });
@@ -40,7 +40,7 @@ export async function GET() {
 
 async function clientOf(orgId: string, id: unknown) {
   if (typeof id !== "string") return null;
-  return prisma.client.findFirst({ where: { id, organizationId: orgId }, select: { id: true, name: true, clientType: true } });
+  return prisma.client.findFirst({ where: { id, organizationId: orgId, ...PUBLISHING_CLIENT_WHERE }, select: { id: true, name: true, clientType: true } });
 }
 
 export async function PUT(req: NextRequest) {
