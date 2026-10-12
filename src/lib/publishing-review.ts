@@ -11,7 +11,17 @@ import {
   addEvent, alertTeam, mediaCount, esc, getSettings, getTarget, quote, reviewToken, reviewUrl, sendMail, textProblems, SITE,
 } from "@/lib/publishing";
 
-export async function submitForReview(orgId: string, itemId: string, by: string): Promise<string | null> {
+/** Default batch name, CloudCampaign-style: "<Company> — <Month YYYY>". */
+export function batchName(client: string, when = new Date()): string {
+  return `${client} — ${when.toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "America/New_York" })}`;
+}
+
+export async function submitForReview(
+  orgId: string,
+  itemId: string,
+  by: string,
+  opts: { notify?: boolean; batch?: string | null } = {},
+): Promise<string | null> {
   const item = await prisma.contentItem.findFirst({ where: { id: itemId, organizationId: orgId } });
   if (!item) return "Content not found.";
   if (!item.clientId) return "Pick the client first — the review goes to their reviewer.";
@@ -20,7 +30,9 @@ export async function submitForReview(orgId: string, itemId: string, by: string)
   if (problems.length) return problems.join(" ");
 
   await prisma.contentItem.update({ where: { id: item.id }, data: { status: "IN_REVIEW", submittedAt: new Date() } });
-  await addEvent(orgId, item.id, item.version, "submitted", "team", by);
+  // The "submitted" event carries the batch name; the review page groups by it.
+  await addEvent(orgId, item.id, item.version, "submitted", "team", by, opts.batch ? `batch:${opts.batch}` : null);
+  if (opts.notify === false) return null;
 
   const target = await getTarget(orgId, item.clientId);
   const token = await reviewToken(orgId, item.clientId);
@@ -38,7 +50,59 @@ export async function submitForReview(orgId: string, itemId: string, by: string)
   return null;
 }
 
-export type ClientAction = "comment" | "request_changes" | "approve";
+/**
+ * Send several posts of one company for review together (v4.41.0) — ONE email
+ * to the reviewer listing them, like a CloudCampaign approval batch. Posts that
+ * are not ready (no picture, too long for X…) are skipped and reported.
+ */
+export async function submitBatch(
+  orgId: string,
+  clientId: string,
+  ids: string[] | null,
+  by: string,
+  name?: string | null,
+): Promise<{ sent: string[]; skipped: { id: string; title: string; reason: string }[]; batch: string; emailed: boolean }> {
+  const client = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId }, select: { name: true } });
+  const batch = (name || "").trim().slice(0, 120) || batchName(client?.name || "Content");
+  const items = await prisma.contentItem.findMany({
+    where: {
+      organizationId: orgId,
+      clientId,
+      status: { in: ["DRAFT", "CHANGES_REQUESTED"] },
+      ...(ids && ids.length ? { id: { in: ids } } : {}),
+    },
+    orderBy: [{ scheduledAt: "asc" }, { createdAt: "asc" }],
+  });
+  const sent: string[] = [];
+  const skipped: { id: string; title: string; reason: string }[] = [];
+  for (const it of items) {
+    const err = await submitForReview(orgId, it.id, by, { notify: false, batch });
+    if (err) skipped.push({ id: it.id, title: it.title || it.text.slice(0, 60), reason: err });
+    else sent.push(it.id);
+  }
+  let emailed = false;
+  if (sent.length) {
+    const target = await getTarget(orgId, clientId);
+    if (target.reviewerEmail) {
+      const token = await reviewToken(orgId, clientId);
+      const hi = target.reviewerName ? `Hi ${esc(target.reviewerName.split(/\s+/)[0])},` : "Hello,";
+      const list = items
+        .filter((i) => sent.includes(i.id))
+        .map((i) => `<li style="margin:4px 0">${esc((i.title || i.text).split("\n")[0].slice(0, 120))}</li>`)
+        .join("");
+      emailed = await sendMail(
+        target.reviewerEmail,
+        `${sent.length} post${sent.length === 1 ? "" : "s"} to review — ${batch}`,
+        `<p>${hi}</p><p><b>${esc(batch)}</b> is ready for your review — ${sent.length} post${sent.length === 1 ? "" : "s"}:</p><ul>${list}</ul>
+         <p>Approve them one by one or all at once, comment, or ask for changes. Nothing is published before you approve.</p>`,
+        { href: reviewUrl(token), label: "Review the content" },
+      );
+    }
+  }
+  return { sent, skipped, batch, emailed };
+}
+
+export type ClientAction = "comment" | "request_changes" | "approve" | "approve_all";
 
 export async function clientAction(
   orgId: string,
@@ -48,6 +112,24 @@ export async function clientAction(
   name: string | null,
   body: string | null,
 ): Promise<string | null> {
+  if (action === "approve_all") {
+    const who0 = (name || "").trim().slice(0, 80) || "Client";
+    const waiting = await prisma.contentItem.findMany({ where: { organizationId: orgId, clientId, status: "IN_REVIEW" } });
+    if (!waiting.length) return "Nothing is waiting for your approval.";
+    const now = new Date();
+    for (const w of waiting) {
+      await prisma.contentItem.update({ where: { id: w.id }, data: { status: "APPROVED", approvedAt: now, approvedBy: who0, approvedRole: "client" } });
+      await addEvent(orgId, w.id, w.version, "approved", "client", who0, "Approved with “Approve all”");
+    }
+    const cl = await prisma.client.findFirst({ where: { id: clientId }, select: { name: true } });
+    await alertTeam(
+      orgId,
+      `${cl?.name || "The client"} approved ${waiting.length} post${waiting.length === 1 ? "" : "s"} — ready to schedule`,
+      `<p><b>${esc(who0)}</b> (${esc(cl?.name || "client")}) approved all ${waiting.length} posts waiting for review.</p>`,
+      `${SITE}/publishing`,
+    );
+    return null;
+  }
   const item = await prisma.contentItem.findFirst({ where: { id: itemId, organizationId: orgId, clientId } });
   if (!item) return "Post not found.";
   const who = (name || "").trim().slice(0, 80) || "Client";

@@ -15,7 +15,7 @@ import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { CalendarDays, Check, Loader2, MessageSquare, Plus, Send, Users } from "lucide-react";
 import {
-  act, Counter, fmt, ItemBadge, liLength, LiveStrip, mediaSrc, NET_LABEL, NetChip, nets, PicturePicker, prepareImage, uploadImage, xLength, SuggestXButton,
+  act, Counter, fmt, ItemBadge, liLength, LiveStrip, mediaSrc, NET_LABEL, NetChip, nets, PicturePicker, prepareImage, uploadImage, xLength, SuggestXButton, ReviewBadge,
   type ClientLite, type Item, type LiveAll, type Net, type Prepared,
 } from "@/components/publishing/shared";
 import { ItemPanel } from "@/components/publishing/item-panel";
@@ -40,6 +40,7 @@ export function PublishingContentClient() {
   const [clientFilter, setClientFilter] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
+  const [batching, setBatching] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -92,6 +93,11 @@ export function PublishingContentClient() {
               <Users size={14} /> Accounts &amp; review links
             </Link>
             {feed?.canWrite && (
+              <button onClick={() => setBatching(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">
+                <Send size={14} /> Send for review
+              </button>
+            )}
+            {feed?.canWrite && (
               <button onClick={() => setComposing(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800">
                 <Plus size={14} /> New post
               </button>
@@ -111,6 +117,17 @@ export function PublishingContentClient() {
           defaultClient={clientFilter}
           onDone={(id) => { setComposing(false); void load(); if (id) setOpenId(id); }}
           onCancel={() => setComposing(false)}
+        />
+      )}
+
+      {batching && feed && (
+        <BatchSender
+          items={feed.items}
+          clients={feed.clients}
+          requireImage={feed.limits.requireImage}
+          defaultClient={clientFilter}
+          onDone={() => { void load(); }}
+          onClose={() => setBatching(false)}
         />
       )}
 
@@ -137,6 +154,9 @@ export function PublishingContentClient() {
                       {i.media && i.media[0] && (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={mediaSrc(i.media[0])} alt="" loading="lazy" className="w-full h-24 object-cover rounded-md mb-1.5 bg-gray-100" />
+                      )}
+                      {["IN_REVIEW", "CHANGES_REQUESTED", "APPROVED", "SCHEDULED"].includes(i.status) && (
+                        <div className="mb-1.5"><ReviewBadge status={i.status} clientFeedback={i.clientFeedback} big /></div>
                       )}
                       {i.title && <div className="text-xs font-semibold text-gray-900 truncate">{i.title}</div>}
                       <div className="text-xs text-gray-700 line-clamp-3 whitespace-pre-wrap break-words">{i.text}</div>
@@ -293,5 +313,112 @@ function Composer({
         {busy && <Loader2 size={14} className="animate-spin text-gray-400" />}
       </div>
     </section>
+  );
+}
+
+
+/**
+ * Send several posts of one company for review in ONE batch (v4.41.0),
+ * CloudCampaign-style: one email, one review page listing them all.
+ */
+function BatchSender({
+  items, clients, requireImage, defaultClient, onDone, onClose,
+}: {
+  items: Item[]; clients: ClientLite[]; requireImage: boolean; defaultClient: string; onDone: () => void; onClose: () => void;
+}) {
+  const ready = (i: Item) => i.status === "DRAFT" || i.status === "CHANGES_REQUESTED";
+  const withDrafts = clients.filter((c) => items.some((i) => i.clientId === c.id && ready(i)));
+  const [clientId, setClientId] = useState(withDrafts.some((c) => c.id === defaultClient) ? defaultClient : withDrafts[0]?.id || "");
+  const drafts = items.filter((i) => i.clientId === clientId && ready(i));
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const month = new Date().toLocaleString("en-US", { month: "long", year: "numeric" });
+  const clientLabel = clients.find((c) => c.id === clientId)?.name || "";
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPicked(new Set(items.filter((i) => i.clientId === clientId && ready(i)).map((i) => i.id)));
+    setName(clientLabel ? `${clientLabel} — ${month}` : "");
+    setResult(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
+
+  async function send() {
+    setBusy(true);
+    setResult(null);
+    try {
+      const r = await fetch("/api/publishing/review-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, ids: Array.from(picked), name }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!j?.success) setResult(j?.error || `HTTP ${r.status}`);
+      else {
+        const d = j.data as { sent: string[]; skipped: { title: string; reason: string }[]; emailed: boolean; batch: string };
+        setResult(
+          `Sent ${d.sent.length} post${d.sent.length === 1 ? "" : "s"} as “${d.batch}”. ` +
+            (d.emailed ? "The reviewer was emailed." : "No reviewer email is set for this company — add it in Accounts & review links.") +
+            (d.skipped.length ? ` Not sent: ${d.skipped.map((s) => `${s.title} (${s.reason})`).join("; ")}` : ""),
+        );
+        onDone();
+      }
+    } catch (e) {
+      setResult(e instanceof Error ? e.message : "failed");
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="fixed inset-0 z-40 bg-black/30 flex items-start justify-center pt-20 px-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-xl p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="text-base font-semibold text-gray-900 mb-1">Send for review in one batch</div>
+        <p className="text-xs text-gray-500 mb-4">The reviewer gets one email and one page with every post below. They can approve each post or all of them at once.</p>
+        {withDrafts.length === 0 ? (
+          <p className="text-sm text-gray-600">No drafts waiting to be sent.</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <select value={clientId} onChange={(e) => setClientId(e.target.value)} className="text-sm border border-gray-300 rounded-lg px-2 py-1.5">
+                {withDrafts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Batch name" className="text-sm border border-gray-300 rounded-lg px-2 py-1.5" />
+            </div>
+            <div className="max-h-72 overflow-y-auto space-y-1.5 mb-3">
+              {drafts.map((i) => {
+                const noPic = requireImage && (i.media?.length ?? 0) === 0;
+                return (
+                  <label key={i.id} className="flex items-start gap-2 text-sm border border-gray-200 rounded-lg p-2">
+                    <input
+                      type="checkbox"
+                      checked={picked.has(i.id)}
+                      onChange={(e) => setPicked((p) => { const n = new Set(p); if (e.target.checked) n.add(i.id); else n.delete(i.id); return n; })}
+                      className="mt-1"
+                    />
+                    <span className="flex-1 min-w-0">
+                      <span className="block font-medium text-gray-900 truncate">{i.title || i.text.split("\n")[0]}</span>
+                      <span className="block text-[11px] text-gray-500">
+                        {i.status === "CHANGES_REQUESTED" ? "Revised after changes · " : ""}{i.scheduledAt ? fmt(i.scheduledAt) : "no date yet"}
+                        {noPic && <span className="text-orange-600"> · no picture — will be skipped</span>}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </>
+        )}
+        {result && <div className="text-sm rounded-lg px-3 py-2 mb-3 bg-gray-50 text-gray-800">{result}</div>}
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 text-sm text-gray-700 border border-gray-300 rounded-lg">Close</button>
+          {withDrafts.length > 0 && (
+            <button disabled={busy || picked.size === 0} onClick={send} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-red-600 rounded-lg disabled:opacity-50">
+              {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Send {picked.size} for review
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

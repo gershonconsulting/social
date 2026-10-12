@@ -58,10 +58,23 @@ export async function GET(req: NextRequest) {
       getPublisherState(c.orgId),
     ]);
 
+    // Which posts waiting for review already have client feedback on their
+    // current version — the board shows those ORANGE (pending approval) and
+    // the untouched ones RED (submitted). (v4.41.0)
+    const waitingIds = items.filter((i) => i.status === "IN_REVIEW").map((i) => i.id);
+    const feedback = waitingIds.length
+      ? await prisma.contentComment.findMany({
+          where: { contentId: { in: waitingIds }, authorRole: "client", kind: { in: ["comment", "changes_requested"] } },
+          select: { contentId: true, version: true },
+        })
+      : [];
+    const verOf = new Map(items.map((i) => [i.id, i.version]));
+    const withFeedback = new Set(feedback.filter((f) => f.version === verOf.get(f.contentId)).map((f) => f.contentId));
+
     return NextResponse.json({
       success: true,
       data: {
-        items,
+        items: items.map((i) => ({ ...i, clientFeedback: withFeedback.has(i.id) })),
         clients,
         settings,
         publisher,

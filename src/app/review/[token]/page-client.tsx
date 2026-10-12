@@ -7,7 +7,8 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Loader2, MessageSquare, PencilLine } from "lucide-react";
+import { Check, CheckCheck, Loader2, MessageSquare, PencilLine } from "lucide-react";
+import { ReviewBadge } from "@/components/publishing/shared";
 
 type Comment = { id: string; authorName: string | null; authorRole: "team" | "client"; kind: string; body: string | null; version: number; createdAt: string };
 type Item = {
@@ -19,17 +20,22 @@ type Item = {
 type Data = { client: string; logoUrl: string | null; agency: string; items: Item[] };
 
 const NAME_KEY = "review_name";
+
+/** Batch a post was sent in (v4.41.0): the latest "submitted" event's
+ *  "batch:<name>", else "<Company> — <Month YYYY>" of its planned date. */
+function batchOf(i: Item, client: string): string {
+  const sub = [...i.comments].reverse().find((c) => c.kind === "submitted" && (c.body || "").startsWith("batch:"));
+  if (sub) return (sub.body as string).slice(6);
+  const d = new Date(i.scheduledAt || i.updatedAt);
+  return `${client} — ${d.toLocaleString("en-US", { month: "long", year: "numeric" })}`;
+}
+/** Client feedback on the current version → orange, none → red. */
+function hasFeedback(i: Item): boolean {
+  return i.comments.some((c) => c.authorRole === "client" && (c.kind === "comment" || c.kind === "changes_requested") && c.version === i.version);
+}
 function fmt(iso: string | null) {
   return iso ? new Date(iso).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "";
 }
-const STATUS: Record<string, { label: string; cls: string }> = {
-  IN_REVIEW: { label: "Waiting for your review", cls: "bg-violet-100 text-violet-800" },
-  CHANGES_REQUESTED: { label: "Changes requested — being revised", cls: "bg-orange-100 text-orange-800" },
-  APPROVED: { label: "Approved", cls: "bg-sky-100 text-sky-800" },
-  SCHEDULED: { label: "Approved · scheduled", cls: "bg-amber-100 text-amber-800" },
-  PUBLISHED: { label: "Published", cls: "bg-emerald-100 text-emerald-800" },
-  PARTIAL: { label: "Published", cls: "bg-emerald-100 text-emerald-800" },
-};
 
 export function ReviewClient({ token }: { token: string }) {
   const [data, setData] = useState<Data | null>(null);
@@ -59,8 +65,14 @@ export function ReviewClient({ token }: { token: string }) {
   if (!data) return <Center><Loader2 className="animate-spin text-gray-400" /></Center>;
 
   const waiting = data.items.filter((i) => i.status === "IN_REVIEW");
-  const revising = data.items.filter((i) => i.status === "CHANGES_REQUESTED");
-  const done = data.items.filter((i) => !["IN_REVIEW", "CHANGES_REQUESTED"].includes(i.status));
+  const groups = new Map<string, Item[]>();
+  for (const i of data.items) {
+    const k = batchOf(i, data.client);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k)!.push(i);
+  }
+  const open = (l: Item[]) => l.some((i) => i.status === "IN_REVIEW" || i.status === "CHANGES_REQUESTED");
+  const ordered = Array.from(groups.entries()).sort((x, y) => Number(open(y[1])) - Number(open(x[1])));
 
   return (
     <div className="min-h-screen bg-[#f5f6f8]">
@@ -69,7 +81,7 @@ export function ReviewClient({ token }: { token: string }) {
           {data.logoUrl && <img src={data.logoUrl} alt="" className="w-10 h-10 rounded-md object-contain bg-white border border-gray-100" />}
           <div className="flex-1">
             <div className="text-xs text-gray-500">{data.agency} · content review</div>
-            <h1 className="text-xl font-semibold text-gray-900">{data.client}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Content to approve</h1>
           </div>
           <label className="text-xs text-gray-600">
             Your name
@@ -78,22 +90,55 @@ export function ReviewClient({ token }: { token: string }) {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-6 space-y-8">
-        <Section title={`Waiting for your review (${waiting.length})`} empty="Nothing to review right now — thank you!">
-          {waiting.map((i) => <Post key={i.id} i={i} token={token} name={name} onDone={load} actionable />)}
-        </Section>
-        {revising.length > 0 && (
-          <Section title={`Being revised (${revising.length})`}>
-            {revising.map((i) => <Post key={i.id} i={i} token={token} name={name} onDone={load} />)}
-          </Section>
+      <main className="max-w-3xl mx-auto px-4 py-6 space-y-10">
+        {waiting.length > 0 && <ApproveAll n={waiting.length} token={token} name={name} onDone={load} />}
+        {ordered.length === 0 && (
+          <p className="text-sm text-gray-500 bg-white border border-dashed border-gray-300 rounded-xl p-6 text-center">Nothing to review right now — thank you!</p>
         )}
-        {done.length > 0 && (
-          <Section title="Approved & published (last 60 days)">
-            {done.map((i) => <Post key={i.id} i={i} token={token} name={name} onDone={load} compact />)}
-          </Section>
-        )}
+        {ordered.map(([batch, list]) => (
+          <section key={batch}>
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">{batch}</h2>
+              <div className="text-sm text-gray-500">
+                {list.length} item{list.length === 1 ? "" : "s"} · {list.filter((i) => ["APPROVED", "SCHEDULED", "PUBLISHED", "PARTIAL"].includes(i.status)).length} approved
+                {open(list) && " · Please approve each post with the button under it."}
+              </div>
+            </div>
+            <div className="space-y-4">
+              {list.map((i) => (
+                <Post key={i.id} i={i} token={token} name={name} onDone={load} actionable={i.status === "IN_REVIEW"} compact={!["IN_REVIEW", "CHANGES_REQUESTED"].includes(i.status)} />
+              ))}
+            </div>
+          </section>
+        ))}
         <p className="text-[11px] text-gray-400 text-center">This private link is for {data.client} only. Nothing is published before you approve it.</p>
       </main>
+    </div>
+  );
+}
+
+function ApproveAll({ n, token, name, onDone }: { n: number; token: string; name: string; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  async function go() {
+    if (!confirm(`Approve all ${n} post${n === 1 ? "" : "s"} waiting for your review?`)) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fetch(`/api/review/${token}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "approve_all", name }) });
+      const j = await r.json();
+      if (!j?.success) throw new Error(j?.error || "Could not approve.");
+      setMsg("All approved — thank you.");
+      onDone();
+    } catch (e) { setMsg(e instanceof Error ? e.message : "Could not approve."); }
+    setBusy(false);
+  }
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-center gap-3">
+      <div className="flex-1 text-sm text-gray-700"><b>{n}</b> post{n === 1 ? " is" : "s are"} waiting for your approval.</div>
+      <button disabled={busy} onClick={go} className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-white bg-emerald-600 rounded-lg disabled:opacity-50">
+        {busy ? <Loader2 size={14} className="animate-spin" /> : <CheckCheck size={16} />} Approve all ({n})
+      </button>
+      {msg && <span className="text-xs text-gray-600 w-full">{msg}</span>}
     </div>
   );
 }
@@ -101,23 +146,12 @@ export function ReviewClient({ token }: { token: string }) {
 function Center({ children }: { children: React.ReactNode }) {
   return <div className="min-h-screen flex items-center justify-center bg-[#f5f6f8] px-4 text-center">{children}</div>;
 }
-function Section({ title, empty, children }: { title: string; empty?: string; children: React.ReactNode }) {
-  const has = Array.isArray(children) ? children.length > 0 : !!children;
-  return (
-    <section>
-      <h2 className="text-sm font-semibold text-gray-800 mb-3">{title}</h2>
-      {has ? <div className="space-y-4">{children}</div> : <p className="text-sm text-gray-500 bg-white border border-dashed border-gray-300 rounded-xl p-6 text-center">{empty}</p>}
-    </section>
-  );
-}
-
 function Post({ i, token, name, onDone, actionable, compact }: { i: Item; token: string; name: string; onDone: () => void; actionable?: boolean; compact?: boolean }) {
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [showThread, setShowThread] = useState(!compact);
   const nets = i.platforms.split(",");
-  const st = STATUS[i.status] || { label: i.status, cls: "bg-gray-100 text-gray-700" };
 
   async function send(action: "comment" | "request_changes" | "approve") {
     if (action !== "approve" && !body.trim()) { setMsg(action === "request_changes" ? "Tell us what to change." : "Write a comment first."); return; }
@@ -138,7 +172,6 @@ function Post({ i, token, name, onDone, actionable, compact }: { i: Item; token:
   return (
     <article className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2">
-        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
         {i.title && <span className="text-sm font-medium text-gray-900">{i.title}</span>}
         <span className="text-[11px] text-gray-500 ml-auto">Version {i.version}{i.scheduledAt ? ` · planned ${fmt(i.scheduledAt)}` : ""}</span>
       </div>
@@ -153,6 +186,12 @@ function Post({ i, token, name, onDone, actionable, compact }: { i: Item; token:
           ))}
         </div>
       )}
+      <div className="px-4 pb-3">
+        <ReviewBadge status={i.status} clientFeedback={hasFeedback(i)} big />
+        {i.approvedAt && ["APPROVED", "SCHEDULED", "PUBLISHED", "PARTIAL"].includes(i.status) && (
+          <div className="text-[11px] text-gray-500 text-center mt-1">Approved on {new Date(i.approvedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}{i.approvedBy ? ` by ${i.approvedBy}` : ""}</div>
+        )}
+      </div>
       {(thread.length > 0 || actionable) && (
         <div className="border-t border-gray-100 px-4 py-3 bg-gray-50/60">
           {thread.length > 0 && (

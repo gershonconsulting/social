@@ -70,6 +70,7 @@ Rules:
 - At most ${target} characters in total, counting spaces, emoji and hashtags. Links count as 23 characters.
 - US English. Same facts, same voice; no invented numbers, names or claims.
 - One tight message: the hook, the key point, and one hashtag or two at the end.
+- Keep the concrete facts (names, numbers, places). No emoji unless the original uses them; no abbreviations like gov't.
 - No thread numbering, no quotation marks around the answer, no preamble.
 Answer with the X post text only.`;
 

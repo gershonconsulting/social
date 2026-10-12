@@ -39,7 +39,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
         deliveries: { select: { platform: true, status: true, postUrl: true, postedAt: true } },
         media: { select: { id: true, key: true, position: true, width: true, height: true }, orderBy: { position: "asc" } },
       },
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ scheduledAt: "asc" }, { updatedAt: "desc" }],
       take: 100,
     }),
   ]);
@@ -52,10 +52,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
   if (!r) return NextResponse.json({ success: false, error: "This review link is not valid any more." }, { status: 404 });
   const b = (await req.json().catch(() => null)) as { contentId?: string; action?: string; name?: string; body?: string } | null;
   const action = b?.action as ClientAction;
-  if (!b?.contentId || !["comment", "request_changes", "approve"].includes(action)) {
+  if (!["comment", "request_changes", "approve", "approve_all"].includes(action) || (action !== "approve_all" && !b?.contentId)) {
     return NextResponse.json({ success: false, error: "Bad request" }, { status: 400 });
   }
-  const err = await clientAction(r.orgId, r.clientId, b.contentId, action, b.name ?? null, b.body ?? null);
+  const err = await clientAction(r.orgId, r.clientId, b?.contentId || "", action, b?.name ?? null, b?.body ?? null);
   if (err) return NextResponse.json({ success: false, error: err }, { status: 400 });
   return NextResponse.json({ success: true });
 }

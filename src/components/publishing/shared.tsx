@@ -58,6 +58,8 @@ export type Item = {
   media?: Media[];
   comments?: Comment[];
   _count?: { comments: number };
+  /** Client commented / asked for changes on the current version (v4.41.0). */
+  clientFeedback?: boolean;
 };
 
 export type Live = { level: "live" | "signed_out" | "offline" | "never"; label: string };
@@ -316,6 +318,33 @@ export function SuggestXButton({ text, onSuggest, disabled }: { text: string; on
         {busy ? "Writing…" : "✨ Suggest X version"}
       </button>
       {err && <span className="text-[11px] text-red-600">{err}</span>}
+    </span>
+  );
+}
+
+/**
+ * Review colours (v4.41.0, Olivier): APPROVED = big green; not approved but
+ * with the client's comments = orange "Pending approval"; only submitted,
+ * nothing from the client yet = red "Submitted".
+ */
+export type ReviewTone = "green" | "orange" | "red";
+export function reviewState(status: string, clientFeedback?: boolean): { label: string; tone: ReviewTone } | null {
+  if (["APPROVED", "SCHEDULED", "PUBLISHED", "PARTIAL"].includes(status)) return { label: "Approved", tone: "green" };
+  if (status === "CHANGES_REQUESTED" || (status === "IN_REVIEW" && clientFeedback)) return { label: "Pending approval", tone: "orange" };
+  if (status === "IN_REVIEW") return { label: "Submitted", tone: "red" };
+  return null;
+}
+export const TONE_CLS: Record<ReviewTone, string> = {
+  green: "bg-emerald-600 text-white",
+  orange: "bg-orange-500 text-white",
+  red: "bg-red-600 text-white",
+};
+export function ReviewBadge({ status, clientFeedback, big }: { status: string; clientFeedback?: boolean; big?: boolean }) {
+  const s = reviewState(status, clientFeedback);
+  if (!s) return null;
+  return (
+    <span className={`inline-flex items-center justify-center font-bold uppercase tracking-wide rounded-md ${TONE_CLS[s.tone]} ${big ? "text-base px-4 py-2 w-full" : "text-[10px] px-1.5 py-0.5"}`}>
+      {s.tone === "green" ? "✓ " : ""}{s.label}
     </span>
   );
 }
