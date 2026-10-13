@@ -241,6 +241,9 @@
     return String(t || "").replace(/https?:\/\/\S+/gi, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim().toLowerCase();
   }
   async function report(id, outcome, postUrl, error) {
+    // 0.20.0: a failure before the click in the minimized window → retry visibly.
+    if (outcome === "failed_before_click" && bgWindow) await markNeedsVisible(id, true);
+    else if (outcome !== "failed_before_click") await markNeedsVisible(id, false);
     try {
       await fetch(API + "/result", {
         method: "POST",
@@ -255,11 +258,45 @@
       return r && r[0] ? r[0].result : null;
     } catch (e) { return null; }
   }
-  async function navigate(tabId, url) { await nativeTabUpdate(tabId, { url: url }); await sleep(3500); }
-  async function openWindow(url) {
-    var w = await chrome.windows.create({ url: url, focused: false, type: "normal", width: 1280, height: 900, top: 0, left: 0 });
+  // 0.20.0: publishing runs in a MINIMIZED window like collection, and pages
+  // get the "#gx-bg" marker so gx-visible.js keeps them rendering. If a post
+  // fails BEFORE the Post click while minimized, the server retries it and
+  // that retry uses a normal window as before (VISIBLE_KEY) — a post is never
+  // lost to the background mode.
+  var bgWindow = true;
+  function markUrl(url) {
+    if (!bgWindow || typeof url !== "string" || !/^https:\/\/([a-z]+\.)?(linkedin\.com|x\.com|twitter\.com)\//i.test(url)) return url;
+    if (url.indexOf("#") !== -1) return url.indexOf("gx-bg") !== -1 ? url : url + "&gx-bg";
+    return url + "#gx-bg";
+  }
+  var pubWinId = null;
+  async function keepMinimized() {
+    if (!bgWindow || !pubWinId) return;
+    try { var w = await chrome.windows.get(pubWinId); if (w && w.state !== "minimized") await chrome.windows.update(pubWinId, { state: "minimized" }); } catch (e) {}
+  }
+  async function navigate(tabId, url) { await keepMinimized(); await nativeTabUpdate(tabId, { url: markUrl(url) }); await sleep(3500); await keepMinimized(); }
+  async function openWindow(url, visible) {
+    bgWindow = !visible;
+    var opts = visible
+      ? { url: url, focused: false, type: "normal", width: 1280, height: 900, top: 0, left: 0 }
+      : { url: url, focused: false, type: "normal", state: "minimized" };
+    var w = await chrome.windows.create(opts);
+    pubWinId = w.id;
     await setState({ publishWindowId: w.id });
-    return { winId: w.id, tabId: w.tabs && w.tabs[0] && w.tabs[0].id };
+    return { winId: w.id, tabId: w.tabs && w.tabs[0] && w.tabs[0].id, visible: !!visible };
+  }
+  var VISIBLE_KEY = "publishVisibleRetry";
+  async function needsVisible(id) {
+    try { var r = await chrome.storage.local.get(VISIBLE_KEY); return !!(r && r[VISIBLE_KEY] && r[VISIBLE_KEY][id]); } catch (e) { return false; }
+  }
+  async function markNeedsVisible(id, on) {
+    try {
+      var r = await chrome.storage.local.get(VISIBLE_KEY);
+      var m = (r && r[VISIBLE_KEY]) || {};
+      if (on) m[id] = Date.now(); else delete m[id];
+      for (var k in m) if (Date.now() - m[k] > 3 * 86400000) delete m[k];
+      await chrome.storage.local.set({ [VISIBLE_KEY]: m });
+    } catch (e) {}
   }
 
   // ── Pictures (0.15.0) ───────────────────────────────────────────────────
@@ -608,8 +645,9 @@
   // ── Loop ────────────────────────────────────────────────────────────────
   async function publishOne(d) {
     var w = null;
+    var visible = await needsVisible(d.id);
     try {
-      w = await openWindow("about:blank");
+      w = await openWindow("about:blank", visible);
       if (!w.tabId) throw new Error("Could not open a window.");
       if (d.platform === "TWITTER") await publishX(d, w);
       else if (d.platform === "LINKEDIN") await publishLinkedIn(d, w);
@@ -623,6 +661,9 @@
       await setState({ publishWindowId: null });
     }
   }
+
+  // 0.20.0: lets gx-update.js wait until no post is going out.
+  self.gxPublishing = function () { return publishing; };
 
   async function tick() {
     if (!(await bound())) return;

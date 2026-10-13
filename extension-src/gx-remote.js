@@ -114,6 +114,7 @@
   chrome.runtime.onStartup.addListener(ensureAlarm);
   ensureAlarm();
 
-  // For tests and the popup.
+  // For tests, the popup and gx-update.js.
   self.gxRemoteTick = tick;
+  self.gxRemoteBusy = function () { return busy; };
 })();

@@ -29,7 +29,7 @@
   var STALE_AFTER_H = 26;
   var WIN_KEY = "collectWindowId";
 
-  var win = { id: null, prevFocused: null };
+  var win = { id: null };
   var running = 0;
 
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
@@ -40,17 +40,36 @@
     try { await chrome.windows.remove(id); } catch (e) {}
   }
 
+  // 0.20.0: MINIMIZED, and focus is never touched. Until 0.19.0 the window
+  // opened on top of everything and focus was then handed back to your last
+  // Chrome window — which pulled Chrome in front of whatever app you were
+  // using. The pages still render because gx-visible.js tells them they are
+  // on screen (every address gets the "#gx-bg" marker, see markUrl()).
   async function openWindow() {
-    try { var f = await chrome.windows.getLastFocused(); win.prevFocused = f && f.id; } catch (e) { win.prevFocused = null; }
-    var w = await chrome.windows.create({
-      url: "about:blank", focused: false, type: "normal",
-      width: 1280, height: 900, top: 0, left: 0
-    });
+    var w = await chrome.windows.create({ url: "about:blank", focused: false, type: "normal", state: "minimized" });
     win.id = w.id;
     try { await chrome.storage.local.set({ collectWindowId: w.id }); } catch (e) {}
-    if (win.prevFocused) { try { await chrome.windows.update(win.prevFocused, { focused: true }); } catch (e) {} }
     return w;
   }
+
+  // If anything restores the window during a run (a page asking for focus,
+  // Chrome itself), put it straight back. Checked at every page change and
+  // every 20 seconds while running.
+  async function keepMinimized() {
+    if (!win.id) return;
+    try {
+      var w = await chrome.windows.get(win.id);
+      if (w && w.state !== "minimized") await chrome.windows.update(win.id, { state: "minimized" });
+    } catch (e) {}
+  }
+  self.gxKeepMinimized = keepMinimized;
+
+  function markUrl(url) {
+    if (typeof url !== "string" || !/^https:\/\/([a-z]+\.)?(linkedin\.com|x\.com|twitter\.com)\//i.test(url)) return url;
+    if (url.indexOf("#") !== -1) return url.indexOf("gx-bg") !== -1 ? url : url + "&gx-bg";
+    return url + "#gx-bg";
+  }
+  self.gxMarkUrl = markUrl;
 
   // A window left behind by a run the browser cut short.
   async function closeLeftover() {
@@ -66,6 +85,7 @@
   chrome.tabs.create = async function (props) {
     if (!running || !win.id) return nativeCreate(props);
     var p = Object.assign({}, props, { windowId: win.id, active: true });
+    if (p.url) p.url = markUrl(p.url);
     try { return await nativeCreate(p); } catch (e) { return nativeCreate(props); }
   };
   // When a collection tab is pointed at a new page, bring it to the front of
@@ -74,7 +94,11 @@
     if (running && win.id && typeof tabId === "number" && props && props.url) {
       try {
         var t = await chrome.tabs.get(tabId);
-        if (t && t.windowId === win.id) await nativeUpdate(tabId, { active: true });
+        if (t && t.windowId === win.id) {
+          await nativeUpdate(tabId, { active: true });
+          props = Object.assign({}, props, { url: markUrl(props.url) });
+          keepMinimized();
+        }
       } catch (e) {}
     }
     return nativeUpdate(tabId, props);
@@ -84,7 +108,7 @@
   var keepAlive = null;
   function startKeepAlive() {
     if (keepAlive) return;
-    keepAlive = setInterval(function () { try { chrome.runtime.getPlatformInfo(function () {}); } catch (e) {} }, 20000);
+    keepAlive = setInterval(function () { try { chrome.runtime.getPlatformInfo(function () {}); } catch (e) {} keepMinimized(); }, 20000);
   }
   function stopKeepAlive() { if (keepAlive) { clearInterval(keepAlive); keepAlive = null; } }
 

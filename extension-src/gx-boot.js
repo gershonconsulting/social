@@ -11,5 +11,6 @@
 // X session live (HeroPost replacement); also before gx-collect.js, for the same reason.
 // Pointing the manifest here keeps background.js and sync-core.js untouched.
 // gx-remote.js (0.19.0) takes collection requests queued by the dashboard; last,
-// so it uses gx-collect.js's guarded runFullSync.
-importScripts("gx-token.js", "background.js", "gx-linkedin.js", "gx-session-watch.js", "gx-publish.js", "gx-collect.js", "gx-personal.js", "gx-remote.js");
+// so it uses gx-collect.js's guarded runFullSync. gx-update.js (0.20.0) reloads the
+// extension when its folder holds a newer version and nothing is running.
+importScripts("gx-token.js", "background.js", "gx-linkedin.js", "gx-session-watch.js", "gx-publish.js", "gx-collect.js", "gx-personal.js", "gx-remote.js", "gx-update.js");
