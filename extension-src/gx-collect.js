@@ -100,7 +100,7 @@
   async function guardedRun(opts) {
     if (!(await bound())) {
       return { ok: false, totalUpserted: 0, totalFailed: 0, accountCount: 0, badPlatforms: [],
-        ingestErrors: ["Not connected to a workspace. Open social.gershoncrm.com in this browser and sign in."] };
+        ingestErrors: ["Not connected to a workspace. Open social.gershon.ai in this browser and sign in."] };
     }
     running++;
     startKeepAlive();
@@ -145,7 +145,7 @@
     if ((await staleHours()) < STALE_AFTER_H) return;
     try { chrome.action.setBadgeText({ text: "…" }); } catch (e) {}
     var res = null;
-    try { res = await self.runFullSync({ origin: "https://social.gershoncrm.com", onProgress: function () {}, trigger: trigger }); } catch (e) {}
+    try { res = await self.runFullSync({ origin: "https://social.gershon.ai", onProgress: function () {}, trigger: trigger }); } catch (e) {}
     try { chrome.action.setBadgeText({ text: res && res.ok ? "✓" : "!" }); } catch (e) {}
   }
 

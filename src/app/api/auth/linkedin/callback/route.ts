@@ -7,6 +7,7 @@ import {
   sessionCookieName,
   SESSION_MAX_AGE_SECONDS,
 } from "@/lib/linkedin-auth";
+import { siteUrl } from "@/lib/site";
 
 /**
  * Finishes the SIGN-IN flow, which comes back through this same URL because
@@ -14,7 +15,7 @@ import {
  * client-connection callback by `state.mode === "login"`.
  */
 async function finishSignIn(req: NextRequest, code: string, state: string): Promise<NextResponse> {
-  const base = process.env.NEXT_PUBLIC_APP_URL || "https://social.gershoncrm.com";
+  const base = siteUrl();
   const cookieState = req.cookies.get("li_login_state")?.value;
   if (!cookieState || cookieState !== state) {
     return NextResponse.redirect(
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
   const state = request.nextUrl.searchParams.get("state");
   const error = request.nextUrl.searchParams.get("error");
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://social.gershoncrm.com";
+  const appUrl = siteUrl();
 
   if (error) {
     const desc = request.nextUrl.searchParams.get("error_description") || error;

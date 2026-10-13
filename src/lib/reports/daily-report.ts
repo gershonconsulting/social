@@ -29,10 +29,11 @@ import { EXTENSION_LATEST } from "@/lib/extension-version";
 import { readExtSeen, semverLt, type ExtSeen } from "@/lib/extension/seen";
 import { readHeartbeat } from "@/lib/extension/heartbeat";
 import { etDayKey, etDayLabel, etDayShort, etMidnight } from "./et-days";
+import { siteUrl } from "@/lib/site";
 
 export const REPORT_SENT_KEY = "daily_report_sent";
 export const DEFAULT_REPORT_TO = "report@gershonconsulting.com";
-const SITE = "https://social.gershoncrm.com";
+const SITE = siteUrl();
 
 
 /** Where a `Load unpacked` copy of the extension lives on Olivier's machine. */
@@ -454,7 +455,7 @@ function buildExtensionBlock(seen: ExtSeen | null, now: Date): DailyReport["exte
       level: "warn",
       headline: "Extension version unknown",
       detail:
-        "No GershonAI extension has reported in yet. Either it is not installed in the Chrome you use for collection, or you have not opened social.gershoncrm.com in that browser since this check went live. Open the dashboard there once and this resolves itself.",
+        "No GershonAI extension has reported in yet. Either it is not installed in the Chrome you use for collection, or you have not opened social.gershon.ai in that browser since this check went live. Open the dashboard there once and this resolves itself.",
       installed: null,
       lastSeenAt: null,
     };

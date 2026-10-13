@@ -33,7 +33,7 @@ const PLATFORM_LABELS: Record<string, string> = {
  * Per-client manual sync.
  *
  * Primary path: drive the GershonAI Chrome extension via window.postMessage.
- *   The extension's content script (running on social.gershoncrm.com) listens
+ *   The extension's content script (running on social.gershon.ai) listens
  *   for GERSHONAI_SYNC_CLIENT messages and forwards them to its background
  *   service worker, which opens LinkedIn + X tabs and scrapes just this one
  *   client. Real residential IP, real session, full extension flow — same as

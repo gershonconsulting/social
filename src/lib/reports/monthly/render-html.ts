@@ -4,8 +4,9 @@
  * from the same model. Kept well under Gmail's 102 KB clipping limit.
  */
 import type { CategoryModel, CompanyModel, MonthWindow, Tile } from "./model";
+import { siteUrl } from "@/lib/site";
 
-const APP = process.env.NEXT_PUBLIC_APP_URL || "https://social.gershoncrm.com";
+const APP = siteUrl();
 const F = "font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif";
 const K = { red: "#D92D20", ink: "#111317", mut: "#6B7280", rule: "#E4E2DC", tint: "#F5F4F0", good: "#067647", goodb: "#E7F3EC", li: "#0A66C2" };
 const e = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");

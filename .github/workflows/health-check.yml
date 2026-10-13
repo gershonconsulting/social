@@ -16,7 +16,7 @@ jobs:
           response=$(curl -s -o /tmp/health.json -w "%{http_code}" \
             -X POST \
             -H "Authorization: Bearer ${{ secrets.CF_CRON_SECRET }}" \
-            "https://social.gershoncrm.com/api/cron/health-check")
+            "https://social.gershon.ai/api/cron/health-check")
           echo "HTTP $response"
           cat /tmp/health.json | head -c 2000
           echo ""

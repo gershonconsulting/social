@@ -3,12 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { ClientStatus } from "@prisma/client";
 import { resolveFrom } from "@/lib/email/sender";
+import { siteUrl } from "@/lib/site";
 
 /**
- * Collection health-check — a server-side "dead man's switch" for social.gershoncrm.com.
+ * Collection health-check — a server-side "dead man's switch" for social.gershon.ai.
  *
  * Pattern & rationale: see gershonconsulting/radar → HEALTH-CHECK-ALERTS.md
- * (the reusable runbook). This is the social.gershoncrm.com port of it.
+ * (the reusable runbook). This is the social.gershon.ai port of it.
  *
  * WHY: The primary collection path is the Chrome extension running in a
  * logged-in browser. When it dies (browser closed, cookies expired, extension
@@ -48,7 +49,7 @@ import { resolveFrom } from "@/lib/email/sender";
 
 const VERSION = "health-check v1.0.0";
 const THROTTLE_KEY = "health_alert_at";
-const DASHBOARD_URL = "https://social.gershoncrm.com";
+const DASHBOARD_URL = siteUrl();
 const REPLY_TO = "support@gershonconsulting.com";
 
 function num(envVal: string | undefined, fallback: number): number {

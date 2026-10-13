@@ -1,6 +1,6 @@
 // Workspace binding — automatic. (extension 0.12.0)
 //
-// Runs on social.gershoncrm.com pages. Asks the dashboard, with the page's own
+// Runs on social.gershon.ai pages. Asks the dashboard, with the page's own
 // sign-in, which workspace the signed-in person belongs to, and stores that
 // workspace's token. From then on everything this browser collects goes to
 // THAT workspace and no other.

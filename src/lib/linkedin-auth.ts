@@ -11,6 +11,7 @@
  */
 import { encode } from "next-auth/jwt";
 import type { UserRole } from "@prisma/client";
+import { siteUrl } from "@/lib/site";
 
 const SESSION_MAX_AGE = 8 * 60 * 60; // 8h — must match authOptions.session.maxAge
 
@@ -25,7 +26,7 @@ export type LinkedInProfile = {
 export const LOGIN_SCOPES = "openid profile email";
 
 export function appUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL || "https://social.gershoncrm.com";
+  return siteUrl();
 }
 
 /**

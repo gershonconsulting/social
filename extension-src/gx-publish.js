@@ -1,7 +1,7 @@
 // Publishing — posts approved content on LinkedIn AND X from THIS browser.
 // (extension 0.15.0; replaces HeroPost)
 //
-// The dashboard (social.gershoncrm.com/publishing) holds the content, the
+// The dashboard (social.gershon.ai/publishing) holds the content, the
 // client review loop and the calendar. This file does the publishing:
 //
 //   1. KEEP THE CONNECTIONS LIVE.
@@ -36,8 +36,8 @@
 // Loaded before gx-collect.js (gx-boot.js) so it uses the real tab APIs.
 
 (function () {
-  var API = "https://social.gershoncrm.com/api/extension/publish";
-  var COOKIE_SAVE = "https://social.gershoncrm.com/api/cookies/save";
+  var API = "https://social.gershon.ai/api/extension/publish";
+  var COOKIE_SAVE = "https://social.gershon.ai/api/cookies/save";
   var X_LOGIN_URL = "https://x.com/i/flow/login";
   var BEARER = "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA";
 

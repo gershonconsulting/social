@@ -1,4 +1,4 @@
-// Workspace token — what tells social.gershoncrm.com whose data this is.
+// Workspace token — what tells social.gershon.ai whose data this is.
 //
 // One extension, many customers. The token is set AUTOMATICALLY by
 // gx-bridge.js from the dashboard tab you are signed in to (0.12.0). Every
@@ -14,7 +14,7 @@
 // tag ahead of popup.js in popup.html.
 
 (function () {
-  var API_ORIGIN = "https://social.gershoncrm.com";
+  var API_ORIGIN = "https://social.gershon.ai";
   var STORAGE_KEY = "workspaceToken";
 
   var cached = null;      // string | "" once read
@@ -63,7 +63,7 @@
         JSON.stringify({
           success: false,
           code: "token_required",
-          error: "Not connected to a workspace. Open social.gershoncrm.com in this browser and sign in — the extension connects itself.",
+          error: "Not connected to a workspace. Open social.gershon.ai in this browser and sign in — the extension connects itself.",
         }),
         { status: 401, headers: { "content-type": "application/json" } }
       );
@@ -118,7 +118,7 @@
         title.textContent = "Not connected — nothing will be collected";
         detail.style.color = "#b91c1c";
         detail.textContent =
-          "Open social.gershoncrm.com in this browser and sign in. The extension connects itself to your workspace.";
+          "Open social.gershon.ai in this browser and sign in. The extension connects itself to your workspace.";
       }
       wrap.appendChild(title);
       wrap.appendChild(detail);

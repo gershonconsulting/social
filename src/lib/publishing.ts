@@ -30,8 +30,9 @@
 import type { ClientType } from "@prisma/client";
 import prisma from "@/lib/db-raw";
 import { resolveFrom } from "@/lib/email/sender";
+import { siteUrl } from "@/lib/site";
 
-export const SITE = "https://social.gershoncrm.com";
+export const SITE = siteUrl();
 
 /** Publishing is for CAMPAIGN companies and our own INTERNAL ones — Gershon
  *  posts for itself too (Olivier, 2026-10-12). Every

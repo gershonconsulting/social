@@ -214,7 +214,7 @@ function renderHtml(d: DigestData): string {
     return `${header}
     <tr>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;font-weight:600;">
-        <a href="https://social.gershoncrm.com/clients/${c.id}" style="color:#111;text-decoration:none;">${c.name}</a>
+        <a href="https://social.gershon.ai/clients/${c.id}" style="color:#111;text-decoration:none;">${c.name}</a>
       </td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:700;font-size:18px;">${c.newPosts}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;color:#555;">
@@ -249,7 +249,7 @@ function renderHtml(d: DigestData): string {
 <html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:24px;background:#f9fafb;color:#111;">
 <div style="max-width:680px;margin:0 auto;background:white;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
   <div style="background:#FE1B04;color:white;padding:20px 24px;">
-    <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;opacity:0.85;">social.gershoncrm.com</div>
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;opacity:0.85;">social.gershon.ai</div>
     <div style="font-size:22px;font-weight:700;margin-top:4px;">Daily digest — ${day}</div>
   </div>
   <div style="padding:20px 24px;background:#fff8f7;border-bottom:1px solid #fee2dd;">
@@ -287,11 +287,11 @@ function renderHtml(d: DigestData): string {
       </tr>
     </table>
     <div style="margin-top:12px;text-align:center;">
-      <a href="https://social.gershoncrm.com/networks" style="display:inline-block;padding:10px 18px;background:#FE1B04;color:white;font-weight:600;font-size:13px;text-decoration:none;border-radius:8px;">Open Networks page →</a>
+      <a href="https://social.gershon.ai/networks" style="display:inline-block;padding:10px 18px;background:#FE1B04;color:white;font-weight:600;font-size:13px;text-decoration:none;border-radius:8px;">Open Networks page →</a>
     </div>
   </div>
   <div style="padding:14px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:11px;color:#999;">
-    Generated ${fmtDate(d.generatedAt)} · <a href="https://social.gershoncrm.com" style="color:#6b7280;">social.gershoncrm.com</a> · v${(process.env.NEXT_PUBLIC_APP_VERSION || "dev").slice(0, 7)}
+    Generated ${fmtDate(d.generatedAt)} · <a href="https://social.gershon.ai" style="color:#6b7280;">social.gershon.ai</a> · v${(process.env.NEXT_PUBLIC_APP_VERSION || "dev").slice(0, 7)}
   </div>
 </div>
 </body></html>

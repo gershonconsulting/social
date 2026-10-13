@@ -4,7 +4,7 @@ export const runtime = "edge";
  *
  * How the Chrome extension learns which workspace it collects for — without
  * anybody pasting anything. The extension's content script runs on
- * social.gershoncrm.com pages, calls this with the page's own sign-in cookie,
+ * social.gershon.ai pages, calls this with the page's own sign-in cookie,
  * and stores the token it gets back. So the workspace an install collects for
  * is ALWAYS the workspace of the person signed in to the dashboard in that
  * browser. Sign in as Dmitri → VALOS. Sign in as Olivier → Gershon.

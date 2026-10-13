@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     description:
       "Companies → Collection → Proof. Social turns what your clients actually published on LinkedIn and X into a daily compliance picture and a monthly report.",
     type: "website",
-    url: "https://social.gershoncrm.com",
+    url: "https://social.gershon.ai",
   },
 };
 

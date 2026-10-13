@@ -6,7 +6,7 @@
  * report need these.
  *
  * The GershonAI Chrome extension already announces itself to every
- * social.gershoncrm.com page (content.js posts GERSHONAI_HELLO and answers
+ * social.gershon.ai page (content.js posts GERSHONAI_HELLO and answers
  * GERSHONAI_PING with chrome.runtime.getManifest().version). Until now the
  * server never learned about it, so nothing outside the browser could tell
  * whether a stale build was still installed. ExtensionSeenReporter (mounted

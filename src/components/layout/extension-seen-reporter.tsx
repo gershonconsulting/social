@@ -7,7 +7,7 @@ import { useEffect } from "react";
  * Chrome extension is actually installed and tells the server.
  *
  * The extension's content script already announces itself on every
- * social.gershoncrm.com page: it posts GERSHONAI_HELLO on load and answers a
+ * social.gershon.ai page: it posts GERSHONAI_HELLO on load and answers a
  * GERSHONAI_PING with GERSHONAI_PONG. Both carry
  * chrome.runtime.getManifest().version. We listen for either (HELLO can fire
  * before React mounts, so we ping too) and forward the version to

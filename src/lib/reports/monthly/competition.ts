@@ -18,6 +18,7 @@
  */
 import { MrPdf, strWidth as W, type RGB } from "./pdf-writer";
 import type { CategoryData, CompanyMonth, MonthWindow, ReportPost } from "./model";
+import { siteUrl } from "@/lib/site";
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
 const one = (n: number) => (Math.round(n * 10) / 10).toFixed(1).replace(/\.0$/, "");
@@ -245,7 +246,7 @@ export function competitionSubject(win: MonthWindow, m: CompetitionModel): strin
 }
 
 export function competitionHtml(win: MonthWindow, m: CompetitionModel, build: string): string {
-  const app = process.env.NEXT_PUBLIC_APP_URL || "https://social.gershoncrm.com";
+  const app = siteUrl();
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:0;background:${K.tint}">
 <div style="display:none;max-height:0;overflow:hidden">${e(m.lead)}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${K.tint};${F}"><tr><td align="center" style="padding:24px 12px">

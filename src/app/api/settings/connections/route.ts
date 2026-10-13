@@ -1,6 +1,7 @@
 export const runtime = 'edge';
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { siteUrl } from "@/lib/site";
 
 /**
  * GET /api/settings/connections
@@ -66,7 +67,7 @@ export async function GET() {
           linkedinSecretConfigured: !!process.env.LINKEDIN_CLIENT_SECRET,
           googleConfigured: false,
           googleSecretConfigured: false,
-          appUrl: process.env.NEXT_PUBLIC_APP_URL || "https://social.gershoncrm.com",
+          appUrl: siteUrl(),
         },
       },
     });

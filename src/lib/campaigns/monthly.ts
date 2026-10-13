@@ -32,8 +32,9 @@
 
 import prisma from "@/lib/db";
 import { ClientStatus, ClientType, ComplianceStatus, PostingMode } from "@prisma/client";
+import { siteUrl } from "@/lib/site";
 
-export const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://social.gershoncrm.com";
+export const APP_URL = siteUrl();
 export const REPORT_API_VERSION = 1;
 
 export type Basis = "compliance" | "derived";

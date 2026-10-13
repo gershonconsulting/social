@@ -14,7 +14,7 @@
 //        - opens linkedin.com/login in the window you are using, so the
 //          password manager (1Password) can fill it in one click;
 //        - shows a desktop notification and a red "IN" badge;
-//        - tells social.gershoncrm.com, which emails the person once.
+//        - tells social.gershon.ai, which emails the person once.
 //      The voice repeats every 10 minutes, at most 6 times, while signed out.
 //   3. When li_at comes back, everything clears and the server is told.
 //
@@ -30,7 +30,7 @@
 // page should go.
 
 (function () {
-  var API = "https://social.gershoncrm.com/api/extension/linkedin-session";
+  var API = "https://social.gershon.ai/api/extension/linkedin-session";
   var LOGIN_URL = "https://www.linkedin.com/login";
   var STATE_KEY = "liWatch";
   var NAG_ALARM = "li-watch-nag";

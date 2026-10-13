@@ -24,7 +24,7 @@ jobs:
     steps:
       - name: Send posting alert
         run: |
-          URL="https://social.gershoncrm.com/api/cron/posting-alert"
+          URL="https://social.gershon.ai/api/cron/posting-alert"
           if [ -n "${{ github.event.inputs.kind }}" ]; then
             URL="$URL?kind=${{ github.event.inputs.kind }}"
           fi

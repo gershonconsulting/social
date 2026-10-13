@@ -52,8 +52,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           echo "${{ secrets.CF_DATABASE_URL }}" | npx wrangler pages secret put DATABASE_URL --project-name gershoncrm-social
-          echo "https://social.gershoncrm.com" | npx wrangler pages secret put NEXTAUTH_URL --project-name gershoncrm-social
-          echo "https://social.gershoncrm.com" | npx wrangler pages secret put NEXT_PUBLIC_APP_URL --project-name gershoncrm-social
+          echo "https://social.gershon.ai" | npx wrangler pages secret put NEXTAUTH_URL --project-name gershoncrm-social
+          echo "https://social.gershon.ai" | npx wrangler pages secret put NEXT_PUBLIC_APP_URL --project-name gershoncrm-social
           echo "${{ secrets.CF_NEXTAUTH_SECRET }}" | npx wrangler pages secret put NEXTAUTH_SECRET --project-name gershoncrm-social
           echo "${{ secrets.CF_CRON_SECRET }}" | npx wrangler pages secret put CRON_SECRET --project-name gershoncrm-social
           echo "${{ secrets.CF_CAMPAIGN_API_KEY }}" | npx wrangler pages secret put CAMPAIGN_API_KEY --project-name gershoncrm-social

@@ -199,7 +199,7 @@ export function ExtensionPageClient({ latest }: { latest: string }) {
           <li>Unzip the file into a folder you keep.</li>
           <li>Open <code>chrome://extensions</code> and switch on Developer mode.</li>
           <li>New install: <strong>Load unpacked</strong> and pick the folder. Update: replace the folder&apos;s files, then press the reload arrow on the Social card.</li>
-          <li>Open social.gershoncrm.com in that Chrome while signed in. The extension connects itself to your workspace — the popup then shows <strong>Collecting for: &lt;your workspace&gt;</strong>.</li>
+          <li>Open social.gershon.ai in that Chrome while signed in. The extension connects itself to your workspace — the popup then shows <strong>Collecting for: &lt;your workspace&gt;</strong>.</li>
         </ol>
       </Card>
 

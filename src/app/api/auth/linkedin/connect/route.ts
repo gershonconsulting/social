@@ -1,5 +1,6 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
+import { siteUrl } from "@/lib/site";
 
 /**
  * GET /api/auth/linkedin/connect
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
   const connectionId = request.nextUrl.searchParams.get("connectionId") || "";
 
   const linkedinClientId = process.env.LINKEDIN_CLIENT_ID;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://social.gershoncrm.com";
+  const appUrl = siteUrl();
 
   if (!linkedinClientId) {
     return NextResponse.redirect(

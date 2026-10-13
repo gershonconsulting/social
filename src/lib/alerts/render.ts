@@ -4,6 +4,7 @@
  */
 
 import { fmtDate, type AlertCompany, type PostingAlert } from "./posting-alerts";
+import { siteUrl } from "@/lib/site";
 
 const RED = "#FE1B04";
 const INK = "#111827";
@@ -48,7 +49,7 @@ function companyRow(c: AlertCompany, appUrl: string): string {
 }
 
 export function renderAlertBody(a: PostingAlert): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://social.gershoncrm.com";
+  const appUrl = siteUrl();
   const kindLabel = a.kind === "week" ? "Weekly posting check" : "Monthly posting check";
   const t = tone(a.totals.attainmentPct);
 

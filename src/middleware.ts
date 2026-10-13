@@ -36,6 +36,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
+import { LEGACY_HOSTS, SITE_HOST } from "@/lib/site";
 
 /**
  * Called by something that is not a browser holding a login, and that proves
@@ -71,8 +72,30 @@ function startsWithAny(pathname: string, prefixes: string[]): boolean {
   return prefixes.some((p) => pathname === p || pathname.startsWith(p));
 }
 
+/**
+ * v4.43.0 — the app now lives at social.gershon.ai. On the old host
+ * (social.gershoncrm.com) every PAGE, and every GET under /api/auth/ (so a
+ * LinkedIn sign-in starts and finishes on the same host), is permanently
+ * redirected to the same path on the new host. The rest of /api/* is still
+ * served on the old host so not-yet-updated extensions, the scheduled jobs and
+ * client.gershoncrm.com keep working.
+ */
+function legacyRedirect(req: NextRequest): NextResponse | null {
+  const host = (req.headers.get("host") || "").toLowerCase().split(":")[0];
+  if (!LEGACY_HOSTS.includes(host)) return null;
+  const { pathname, search } = req.nextUrl;
+  const isApi = pathname.startsWith("/api/");
+  const isAuthGet = req.method === "GET" && pathname.startsWith("/api/auth/");
+  if (isApi && !isAuthGet) return null;
+  if (!isApi && req.method !== "GET" && req.method !== "HEAD") return null;
+  return NextResponse.redirect(`https://${SITE_HOST}${pathname}${search}`, 308);
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  const moved = legacyRedirect(req);
+  if (moved) return moved;
 
   if (!pathname.startsWith("/api/")) return NextResponse.next();
   if (startsWithAny(pathname, AUTH_PATHS)) return NextResponse.next();
@@ -95,6 +118,7 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // Everything under /api. Static assets and pages are untouched.
-  matcher: ["/api/:path*"],
+  // Pages (for the old-domain redirect) and everything under /api (for the
+  // session gate). Next's own build assets are left alone.
+  matcher: ["/((?!_next/static|_next/image).*)"],
 };

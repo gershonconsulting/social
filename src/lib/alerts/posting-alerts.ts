@@ -27,10 +27,11 @@
 
 import prisma from "@/lib/db";
 import { ClientStatus, ClientType, ComplianceStatus, PostingMode } from "@prisma/client";
+import { siteUrl } from "@/lib/site";
 
 export const SENT_KEY = "posting_alert_sent";
 export const DEFAULT_TO = "social@gershonconsulting.com";
-export const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://social.gershoncrm.com";
+export const APP_URL = siteUrl();
 
 export type PeriodKind = "week" | "month";
 export type Basis = "compliance" | "derived";

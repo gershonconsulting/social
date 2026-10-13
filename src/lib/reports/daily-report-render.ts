@@ -9,9 +9,10 @@
  */
 
 import type { DailyReport, Metric } from "./daily-report";
+import { siteUrl } from "@/lib/site";
 
 const RED = "#FE1B04";
-const SITE = "https://social.gershoncrm.com";
+const SITE = siteUrl();
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

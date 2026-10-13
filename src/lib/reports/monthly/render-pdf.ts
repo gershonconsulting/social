@@ -190,7 +190,7 @@ export function categoryPdf(win: MonthWindow, m: CategoryModel, build: string): 
     y -= 22;
     p.text(M, y, clip(`Each company's own one-page report was also sent to ${m.delivered.join(", ")}.`, 7, false, CW), 7, false, C.MUT);
   }
-  foot(p, `Social · Gershon.AI  ·  ${m.label}  ·  social.gershoncrm.com`, build);
+  foot(p, `Social · Gershon.AI  ·  ${m.label}  ·  social.gershon.ai`, build);
   return p;
 }
 

@@ -84,7 +84,7 @@ export function Landing({
           </div>
 
           <div className="mock">
-            <div className="bar"><i /><i /><i /><span className="u">social.gershoncrm.com/dashboard</span></div>
+            <div className="bar"><i /><i /><i /><span className="u">social.gershon.ai/dashboard</span></div>
             <div className="flow">
               <div className="stage">
                 <h4>1 · Companies</h4>

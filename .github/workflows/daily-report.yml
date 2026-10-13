@@ -20,7 +20,7 @@ jobs:
       - name: POST /api/report/daily
         run: |
           code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
-            -X POST 'https://social.gershoncrm.com/api/report/daily' \
+            -X POST 'https://social.gershon.ai/api/report/daily' \
             -H "Authorization: Bearer ${{ secrets.CF_CRON_SECRET }}")
           echo "HTTP $code"
           cat /tmp/out.json
