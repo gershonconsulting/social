@@ -4,7 +4,7 @@
  * Background collection (v4.44.0, extension 0.19.0).
  *
  * The dashboard asks; a Chrome running the extension does the work. Requests
- * go to a queue on the server (/api/collect/request); every listening Chrome
+ * go to a queue on the server (/api/collect/request, /api/collect/queue); every listening Chrome
  * checks it once a minute, takes the job and reports back. Works from any
  * browser — this one does not need the extension.
  */
@@ -37,7 +37,7 @@ export async function requestBackgroundCollection(clientId: string | null): Prom
 }
 
 export async function fetchQueue(jobId?: string): Promise<QueueView> {
-  const r = await fetch("/api/collect/status" + (jobId ? `?id=${encodeURIComponent(jobId)}` : ""), { cache: "no-store" });
+  const r = await fetch("/api/collect/queue" + (jobId ? `?id=${encodeURIComponent(jobId)}` : ""), { cache: "no-store" });
   const j = await r.json().catch(() => null);
   if (!r.ok || !j?.success) throw new Error(j?.error || `HTTP ${r.status}`);
   return j.data;
