@@ -126,6 +126,9 @@
     return result;
   }
 
+  // 0.19.0: lets gx-remote.js wait while a collection is already running.
+  self.gxCollectRunning = function () { return running > 0; };
+
   self.runFullSync = function (opts) {
     var p = queue.then(function () { return guardedRun(opts); });
     queue = p.catch(function () {});

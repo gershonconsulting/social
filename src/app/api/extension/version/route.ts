@@ -16,6 +16,7 @@ import { EXTENSION_LATEST, EXTENSION_ZIP_URL } from "@/lib/extension-version";
 const LATEST = EXTENSION_LATEST;
 
 const RELEASE_NOTES: Record<string, string> = {
+  "0.19.0": "Works in the background on request. Every minute the extension checks social.gershon.ai for a collection someone asked for — from any browser or a phone, no dashboard tab needed here — then collects in its own window and reports back. The dashboard now shows which Chromes are listening and the extension version each one runs.",
   "0.18.0": "New address. The dashboard moved to social.gershon.ai. The extension now works on that address (and still recognises the old social.gershoncrm.com pages), so collection and publishing carry on without a break. Open social.gershon.ai once in this browser while signed in and the extension reconnects itself.",
   "0.17.0": "Client publishing. A company can now publish its approved posts from its OWN Chrome: open the private link Gershon sends you (social.gershon.ai/connect/…) and this extension connects to that company only. It then publishes only that company's approved posts at their scheduled time, and collects nothing. Your LinkedIn and X sessions never leave your browser.",
   "0.16.0": "Pictures. Every post approved on social.gershon.ai/publishing now goes out on LinkedIn and X with its picture (one per post): the extension attaches it in each network's own post box, waits until it is uploaded, and only then presses Post. If the picture cannot be attached, nothing is posted and it is retried.",

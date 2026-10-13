@@ -1,9 +1,9 @@
 "use client";
 
-import { useCollectingMode } from "@/lib/collecting-mode";
 
 import { useState, useEffect, useRef } from "react";
-import { RefreshCw, Loader2, CheckCircle2, AlertTriangle, Info, Chrome } from "lucide-react";
+import { Loader2, CheckCircle2, AlertTriangle, Info, Chrome, Radio } from "lucide-react";
+import { useJobFollower, jobLine, JobIcon } from "@/components/extension/background-collector";
 
 interface PlatformResult {
   platform: string;
@@ -48,7 +48,6 @@ const PLATFORM_LABELS: Record<string, string> = {
  *   the extension path. Otherwise we render the Phantombuster path.
  */
 export function ClientSyncButton({ clientId }: { clientId: string }) {
-  const [collecting] = useCollectingMode();
   const [extensionVersion, setExtensionVersion] = useState<string | null>(null);
   const [extensionChecked, setExtensionChecked] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -57,6 +56,8 @@ export function ClientSyncButton({ clientId }: { clientId: string }) {
   const [topLevelError, setTopLevelError] = useState<string | null>(null);
   const [showResults, setShowResults] = useState(false);
   const requestIdRef = useRef<string | null>(null);
+  // v4.44.0 — no extension in THIS browser: queue it for a Chrome that has one.
+  const bg = useJobFollower();
 
   // Probe for the extension on mount.
   useEffect(() => {
@@ -171,30 +172,51 @@ export function ClientSyncButton({ clientId }: { clientId: string }) {
   return (
     <div className="relative inline-block">
       <div className="flex items-center gap-2">
+        {extensionChecked && !hasExtension ? (
+          <button
+            onClick={() => { setShowResults(true); void bg.start(clientId); }}
+            disabled={bg.active}
+            title="Ask a Chrome that has the extension to collect this company in the background. Works from any browser."
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60"
+          >
+            {bg.active ? <Loader2 size={14} className="animate-spin" /> : <Radio size={14} />}
+            {bg.active ? (bg.job?.status === "running" ? "Collecting in the background…" : "Queued…") : "Collect in the background"}
+          </button>
+        ) : (
         <button
           onClick={hasExtension ? handleSyncViaExtension : undefined}
           disabled={loading || !extensionChecked || !hasExtension}
-          title={
-            hasExtension
-              ? "Drive the GershonAI extension to scrape this client's LinkedIn + X in your browser"
-              : collecting
-              ? "Install the GershonAI Chrome extension to enable this"
-              : "This computer is viewing only — run this from the computer that has the extension"
-          }
+          title="Drive the extension in this browser to collect this company's LinkedIn + X now"
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-60"
         >
           {loading ? <Loader2 size={14} className="animate-spin" /> : <Chrome size={14} />}
-          {loading
-            ? "Scraping in your browser…"
-            : hasExtension
-            ? "Sync via extension"
-            : extensionChecked
-            ? (collecting ? "Install extension to sync" : "Viewing only on this computer")
-            : "Detecting extension…"}
+          {loading ? "Scraping in your browser…" : hasExtension ? "Sync via extension" : "Detecting extension…"}
         </button>
+        )}
       </div>
 
-      {showResults && (loading || results || summary || topLevelError) && (
+      {showResults && !hasExtension && (bg.job || bg.error) && (
+        <div className="absolute right-0 top-full mt-2 z-30 w-80 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <span className="text-sm font-semibold text-gray-900">Background collection</span>
+            {!bg.active && (
+              <button onClick={() => setShowResults(false)} className="text-xs text-gray-400 hover:text-gray-600">Close</button>
+            )}
+          </div>
+          <div className="px-4 py-3 text-sm text-gray-700 flex items-start gap-2">
+            {bg.error ? (
+              <><AlertTriangle size={14} className="text-[#FE1B04] mt-0.5" /> <span>{bg.error}</span></>
+            ) : bg.job ? (
+              <><span className="mt-0.5"><JobIcon status={bg.job.status} /></span> <span>{jobLine(bg.job, bg.listening)}</span></>
+            ) : null}
+          </div>
+          <div className="px-4 py-2 text-[11px] text-gray-500 bg-gray-50 border-t border-gray-100">
+            Runs in a Chrome that has the extension — see <a href="/extension" className="underline">Extension</a> for which ones are listening.
+          </div>
+        </div>
+      )}
+
+      {showResults && hasExtension && (loading || results || summary || topLevelError) && (
         <div className="absolute right-0 top-full mt-2 z-30 w-80 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <span className="text-sm font-semibold text-gray-900">

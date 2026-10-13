@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, Copy, Download, Loader2, Play, Puzzle, XCircle, AlertTriangle } from "lucide-react";
 import { EXTENSION_ZIP_URL, EXTENSION_ZIP_NAME } from "@/lib/extension-version";
+import { BackgroundCollectorCard } from "@/components/extension/background-collector";
 
 type Detect = { state: "checking" } | { state: "missing" } | { state: "found"; version: string };
 type Company = { id: string; name: string; clientType: string; platforms: string[] };
@@ -220,7 +221,9 @@ export function ExtensionPageClient({ latest }: { latest: string }) {
         <p className="text-xs text-gray-500 mt-2">This key tells the extension which workspace its posts belong to.</p>
       </Card>
 
-      <Card title="Collect now">
+      <BackgroundCollectorCard latest={latest} />
+
+      <Card title="Collect now, from this browser">
         {companies === null ? (
           <div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 size={16} className="animate-spin" /> Loading companies…</div>
         ) : companies.length === 0 ? (
