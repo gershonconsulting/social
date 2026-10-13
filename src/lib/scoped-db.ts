@@ -173,8 +173,35 @@ export async function getCurrentOrgId(): Promise<string | null> {
   return (await resolveOrg()).orgId;
 }
 
+/**
+ * findFirst does not accept a compound-unique selector such as
+ * `{ clientId_windowDays: { clientId, windowDays } }` — only findUnique /
+ * upsert do. Because this layer turns findUnique into findFirst (and checks
+ * ownership with findFirst), such a key must be spread into its plain fields:
+ * `{ clientId, windowDays }`. A key is compound when its name is exactly its
+ * object's field names joined by "_" (Prisma's naming rule for @@unique).
+ * Without this, Content Intelligence failed with
+ * "Unknown argument `clientId_windowDays`" (2026-10-13).
+ */
+export function flattenCompoundUnique(where: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(where)) {
+    if (
+      k.includes("_") &&
+      v && typeof v === "object" && !Array.isArray(v) && !(v instanceof Date) &&
+      Object.keys(v as object).length > 1 &&
+      Object.keys(v as object).join("_") === k
+    ) {
+      Object.assign(out, v as Record<string, unknown>);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
 function mergeWhere(args: Record<string, unknown>, orgId: string): Record<string, unknown> {
-  const where = (args.where ?? {}) as Record<string, unknown>;
+  const where = flattenCompoundUnique((args.where ?? {}) as Record<string, unknown>);
   return { ...args, where: { ...where, organizationId: orgId } };
 }
 
@@ -257,7 +284,7 @@ function buildScoped(orgId: string) {
             // merged into it: the query would match another tenant's row by id
             // or by a unique key and happily write to it. So look the row up
             // first, unscoped, and decide.
-            const where = (a.where ?? {}) as Record<string, unknown>;
+            const where = flattenCompoundUnique((a.where ?? {}) as Record<string, unknown>);
             const existing = (await (
               prisma[toDelegate(model)] as unknown as {
                 findFirst: (x: unknown) => Promise<unknown>;

@@ -280,7 +280,6 @@ export default function AdminPage() {
             ? `“${name}” was created, but: ${warnings.join(" ")}`
             : `“${name}” was created.`
         );
-        void syncPhantombusterSheet();
         return;
       }
 
@@ -297,7 +296,6 @@ export default function AdminPage() {
         resetCreateForm();
         loadClients();
         setSyncMsg(`“${name}” was created. (The server hiccuped on the way back, but the company is saved.)`);
-        void syncPhantombusterSheet();
         return;
       }
 
@@ -308,23 +306,12 @@ export default function AdminPage() {
         resetCreateForm();
         loadClients();
         setSyncMsg(`“${name}” was created. (The connection dropped on the way back, but the company is saved.)`);
-        void syncPhantombusterSheet();
         return;
       }
       setFormError("Network error creating company. Please try again.");
     } finally {
       setCreating(false);
     }
-  }
-
-  // Rebuild the Phantombuster source spreadsheet after a create. Fired from the
-  // browser rather than as an un-awaited self-fetch inside the API route: on the
-  // Cloudflare edge runtime that dangling fetch could abort the create response
-  // itself. Failure here is invisible and harmless — the nightly job re-syncs.
-  async function syncPhantombusterSheet() {
-    try {
-      await fetch("/api/admin/sheets-sync", { method: "POST" });
-    } catch { /* non-fatal */ }
   }
 
   function handleCancel() {

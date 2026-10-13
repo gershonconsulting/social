@@ -1,8 +1,8 @@
 name: Streak Client Sync
 
+# Retired 2026-10-13: Olivier — "we don't need Streak". Schedule removed; the
+# manual trigger is kept only so the job can be re-enabled without rewriting it.
 on:
-  schedule:
-    - cron: '30 5 * * *'   # 05:30 UTC — 30 min before the daily-sync cron
   workflow_dispatch:
 
 jobs:
