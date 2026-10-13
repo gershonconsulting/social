@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertOctagon, Download } from "lucide-react";
 import { useCollectingMode } from "@/lib/collecting-mode";
+import { EXTENSION_ZIP_URL, EXTENSION_ZIP_NAME } from "@/lib/extension-version";
 
 type State = { kind: "checking" } | { kind: "missing" } | { kind: "found"; version: string };
 
@@ -66,7 +67,7 @@ export function ExtensionInstallBanner({ latest }: { latest: string }) {
         Without it, no new LinkedIn or X posts are collected.{" "}
         <Link href="/extension" className="underline font-semibold">How to install</Link>
       </div>
-      <a href="/social-extension.zip" download
+      <a href={EXTENSION_ZIP_URL} download={EXTENSION_ZIP_NAME}
         className="shrink-0 inline-flex items-center gap-2 bg-white text-[#FE1B04] text-sm font-semibold rounded-lg px-3 py-1.5">
         <Download size={15} /> Download v{latest}
       </a>

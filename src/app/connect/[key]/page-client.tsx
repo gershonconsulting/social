@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, Download, Loader2, XCircle } from "lucide-react";
+import { EXTENSION_ZIP_URL, EXTENSION_ZIP_NAME } from "@/lib/extension-version";
 
 type Data = {
   client: string; logoUrl: string | null; linkedinUrl: string | null; xHandle: string | null; latest: string;
@@ -81,7 +82,7 @@ export function ConnectClient({ keyId }: { keyId: string }) {
           {(ext.state === "missing" || tooOld) && (
             <>
               <div className="flex items-center gap-2 text-red-700"><XCircle size={16} /> {tooOld ? `Version ${ext.version} is too old — update to ${data.latest}.` : "Not installed in this browser."}</div>
-              <a href="/social-extension.zip" download className="inline-flex items-center gap-2 rounded-lg bg-[#FE1B04] text-white font-semibold px-4 py-2">
+              <a href={EXTENSION_ZIP_URL} download={EXTENSION_ZIP_NAME} className="inline-flex items-center gap-2 rounded-lg bg-[#FE1B04] text-white font-semibold px-4 py-2">
                 <Download size={16} /> Download v{data.latest}
               </a>
               <ol className="list-decimal pl-5 space-y-1 text-gray-600">

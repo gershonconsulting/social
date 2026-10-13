@@ -7,6 +7,7 @@ import {
   UserPlus, Loader2, Trash2, ShieldCheck, Download, Linkedin, Mail, KeyRound,
   Check, X, Globe, Clock, LogIn, BadgeCheck, ChevronDown, ChevronRight, UserCheck, Building2,
 } from "lucide-react";
+import { EXTENSION_ZIP_URL, EXTENSION_ZIP_NAME } from "@/lib/extension-version";
 
 type Role = "ADMIN" | "OPERATIONS" | "READ_ONLY";
 type RegistrationMode = "approval" | "open";
@@ -474,7 +475,7 @@ export default function UsersAdminClient() {
               Download the zip, unzip it, then in <code className="bg-gray-100 px-1 rounded">chrome://extensions</code> →
               Developer mode → <strong>Load unpacked</strong> → pick the unzipped folder.
             </div>
-            <a href="/gershonai-extension.zip" download
+            <a href={EXTENSION_ZIP_URL} download={EXTENSION_ZIP_NAME}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-[#0A66C2] hover:bg-[#004182] rounded-lg">
               <Download size={14} /> Download extension (.zip)
             </a>

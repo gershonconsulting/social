@@ -11,6 +11,7 @@ import { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Check, Download, Loader2 } from "lucide-react";
+import { EXTENSION_ZIP_URL, EXTENSION_ZIP_NAME } from "@/lib/extension-version";
 
 const POINTS = [
   "Daily collection from LinkedIn and X",
@@ -162,8 +163,8 @@ export default function LoginPage() {
         </div>
 
         <a
-          href="/social-extension.zip"
-          download
+          href={EXTENSION_ZIP_URL}
+          download={EXTENSION_ZIP_NAME}
           className="mt-6 inline-flex items-center gap-1.5 text-[13px] font-medium text-gray-600 hover:text-gray-900"
         >
           <Download size={14} />

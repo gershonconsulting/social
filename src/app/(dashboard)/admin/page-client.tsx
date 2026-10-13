@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/header";
 import { Plus, Loader2, RefreshCw, Archive, RotateCcw, Globe, Search, Pencil, Check, X, ExternalLink, Trash2 } from "lucide-react";
 import { slugify, formatDate, formatRelative, PLATFORM_LABELS } from "@/lib/utils";
 import { ConnectionBadge } from "@/components/ui/connection-badge";
+import { EXTENSION_ZIP_URL, EXTENSION_ZIP_NAME } from "@/lib/extension-version";
 
 interface LatestPost {
   snippet: string | null;
@@ -445,8 +446,8 @@ export default function AdminPage() {
         subtitle="Company Management, platform connections, and system controls"
         actions={
           <a
-            href="/gershonai-extension.zip"
-            download="gershonai-extension.zip"
+            href={EXTENSION_ZIP_URL}
+            download={EXTENSION_ZIP_NAME}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
           >
             ⬇️ Download GershonAI extension

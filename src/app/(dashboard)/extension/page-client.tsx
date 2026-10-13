@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, Copy, Download, Loader2, Play, Puzzle, XCircle, AlertTriangle } from "lucide-react";
+import { EXTENSION_ZIP_URL, EXTENSION_ZIP_NAME } from "@/lib/extension-version";
 
 type Detect = { state: "checking" } | { state: "missing" } | { state: "found"; version: string };
 type Company = { id: string; name: string; clientType: string; platforms: string[] };
@@ -169,7 +170,7 @@ export function ExtensionPageClient({ latest }: { latest: string }) {
               <XCircle size={18} className="text-[#FE1B04]" />
               Not installed in this browser — no LinkedIn or X posts are collected from here.
             </div>
-            <a href="/social-extension.zip" download
+            <a href={EXTENSION_ZIP_URL} download={EXTENSION_ZIP_NAME}
               className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[#FE1B04] text-white text-sm font-semibold px-4 py-2">
               <Download size={16} /> Download v{latest}
             </a>
@@ -191,7 +192,7 @@ export function ExtensionPageClient({ latest }: { latest: string }) {
       </Card>
 
       <Card title={`Download v${latest}`}>
-        <a href="/social-extension.zip" download
+        <a href={EXTENSION_ZIP_URL} download={EXTENSION_ZIP_NAME}
           className="inline-flex items-center gap-2 rounded-lg bg-[#FE1B04] text-white text-sm font-semibold px-4 py-2">
           <Download size={16} /> Download the extension
         </a>

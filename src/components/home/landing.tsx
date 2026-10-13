@@ -1,5 +1,6 @@
 import { SocialMark } from "@/components/brand/social-mark";
 import { landingStyles } from "./landing-styles";
+import { EXTENSION_ZIP_URL, EXTENSION_ZIP_NAME } from "@/lib/extension-version";
 
 const LinkedInIcon = () => (
   <svg className="li" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -173,7 +174,7 @@ export function Landing({
                   <div className="extbox-meta">Version <b>{extensionVersion}</b> · ~42 KB · Chrome &amp; Edge (Chromium)</div>
                 </div>
               </div>
-              <a className="btn btn-primary extbox-dl" href="/social-extension.zip" download>
+              <a className="btn btn-primary extbox-dl" href={EXTENSION_ZIP_URL} download={EXTENSION_ZIP_NAME}>
                 <DownloadIcon />
                 Download the extension
               </a>

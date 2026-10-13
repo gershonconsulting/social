@@ -25,7 +25,7 @@
 
 import prisma from "@/lib/db";
 import { isPageProblem, PAGE_UNAVAILABLE } from "@/lib/linkedin-page-check";
-import { EXTENSION_LATEST } from "@/lib/extension-version";
+import { EXTENSION_LATEST, EXTENSION_ZIP_URL } from "@/lib/extension-version";
 import { readExtSeen, semverLt, type ExtSeen } from "@/lib/extension/seen";
 import { readHeartbeat } from "@/lib/extension/heartbeat";
 import { etDayKey, etDayLabel, etDayShort, etMidnight } from "./et-days";
@@ -446,7 +446,7 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
 function buildExtensionBlock(seen: ExtSeen | null, now: Date): DailyReport["extension"] {
   const base = {
     latest: EXTENSION_LATEST,
-    downloadUrl: `${SITE}/gershonai-extension.zip`,
+    downloadUrl: `${SITE}${EXTENSION_ZIP_URL}`,
     localPath: LOCAL_EXT_PATH,
   };
   if (!seen) {

@@ -1,6 +1,6 @@
 export const runtime = 'edge';
 import { NextResponse } from "next/server";
-import { EXTENSION_LATEST } from "@/lib/extension-version";
+import { EXTENSION_LATEST, EXTENSION_ZIP_URL } from "@/lib/extension-version";
 
 /**
  * GET /api/extension/version
@@ -10,7 +10,7 @@ import { EXTENSION_LATEST } from "@/lib/extension-version";
  * "Update available" banner if installed < latest.
  *
  * Bump LATEST whenever a new version of the extension files is published
- * to public/gershonai-extension.zip. Keep semver — popup does a numeric
+ * to public/social-extension-v<version>.zip. Keep semver — popup does a numeric
  * dot-segment compare.
  */
 const LATEST = EXTENSION_LATEST;
@@ -47,6 +47,7 @@ export async function GET() {
     success: true,
     data: {
       latest: LATEST,
+      downloadUrl: EXTENSION_ZIP_URL,
       releaseNotes: RELEASE_NOTES[LATEST] ?? "",
       updateInstructions: "Open chrome://extensions/ and click the reload icon on the GershonAI card.",
     },

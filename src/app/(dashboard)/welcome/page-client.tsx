@@ -37,6 +37,7 @@ import {
   Sparkles,
   Pencil,
 } from "lucide-react";
+import { EXTENSION_ZIP_URL } from "@/lib/extension-version";
 
 type Steps = {
   nameWorkspace: boolean;
@@ -448,7 +449,7 @@ export function WelcomePageClient() {
           <ol className="text-sm text-gray-700 space-y-2 list-decimal pl-4 leading-relaxed">
             <li>
               <a
-                href="/gershonai-extension.zip"
+                href={EXTENSION_ZIP_URL}
                 className="inline-flex items-center gap-1.5 text-[#FE1B04] font-medium"
               >
                 <Download size={13} /> Download the extension

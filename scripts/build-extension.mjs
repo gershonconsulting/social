@@ -34,6 +34,25 @@ const ZIP_PATH = "public/gershonai-extension.zip";
 const SRC_DIR = "extension-src";
 const PUBLIC_ZIP = "public/social-extension.zip";
 
+/**
+ * The versioned download — social-extension-v<version>.zip — like the other
+ * Gershon extensions (radar-extension-v1.15.0.zip). The version comes from
+ * extension-src/manifest.json and must equal EXTENSION_LATEST in
+ * src/lib/extension-version.ts, because every download link on the site is
+ * built from that constant. A mismatch would ship links to a file that does
+ * not exist, so it stops the build instead.
+ */
+const MANIFEST_VERSION = JSON.parse(readFileSync(join(SRC_DIR, "manifest.json"), "utf8")).version;
+const LATEST_MATCH = readFileSync("src/lib/extension-version.ts", "utf8").match(/EXTENSION_LATEST\s*=\s*"([^"]+)"/);
+const LATEST = LATEST_MATCH ? LATEST_MATCH[1] : null;
+if (!MANIFEST_VERSION || MANIFEST_VERSION !== LATEST) {
+  console.error(
+    `extension: manifest version ${MANIFEST_VERSION} != EXTENSION_LATEST ${LATEST} — bump both together.`,
+  );
+  process.exit(1);
+}
+const VERSIONED_ZIP = `public/social-extension-v${MANIFEST_VERSION}.zip`;
+
 /* ---------- read ---------- */
 
 /** Every entry of a zip, as { name, data }, via the central directory. */
@@ -202,8 +221,9 @@ try {
   const built = writeZip(ordered);
   writeFileSync(ZIP_PATH, built);
   writeFileSync(PUBLIC_ZIP, built);
+  writeFileSync(VERSIONED_ZIP, built);
   console.log(
-    `extension: ${ordered.length} files (${replaced} replaced, ${added} added) -> ${ZIP_PATH} + ${PUBLIC_ZIP}`,
+    `extension: ${ordered.length} files (${replaced} replaced, ${added} added) -> ${VERSIONED_ZIP} (+ ${PUBLIC_ZIP}, ${ZIP_PATH})`,
   );
 } catch (err) {
   console.warn(
@@ -212,6 +232,7 @@ try {
   );
   try {
     writeFileSync(PUBLIC_ZIP, readFileSync(ZIP_PATH));
+    writeFileSync(VERSIONED_ZIP, readFileSync(ZIP_PATH));
   } catch {
     // Nothing more to do; the old name still serves.
   }
