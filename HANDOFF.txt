@@ -112,3 +112,17 @@ Report mailbox - report@gershonconsulting.com
 ================================================================
 END OF HANDOFF
 ================================================================
+
+----------------------------------------------------------------
+2026-10-13 — client.gershoncrm.com integration
+----------------------------------------------------------------
+- client.gershoncrm.com (gershonconsulting/client) now reads Promote
+  data per GERSHON CLIENT NUMBER, mapped to this app's Client.id in
+  client/src/v3-data.ts (CLIENT_REGISTRY). Same numbers everywhere:
+  175 Finance Montreal, 200 MAbSilico, 212 Wallix, 229 Altavia,
+  233 Valos, 245 PhiTech, 246 Enzymicals, 247 Flying Secoya,
+  248 Meteor Biotech, 250 Amphasys.
+- PROMOTE_API_KEY (this project) / SOCIAL_PROMOTE_KEY (client) were
+  rotated by client's "Rotate Promote key" workflow, now run through
+  cloudflare/wrangler-action. This commit only redeploys social so the
+  new PROMOTE_API_KEY secret is live. No schema change.
