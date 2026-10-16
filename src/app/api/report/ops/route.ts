@@ -9,6 +9,8 @@ import { buildOps, isOpsKind, OPS_KINDS, sendOps } from "@/lib/reports/ops";
  *   ?kind=posting      did every campaign / internal company post?
  *   ?kind=content      approved content ready to publish, per company
  *   ?kind=competitive  competitor & partner posts collected per day / week, and what they are about
+ *   ?kind=intelligence AI insights + actions from competitor & partner posts — goes to sales@ (v4.50.0)
+ *                      GET &refresh=1 re-runs the AI instead of using today's cached answer
  *
  * GET  ?kind=…               render that email in the browser (never sends)
  * GET  ?kind=…&format=json   the numbers behind it
@@ -25,7 +27,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, error: `kind must be one of: ${OPS_KINDS.join(", ")}` }, { status: 400 });
   }
   try {
-    const b = await buildOps(kind);
+    const b = await buildOps(kind, undefined, { refresh: url.searchParams.get("refresh") === "1" });
     if (url.searchParams.get("format") === "json") {
       return NextResponse.json({ success: true, data: { subject: b.subject, day: b.dayKey, report: b.data } });
     }

@@ -101,12 +101,13 @@ export function table(head: string, rows: string): string {
   return `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${head}${rows}</table>`;
 }
 
-export type OpsKind = "posting" | "content" | "competitive";
+export type OpsKind = "posting" | "content" | "competitive" | "intelligence";
 export const OPS_LABEL: Record<OpsKind | "collection", string> = {
   collection: "Collection",
   posting: "Posting",
   content: "Content Ready",
   competitive: "Competitive",
+  intelligence: "Intelligence",
 };
 
 /** The four reports link to each other so any one of them opens the rest. */
@@ -116,6 +117,7 @@ function siblings(current: OpsKind | "collection"): string {
     ["posting", `${SITE}/api/report/ops?kind=posting`],
     ["content", `${SITE}/api/report/ops?kind=content`],
     ["competitive", `${SITE}/api/report/ops?kind=competitive`],
+    ["intelligence", `${SITE}/api/report/ops?kind=intelligence`],
   ];
   return links
     .map(([k, href]) =>
@@ -182,9 +184,9 @@ export async function deliver(
   dayKey: string,
   subject: string,
   html: string,
-  opts: { force?: boolean; to?: string } = {},
+  opts: { force?: boolean; to?: string; defaultTo?: string } = {},
 ): Promise<DeliveryResult> {
-  const to = opts.to || process.env.REPORT_TO || OPS_TO;
+  const to = opts.to || opts.defaultTo || process.env.REPORT_TO || OPS_TO;
   const id = `${kind}:${dayKey}`;
   if (!opts.force) {
     const sent = await readSent();
