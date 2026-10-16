@@ -20,7 +20,7 @@ import { buildCompetitiveReport, type CompetitiveReport } from "./competitive";
 import { banner, esc, fmt, kpis, page, pill, section, SITE, type Level } from "./shell";
 
 export const INTEL_TO = "sales@gershonconsulting.com";
-const CACHE_PREFIX = "ops_intel:v2:";
+const CACHE_PREFIX = "ops_intel:v3:";
 const INTEL_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
 type Priority = "high" | "medium" | "low";
@@ -74,6 +74,8 @@ Your job: turn what competitors and partners post into concrete actions the Gers
 Rules:
 - Competitors and partners that are not linked to one of our companies ("watchedFor" empty) are part of Gershon Consulting's OWN market (organisations around foreign companies entering the US). Actions based on them are for "Gershon Consulting" unless the post is clearly about the field of another of our companies (use their "about").
 - Never guess what one of our companies does: use only its "about". If it has no "about", do not give it an action.
+- Only give actions to the companies in "ourCompanies". Most actions will be for Gershon Consulting — that is expected. Do not stretch an unrelated post into an action for another company.
+- Rank by business value for Gershon: a partner event or program where Gershon can meet foreign companies entering the US, or a competitor move Gershon must answer, is high; a simple like/share is low.
 - Every action names ONE of Gershon's own companies in "forCompany" (exact name from the list), or "Gershon Consulting" for agency-wide actions.
 - "basedOn" cites the competitor/partner and what they posted (use the post ids like "#3").
 - Competitors: find what works for them (topics, formats, events) and how our company should answer, counter-position or fill the gap.
@@ -87,7 +89,7 @@ Answer ONLY with a JSON object, no prose, exactly this shape:
   "headline": string,
   "insights": [ { "title": string, "detail": string, "companies": string[] } ],
   "actions": [ { "action": string, "forCompany": string, "why": string, "basedOn": string, "priority": "high"|"medium"|"low" } ],
-  "engage": [ { "postId": number, "how": string } ],
+  "engage": [ { "postId": number, "how": string } ],   // "how" = the exact comment to post, 1-2 sentences, in English, from Gershon's or the named company's voice
   "postIdeas": [ { "forCompany": string, "hook": string, "angle": string } ],
   "watch": [ { "company": string, "signal": string } ]
 }
@@ -206,7 +208,15 @@ export async function buildIntelligenceReport(orgId: string, opts: { refresh?: b
         })
       : Promise.resolve([]),
   ]);
-  const ours = oursRows.map((c) => ({ name: c.name.trim(), type: c.clientType === "INTERNAL" ? "internal brand" : "campaign client", industry: aboutOf(c.name, c.industry) }));
+  // Only companies a tracked competitor/partner is linked to (Competitor Watch)
+  // can receive actions, plus Gershon Consulting itself, whose market the
+  // unlinked ones belong to. Otherwise the model invents links (a travel post
+  // turned into a biocatalysis action).
+  const linked = new Set(competitive.rows.flatMap((c) => c.watchedFor.map((n) => n.trim().toLowerCase())));
+  const ours = oursRows
+    .filter((c) => /gershon/i.test(c.name) || linked.has(c.name.trim().toLowerCase()))
+    .map((c) => ({ name: c.name.trim(), type: c.clientType === "INTERNAL" ? "internal brand" : "campaign client", industry: aboutOf(c.name, c.industry) }));
+  if (!ours.some((o) => /gershon/i.test(o.name))) ours.unshift({ name: "Gershon Consulting", type: "internal brand", industry: aboutOf("Gershon Consulting", null) });
 
   const samples: Sample[] = posts
     .map((p) => ({ p, e: p.likeCount + p.commentCount + p.shareCount }))
