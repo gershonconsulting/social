@@ -245,3 +245,31 @@ export async function loadCompanyExtras(win: MonthWindow, orgId: string, company
   }
   return extras;
 }
+
+/**
+ * v4.47.0 — ONE company, any category, for the "Download PDF" button on the
+ * company page. Same shaping as loadCategories, but two narrow queries for a
+ * single client instead of the whole book. `uptoDay` cuts an in-progress month
+ * at today so the objective is measured against the days that have passed.
+ */
+export async function loadOneCompany(
+  win: MonthWindow,
+  client: { id: string; name: string; clientType: string; status: string },
+  orgId: string,
+  uptoDay?: number,
+): Promise<CompanyMonth> {
+  const cur = bounds(win.y, win.m);
+  const prevB = bounds(win.m === 0 ? win.y - 1 : win.y, (win.m + 11) % 12);
+  const last = uptoDay ? `${win.y}-${pad(win.m + 1)}-${pad(uptoDay)}` : cur.last;
+  const posts = await postsIn([client.id], cur.first, last);
+  const prev = await postsIn([client.id], prevB.first, prevB.last);
+  let objective: CompanyMonth["objective"] = null;
+  if (client.clientType === "CAMPAIGN" && client.status === "ACTIVE") {
+    const obj = await objectivesFor(orgId, [client]);
+    const perWeek = obj.perWeek(client.id);
+    objective = { perWeek, target: monthTarget(perWeek, uptoDay || win.dim) };
+  }
+  let followers: number | null = null;
+  if (client.clientType === "COMPETITION") followers = (await latestFollowers([client.id], last)).get(client.id) ?? null;
+  return shapeCompany(win, client, posts, prev, objective, followers);
+}

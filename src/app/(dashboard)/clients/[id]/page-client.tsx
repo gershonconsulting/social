@@ -17,6 +17,7 @@ import { AlertCircle, Loader2, CheckCircle2, XCircle, AlertTriangle, ChevronDown
 import { formatRelative } from "@/lib/utils";
 import { ClientSyncButton } from "@/components/clients/client-sync-button";
 import { ClientExportMenu } from "@/components/clients/client-export-menu";
+import { ClientPdfMenu } from "@/components/clients/client-pdf-menu";
 import { ClientNameEditor } from "@/components/clients/client-name-editor";
 import { ClientCategoryEditor } from "@/components/clients/client-category-editor";
 import { ComplianceDashboard } from "@/components/clients/compliance-dashboard";
@@ -223,7 +224,8 @@ export function ClientDetailPageClient({ clientId }: { clientId: string }) {
     // page hangs or never finishes, the data must still be one click away.
     return (
       <div className="space-y-4">
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <ClientPdfMenu clientId={clientId} />
           <ClientExportMenu clientId={clientId} />
         </div>
         <div className="flex items-center justify-center py-24 text-gray-500">
@@ -260,6 +262,7 @@ export function ClientDetailPageClient({ clientId }: { clientId: string }) {
                 Back to Companies
               </Link>
               {/* The data is still downloadable when the page itself won't load. */}
+              <ClientPdfMenu clientId={clientId} />
               <ClientExportMenu clientId={clientId} />
             </div>
           </div>
@@ -314,6 +317,7 @@ export function ClientDetailPageClient({ clientId }: { clientId: string }) {
             <Calendar size={14} />
             Monthly report
           </Link>
+          <ClientPdfMenu clientId={client.id} />
           <ClientExportMenu clientId={client.id} />
           <ClientSyncButton clientId={client.id} />
         </div>
