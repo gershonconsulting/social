@@ -70,7 +70,7 @@ async function sendViaResend(
   // exactly the case here, since this report goes to
   // report@gershonconsulting.com. gershon.ai is verified and sending-enabled,
   // so the report uses it and leaves the digest's sender untouched.
-  const from = process.env.REPORT_FROM || "Social GershonCRM <reports@gershon.ai>";
+  const from = process.env.REPORT_FROM || "GC Social <reports@gershon.ai>";
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",

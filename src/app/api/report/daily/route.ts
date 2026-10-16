@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildDailyReport } from "@/lib/reports/daily-report";
 import { renderDailyReportHtml, dailyReportSubject } from "@/lib/reports/daily-report-render";
 import { sendDailyReport } from "@/lib/reports/daily-report-send";
+import { sendOps } from "@/lib/reports/ops";
 
 /**
  * GET  /api/report/daily              — render the email in the browser (never sends)
@@ -45,6 +46,17 @@ export async function POST(req: NextRequest) {
     const force = url.searchParams.get("force") === "1";
     const to = url.searchParams.get("to") || undefined;
     const r = await sendDailyReport({ force, to });
+    // v4.49.0 — the same morning cron also sends the Posting, Content Ready
+    // and Competitive reports (four separate emails to report@). Each one is
+    // idempotent per day, so a retry never double-sends. ?only=1 skips them.
+    let ops: unknown = null;
+    if (url.searchParams.get("only") !== "1") {
+      try {
+        ops = await sendOps({ force, to });
+      } catch (e) {
+        ops = { error: e instanceof Error ? e.message : String(e) };
+      }
+    }
     return NextResponse.json(
       {
         success: r.sent || r.skipped !== null,
@@ -59,6 +71,7 @@ export async function POST(req: NextRequest) {
           statusLevel: r.report.status.level,
           extensionLevel: r.report.extension.level,
           progress: r.report.progress,
+          ops,
         },
       },
       { status: r.sent || r.skipped ? 200 : 502 },

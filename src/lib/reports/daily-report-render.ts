@@ -303,7 +303,7 @@ export function renderDailyReportHtml(r: DailyReport): string {
 export function dailyReportSubject(r: DailyReport): string {
   const n = r.pagesToFix?.length ?? 0;
   const fix = n > 0 ? ` · ${n} LinkedIn ${n === 1 ? "link" : "links"} to fix` : "";
-  const base = `Social Report — ${r.day.short}`;
+  const base = `Social Collection Report — ${r.day.short}`;
   if (r.status.level === "critical") return `⛔ NO COLLECTION — ${base}${fix}`;
   if (r.extension.level === "critical") return `⚠️ Extension out of date — ${base}${fix}`;
   if (r.status.level === "warn") return `⚠️ ${base} — collection ran short${fix}`;
