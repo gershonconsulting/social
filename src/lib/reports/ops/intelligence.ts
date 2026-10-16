@@ -20,7 +20,8 @@ import { buildCompetitiveReport, type CompetitiveReport } from "./competitive";
 import { banner, esc, fmt, kpis, page, pill, section, SITE, type Level } from "./shell";
 
 export const INTEL_TO = "sales@gershonconsulting.com";
-const CACHE_PREFIX = "ops_intel:";
+const CACHE_PREFIX = "ops_intel:v2:";
+const INTEL_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
 type Priority = "high" | "medium" | "low";
 
@@ -43,17 +44,43 @@ export type IntelligenceReport = {
   level: Level;
 };
 
+/**
+ * What our companies do, for the AI. The Client row's industry wins when it is
+ * filled in; otherwise this list (from the Campaign Content Knowledge Base,
+ * Aug 2026). A company missing from both is sent without a description and the
+ * model is told not to guess what it does.
+ */
+const ABOUT: Array<{ re: RegExp; about: string }> = [
+  { re: /gershon/i, about: "US market-entry consulting for foreign (mostly French/European) B2B companies: LinkedIn outbound, lead generation, commercial representation in the US" },
+  { re: /\bwallix\b/i, about: "Cybersecurity — privileged access management (PAM), identity and OT security; selling to US CISOs, IAM/PAM architects, MSSPs" },
+  { re: /\bvalos\b/i, about: "Clinical data management and biometrics/biostatistics services for US biotech, specialty pharma and medtech" },
+  { re: /urban factory/i, about: "IT accessories, docking stations and ergonomics, sold through the US IT reseller channel" },
+  { re: /phi-?tech/i, about: "AI + RNA/genomics diagnostics for geneticists, molecular pathologists and pharma R&D" },
+  { re: /enzymicals/i, about: "Biocatalysis / green-chemistry CDMO for US pharma process and development chemists" },
+  { re: /flying secoya/i, about: "Sustainable (eco) production consultancy + SaaS for film and TV productions — carbon measurement and ESG reporting" },
+  { re: /linalysis/i, about: "LinkedIn analytics SaaS (Gershon venture)" },
+];
+
+function aboutOf(name: string, industry: string | null): string | null {
+  const hit = ABOUT.find((a) => a.re.test(name));
+  return hit?.about || industry || null;
+}
+
 type Sample = { id: number; company: string; kind: string; watchedFor: string[]; platform: string; date: string; engagement: number; text: string; url: string | null };
 
 const SYSTEM = `You are the competitive-intelligence analyst of Gershon Consulting, a B2B firm that helps companies enter the US market through LinkedIn and X.
 You receive (1) Gershon's own companies (campaign clients and internal brands), (2) statistics about what their competitors and partners posted on LinkedIn/X this week, and (3) the week's most-engaged competitor/partner posts, each with an id.
 Your job: turn what competitors and partners post into concrete actions the Gershon sales and content team can take THIS WEEK.
 Rules:
+- Competitors and partners that are not linked to one of our companies ("watchedFor" empty) are part of Gershon Consulting's OWN market (organisations around foreign companies entering the US). Actions based on them are for "Gershon Consulting" unless the post is clearly about the field of another of our companies (use their "about").
+- Never guess what one of our companies does: use only its "about". If it has no "about", do not give it an action.
 - Every action names ONE of Gershon's own companies in "forCompany" (exact name from the list), or "Gershon Consulting" for agency-wide actions.
 - "basedOn" cites the competitor/partner and what they posted (use the post ids like "#3").
 - Competitors: find what works for them (topics, formats, events) and how our company should answer, counter-position or fill the gap.
 - Partners: find chances to engage (comment, share, co-post, joint webinar, introductions) that help our company.
-- Be specific and short. No generic advice like "post more consistently".
+- Each action names the competitor/partner and the precise subject of their post, and says exactly what to do (post, comment, reach out to whom, propose what). No generic advice like "post more consistently" or "research the market".
+- "basedOn" format: "<Company> — <what they posted> (#id)".
+- "headline" is the single most useful finding of the week in one sentence with a name or a number in it — never a title like "Competitor analysis".
 - If the data is thin, say so in the headline instead of inventing.
 Answer ONLY with a JSON object, no prose, exactly this shape:
 {
@@ -179,7 +206,7 @@ export async function buildIntelligenceReport(orgId: string, opts: { refresh?: b
         })
       : Promise.resolve([]),
   ]);
-  const ours = oursRows.map((c) => ({ name: c.name, type: c.clientType === "INTERNAL" ? "internal brand" : "campaign client", industry: c.industry }));
+  const ours = oursRows.map((c) => ({ name: c.name.trim(), type: c.clientType === "INTERNAL" ? "internal brand" : "campaign client", industry: aboutOf(c.name, c.industry) }));
 
   const samples: Sample[] = posts
     .map((p) => ({ p, e: p.likeCount + p.commentCount + p.shareCount }))
@@ -215,7 +242,7 @@ export async function buildIntelligenceReport(orgId: string, opts: { refresh?: b
       const settings = await getAISettings();
       if (!settings.available) throw new Error("Cloudflare Workers AI is not available on this deployment");
       const payload = {
-        ourCompanies: ours,
+        ourCompanies: ours.map((o) => ({ name: o.name, type: o.type, about: o.industry || undefined })),
         week: {
           collectedThisWeek: competitive.weekly[0].total,
           collectedLastWeek: competitive.weekly[1].total,
@@ -236,7 +263,8 @@ export async function buildIntelligenceReport(orgId: string, opts: { refresh?: b
         })),
         topPosts: samples.map((s) => ({ id: s.id, company: s.company, role: s.kind === "PARTNER" ? "partner" : "competitor", watchedFor: s.watchedFor, platform: s.platform, date: s.date, engagement: s.engagement, text: s.text })),
       };
-      const out = await runChat(settings, SYSTEM, JSON.stringify(payload), 3500);
+      // The 70B model reasons noticeably better on this task; runChat falls back down the chain if it is unavailable.
+      const out = await runChat({ ...settings, model: INTEL_MODEL }, SYSTEM, JSON.stringify(payload), 3500);
       intel = parseIntel(out.text, samples);
       model = out.model;
       if (!intel) throw new Error("Intelligence answered in an unreadable format");
