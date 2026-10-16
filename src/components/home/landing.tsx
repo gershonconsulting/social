@@ -44,10 +44,11 @@ export function Landing({
             <span>Social<small>by Gershon.AI</small></span>
           </a>
           <nav className="nav-links">
-            <a className="link" href="#how">How it works</a>
             <a className="link" href="#features">Features</a>
-            <a className="link" href="#extension">Extension</a>
+            <a className="link" href="#publishing">Publishing</a>
+            <a className="link" href="#how">How it works</a>
             <a className="link" href="#reporting">Reporting</a>
+            <a className="link" href="#extension">Extension</a>
             <a className="link" href={primaryHref}>{signedIn ? "Dashboard" : "Sign in"}</a>
             <a className="btn btn-primary" href={primaryHref}>
               <LinkedInIcon />
@@ -60,52 +61,51 @@ export function Landing({
       <section className="hero">
         <div className="rings"><span /><span /><span /><span /><div className="sweep" /></div>
         <div className="wrap">
-          <span className="kicker">◆ Social campaign compliance · LinkedIn &amp; X</span>
-          <h1>Proof that every campaign<br /><span className="g">is actually being published</span> — daily.</h1>
+          <span className="kicker">◆ Social network management software · LinkedIn &amp; X</span>
+          <h1>Manage every social account<br /><span className="g">from first draft to monthly proof.</span></h1>
           <p className="sub">
-            Social watches every company you run campaigns for, collects what they actually posted on LinkedIn and X,
-            and turns it into a compliance picture you can defend: who is on cadence, who went quiet, and exactly what
-            shipped. Collection runs in <em>your</em> browser through a Chrome extension. No password sharing.
+            Social is one place to plan, approve, publish and measure LinkedIn and X for every company you manage.
+            Write the content, get the client&apos;s approval in one batch, schedule it on both networks at once — then
+            Social checks what really went live and turns it into analytics and a client-ready monthly report.
           </p>
           <div className="cta-row">
             <a className="btn btn-primary" href={primaryHref}>
               <LinkedInIcon />
               {primaryLabel}
             </a>
-            <a className="btn btn-lite" href="#extension">
-              <DownloadIcon />
-              Get the Chrome extension
+            <a className="btn btn-lite" href="#features">
+              See all features →
             </a>
           </div>
           <div className="trust">
-            Runs every day · LinkedIn + X in one view · your data never leaves your account ·{" "}
+            LinkedIn + X in one place · client approval built in · runs in your own browser, no password sharing ·{" "}
             <a href={secondaryHref} style={{ color: "#bcd0ff", fontWeight: 600, textDecoration: "underline" }}>
               {signedIn ? "Jump to the summary →" : "Already have an account? Sign in →"}
             </a>
           </div>
 
           <div className="mock">
-            <div className="bar"><i /><i /><i /><span className="u">social.gershon.ai/dashboard</span></div>
+            <div className="bar"><i /><i /><i /><span className="u">social.gershon.ai/publishing</span></div>
             <div className="flow">
               <div className="stage">
-                <h4>1 · Companies</h4>
-                <div className="big">Who you track</div>
-                <div className="lbl">clients and campaign accounts, synced from the CRM</div>
-                <ul><li>Pulled from Streak</li><li>Client / Campaign / Recycled</li><li>LinkedIn + X handles</li></ul>
+                <h4>1 · Plan &amp; approve</h4>
+                <div className="big">Content</div>
+                <div className="lbl">written, reviewed and validated by the client</div>
+                <ul><li>Content library &amp; calendar</li><li>Batch client review</li><li>One week always ready</li></ul>
               </div>
               <div className="arrow">→</div>
               <div className="stage">
-                <h4>2 · Collection</h4>
-                <div className="big">What they posted</div>
-                <div className="lbl">gathered daily in your own browser session</div>
-                <ul><li>Chrome extension collector</li><li>Posts, dates, engagement</li><li>Stall alerts if it dries up</li></ul>
+                <h4>2 · Publish</h4>
+                <div className="big">LinkedIn + X</div>
+                <div className="lbl">scheduled once, posted on both networks</div>
+                <ul><li>One picture per post</li><li>AI-suggested X version</li><li>Every post verified</li></ul>
               </div>
               <div className="arrow">→</div>
               <div className="stage">
-                <h4>3 · Proof</h4>
-                <div className="big">Compliance</div>
-                <div className="lbl">graded, charted, and ready to send</div>
-                <ul><li>Green / amber / red status</li><li>Follower &amp; network trends</li><li>Monthly client report link</li></ul>
+                <h4>3 · Measure &amp; report</h4>
+                <div className="big">Proof</div>
+                <div className="lbl">collected daily, charted and ready to send</div>
+                <ul><li>Green / amber / red status</li><li>Followers &amp; competitors</li><li>Monthly report &amp; PDF</li></ul>
               </div>
             </div>
           </div>
@@ -114,51 +114,125 @@ export function Landing({
 
       <div className="wrap">
         <div className="stats">
-          <div className="stat"><b>LinkedIn + X</b><span>both networks, one timeline</span></div>
-          <div className="stat"><b>Daily</b><span>collection and digest email</span></div>
-          <div className="stat"><b>Per company</b><span>no aggregate hand-waving</span></div>
-          <div className="stat"><b>Shareable report</b><span>a permanent link per client</span></div>
+          <div className="stat"><b>LinkedIn + X</b><span>publish and track both, together</span></div>
+          <div className="stat"><b>Batch approval</b><span>clients validate content in one pass</span></div>
+          <div className="stat"><b>Daily</b><span>collection, digest and alerts</span></div>
+          <div className="stat"><b>Monthly PDF</b><span>one-page report per company</span></div>
         </div>
       </div>
 
       <section className="pad" id="features">
         <div className="wrap">
-          <div className="eyebrow">What you get</div>
-          <h2 className="sec">Campaigns are only worth what was actually published. Social measures that.</h2>
+          <div className="eyebrow">Features</div>
+          <h2 className="sec">Everything you need to run social for the companies you manage.</h2>
           <p className="lead">
-            Reporting from a scheduler tells you what was <em>queued</em>. Social reads the live profiles and records
-            what really went out — so cadence, gaps and results are facts, not promises.
+            Most tools stop at the scheduler. Social covers the whole cycle — content, approval, publishing, monitoring
+            and reporting — and measures what was <em>actually</em> published, not just what was queued.
           </p>
           <div className="grid3">
-            <div className="card"><div className="ic">🏢</div><h3>Every company in one place</h3><p>Companies sync straight from Streak and stay categorised — Client, Campaign or Recycled — with their LinkedIn page and X handle attached.</p></div>
-            <div className="card"><div className="ic">🧩</div><h3>The extension does the collecting</h3><p>A Chrome extension collects posts in your own logged-in session, on a daily schedule. Nothing is scraped from a server, and no credentials are shared.</p></div>
-            <div className="card"><div className="ic">🚦</div><h3>Compliance at a glance</h3><p>Each company gets a green / amber / red posting status over the window you choose — last week, last month, this year or all time.</p></div>
-            <div className="card"><div className="ic">📡</div><h3>Networks &amp; followers</h3><p>See the split by network and by category, and track follower movement per client — never blended into a meaningless total.</p></div>
-            <div className="card"><div className="ic">🧠</div><h3>Content intelligence</h3><p>An AI read of each company&apos;s output: themes, tone, cadence and what is working, generated on demand from the posts already collected.</p></div>
-            <div className="card"><div className="ic">📩</div><h3>Daily digest &amp; health alerts</h3><p>A morning email recaps what landed. If collection stalls for 36 hours you get an alert instead of a silent, empty dashboard.</p></div>
+            <div className="card"><div className="ic">🗓️</div><h3>Publishing calendar &amp; scheduler</h3><p>Plan posts on a calendar and publish to LinkedIn and X at the same time. Every post carries its picture, and Social checks that each one really went out.</p></div>
+            <div className="card"><div className="ic">✅</div><h3>Client review &amp; approval</h3><p>Send content to the client in one batch, discuss it in comments, and let them approve all at once — with clear Approved, Pending approval and Submitted status.</p></div>
+            <div className="card"><div className="ic">📦</div><h3>Always a week ahead</h3><p>A content inventory keeps one week of validated posts ready to publish, warns you when it runs low and reminds clients about posts still waiting for approval.</p></div>
+            <div className="card"><div className="ic">✨</div><h3>Intelligence (AI)</h3><p>Suggest the X version of a LinkedIn post within the character limit, read each company&apos;s themes and tone, and turn collected content into ready-to-use post ideas.</p></div>
+            <div className="card"><div className="ic">🧩</div><h3>Automatic daily collection</h3><p>The Chrome extension collects every company&apos;s LinkedIn and X posts in the background, in your own session — no password sharing, nothing to run by hand.</p></div>
+            <div className="card"><div className="ic">🚦</div><h3>Posting compliance at a glance</h3><p>Each company gets a green / amber / red status over the window you choose — last week, last month, this month, this year or all time.</p></div>
+            <div className="card"><div className="ic">🔭</div><h3>Competitor Watch</h3><p>Compare a company with the competitors you track: who posts, what they post about, their key words and how often they publish.</p></div>
+            <div className="card"><div className="ic">📈</div><h3>Networks, followers &amp; analytics</h3><p>Follower growth and engagement per company and per network — never blended into one meaningless total across clients.</p></div>
+            <div className="card"><div className="ic">📄</div><h3>Reports, PDF &amp; export</h3><p>Monthly reports by email and permanent share link, a one-page PDF for any company and any month, and a CSV export of posts, followers and competitors.</p></div>
           </div>
         </div>
       </section>
 
-      <section className="pad band" id="how">
+      <section className="pad band" id="publishing">
+        <div className="wrap why">
+          <div>
+            <div className="eyebrow" style={{ textAlign: "left" }}>Publishing</div>
+            <h2>Write once, approve once, publish on LinkedIn and X.</h2>
+            <p>
+              Publishing replaces your separate scheduler. Your team creates the content, the client reviews the whole
+              batch from a single email link, and approved posts go out on schedule on both networks — from your browser,
+              or from the client&apos;s own Chrome extension when they publish under their own account.
+            </p>
+            <ul className="checklist">
+              <li><CheckIcon /><span>One picture per post, on LinkedIn and X.</span></li>
+              <li><CheckIcon /><span>✨ One click suggests the X version, always under the X limit.</span></li>
+              <li><CheckIcon /><span>Every scheduled post is checked to confirm it really went live.</span></li>
+              <li><CheckIcon /><span>Inventory warnings and review reminders keep a week of content ready.</span></li>
+            </ul>
+          </div>
+          <div className="pricecard">
+            <div className="tag">Client review — one batch, one email</div>
+            <div className="amt">3 <small>clear statuses</small></div>
+            <ul>
+              <li><b style={{ color: "#16a34a" }}>● Approved</b> — validated, ready to publish</li>
+              <li><b style={{ color: "#ea580c" }}>● Pending approval</b> — the client left comments</li>
+              <li><b style={{ color: "#dc2626" }}>● Submitted</b> — sent, not reviewed yet</li>
+              <li>Approve all in one click</li>
+              <li>Comments stay with each post</li>
+            </ul>
+            <a className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} href={signedIn ? "/publishing" : "/login"}>
+              {signedIn ? "Open Publishing" : "Sign in to start publishing"}
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section className="pad" id="how">
         <div className="wrap">
           <div className="eyebrow">How it works</div>
-          <h2 className="sec">Three steps to a self-running compliance record.</h2>
+          <h2 className="sec">Up and running in three steps.</h2>
           <div className="steps">
-            <div className="step"><div className="n">1</div><h3>Sign in &amp; sync your companies</h3><p>Sign in with LinkedIn, pull your current clients from Streak, and confirm each company&apos;s LinkedIn page and X handle.</p></div>
-            <div className="step"><div className="n">2</div><h3>Install the extension</h3><p>Download the collector, load it once, and pin it. From then on it gathers posts in your browser every day, on its own.</p></div>
-            <div className="step"><div className="n">3</div><h3>Read the proof — and send it</h3><p>Watch the dashboard for anyone slipping, and send each client their monthly report from a permanent link that always shows current numbers.</p></div>
+            <div className="step"><div className="n">1</div><h3>Sign up &amp; add your companies</h3><p>Sign in with LinkedIn to get your own workspace, add the companies you manage (or sync them from your CRM) with their LinkedIn page and X handle.</p></div>
+            <div className="step"><div className="n">2</div><h3>Install the extension</h3><p>Load the Chrome extension once. It publishes your approved posts and collects what every company posted — in the background, every day.</p></div>
+            <div className="step"><div className="n">3</div><h3>Publish, measure, report</h3><p>Run your calendar and client approvals, watch the dashboard for anyone slipping, and send each client their monthly report or PDF.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section className="pad band" id="reporting">
+        <div className="wrap why">
+          <div>
+            <div className="eyebrow" style={{ textAlign: "left" }}>Reporting</div>
+            <h2>The report writes itself — and the link never expires.</h2>
+            <p>
+              Every month each company gets a one-page report built from the posts Social collected: volume, networks,
+              cadence and reach. It goes out by email, lives at a permanent link, and can be downloaded as a PDF for any
+              company and any of the last twelve months.
+            </p>
+            <ul className="checklist">
+              <li><CheckIcon /><span>Every company is auditable post by post, with dates and sources.</span></li>
+              <li><CheckIcon /><span>Daily digest email, plus an alert when collection stalls.</span></li>
+              <li><CheckIcon /><span>Export posts, followers and competitors to CSV at any time.</span></li>
+            </ul>
+          </div>
+          <div className="pricecard">
+            <div className="tag">Monthly company report</div>
+            <div className="amt">5 <small>core datapoints</small></div>
+            <ul>
+              <li>Posts published this month</li>
+              <li>Breakdown by network</li>
+              <li>Posting cadence vs. target</li>
+              <li>Follower movement</li>
+              <li>Engagement on what shipped</li>
+            </ul>
+            <a className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} href={signedIn ? "/reports" : "/login"}>
+              {signedIn ? "Open reports" : "Sign in to view reports"}
+            </a>
+            <p style={{ textAlign: "center", color: "var(--muted)", fontSize: ".85rem", margin: ".9rem 0 0" }}>
+              Sent automatically on the 1st — PDF on every company page.
+            </p>
           </div>
         </div>
       </section>
 
       <section className="pad" id="extension">
         <div className="wrap">
-          <div className="eyebrow">The collector</div>
+          <div className="eyebrow">The Chrome extension</div>
           <h2 className="sec">Get the Social Chrome extension.</h2>
           <p className="lead">
-            Social collects inside <em>your</em> browser, using <em>your</em> LinkedIn and X sessions — so there is no
-            password sharing and nothing to configure on a server. The extension is the engine; the dashboard is the cockpit.
+            The extension publishes and collects inside <em>your</em> browser, using <em>your</em> LinkedIn and X
+            sessions — so there is no password sharing and nothing to configure on a server. It works in the background
+            and tells you when a newer version is available.
           </p>
 
           <div className="extbox">
@@ -170,8 +244,8 @@ export function Landing({
                   </svg>
                 </span>
                 <div>
-                  <h3>Social by Gershon.AI — LinkedIn &amp; X Collector</h3>
-                  <div className="extbox-meta">Version <b>{extensionVersion}</b> · ~42 KB · Chrome &amp; Edge (Chromium)</div>
+                  <h3>Social by Gershon.AI — LinkedIn &amp; X</h3>
+                  <div className="extbox-meta">Version <b>{extensionVersion}</b> · Chrome &amp; Edge (Chromium)</div>
                 </div>
               </div>
               <a className="btn btn-primary extbox-dl" href={EXTENSION_ZIP_URL} download={EXTENSION_ZIP_NAME}>
@@ -179,8 +253,8 @@ export function Landing({
                 Download the extension
               </a>
               <p className="extbox-note">
-                New here? <a href="/login">Sign in first</a> — the extension files everything it collects under your
-                account, so it needs you signed in once.
+                New here? <a href="/login">Sign in first</a> — the extension works under your account, so it needs you
+                signed in once.
               </p>
             </div>
 
@@ -202,49 +276,12 @@ export function Landing({
         </div>
       </section>
 
-      <section className="pad band" id="reporting">
-        <div className="wrap why">
-          <div>
-            <div className="eyebrow" style={{ textAlign: "left" }}>Why it works</div>
-            <h2>The report writes itself — and the link never expires.</h2>
-            <p>
-              At the end of every month each campaign company gets a report built from posts already collected: volume,
-              networks, cadence and reach. It goes out by email and lives at a permanent link, so a client who opens it
-              in March still sees the right numbers.
-            </p>
-            <ul className="checklist">
-              <li><CheckIcon /><span>No password sharing — collection runs in your own browser.</span></li>
-              <li><CheckIcon /><span>Every company is auditable post by post, with dates and sources.</span></li>
-              <li><CheckIcon /><span>Silence is loud: stalls trigger an alert, not an empty chart.</span></li>
-            </ul>
-          </div>
-          <div className="pricecard">
-            <div className="tag">Monthly campaign report</div>
-            <div className="amt">5 <small>core datapoints</small></div>
-            <ul>
-              <li>Posts published this month</li>
-              <li>Breakdown by network</li>
-              <li>Posting cadence vs. target</li>
-              <li>Follower movement</li>
-              <li>Engagement on what shipped</li>
-            </ul>
-            <a className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} href={signedIn ? "/reports" : "/login"}>
-              {signedIn ? "Open reports" : "Sign in to view reports"}
-            </a>
-            <p style={{ textAlign: "center", color: "var(--muted)", fontSize: ".85rem", margin: ".9rem 0 0" }}>
-              Sent automatically on the 1st — and available any time from the{" "}
-              <a href={signedIn ? "/reports" : "/login"} style={{ color: "var(--brand)", fontWeight: 600 }}>Reports</a> page.
-            </p>
-          </div>
-        </div>
-      </section>
-
       <section className="final">
         <div className="wrap">
-          <h2>Stop taking &ldquo;we posted it&rdquo; on trust.</h2>
+          <h2>Run every social account you manage from one place.</h2>
           <p>
-            Let Social collect what actually went live on LinkedIn and X, every day — and turn it into a compliance
-            record and a client report you can send without editing.
+            Plan, approve and publish on LinkedIn and X — then let Social prove what went live and send the report
+            for you.
           </p>
           <div className="cta-row">
             <a className="btn btn-primary" href={primaryHref}>
@@ -263,15 +300,16 @@ export function Landing({
             <span>Social<small>by Gershon.AI</small></span>
           </a>
           <div className="foot-links">
-            <a className="link" href="#how">How it works</a>
             <a className="link" href="#features">Features</a>
-            <a className="link" href="#extension">Extension</a>
+            <a className="link" href="#publishing">Publishing</a>
+            <a className="link" href="#how">How it works</a>
             <a className="link" href="#reporting">Reporting</a>
+            <a className="link" href="#extension">Extension</a>
             <a className="link" href={primaryHref}>{signedIn ? "Dashboard" : "Sign in"}</a>
             <a className="link" href="mailto:support@gershonconsulting.com">Support</a>
           </div>
           <div className="copy">
-            © 2026 Gershon.AI · social.gershonCRM — social campaign compliance and reporting for LinkedIn and X. v{appVersion}
+            © 2026 Gershon.AI · Social — social network management software for LinkedIn and X. v{appVersion}
           </div>
         </div>
       </footer>

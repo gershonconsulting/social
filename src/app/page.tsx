@@ -6,13 +6,13 @@ import { Landing } from "@/components/home/landing";
 import { APP_VERSION, EXTENSION_LATEST } from "@/lib/extension-version";
 
 export const metadata: Metadata = {
-  title: "Social by Gershon.AI — Proof that every campaign is actually published",
+  title: "Social by Gershon.AI — Social network management software for LinkedIn & X",
   description:
-    "Social collects what your companies really posted on LinkedIn and X, every day, and turns it into a compliance record and a client-ready monthly report. Collection runs in your own browser through a Chrome extension.",
+    "Social is social network management software for LinkedIn and X: plan content, get client approval in one batch, publish on both networks at once, then track what really went live with daily collection, competitor watch, analytics and monthly PDF reports.",
   openGraph: {
-    title: "Social by Gershon.AI — Social campaign compliance",
+    title: "Social by Gershon.AI — Social network management software",
     description:
-      "Companies → Collection → Proof. Social turns what your clients actually published on LinkedIn and X into a daily compliance picture and a monthly report.",
+      "Plan, approve, publish and measure LinkedIn and X for every company you manage — from first draft to monthly proof.",
     type: "website",
     url: "https://social.gershon.ai",
   },
