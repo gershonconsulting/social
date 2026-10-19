@@ -38,3 +38,4 @@ Thumbs.db
 *.tsbuildinfo
 next-env.d.ts
 public/social-extension-v*.zip
+public/social-extension.zip
