@@ -451,7 +451,7 @@
 
   // ── LinkedIn ────────────────────────────────────────────────────────────
   function liTarget(url) {
-    var m = String(url || "").match(/linkedin\.com\/(company|showcase|in)\/([^/?#]+)/i);
+    var m = String(url || "").match(/linkedin\.com\/(company|showcase|in|groups)\/([^/?#]+)/i);
     return m ? { kind: m[1].toLowerCase(), slug: m[2] } : null;
   }
 
@@ -461,7 +461,7 @@
     var dlg = document.querySelector('[role="dialog"] .ql-editor[contenteditable="true"], .share-creation-state .ql-editor');
     if (dlg) return { open: true };
     var all = Array.from(document.querySelectorAll('button, a[role="button"], div[role="button"]'));
-    var start = all.find(function (b) { return /^\s*(start a post|create a post|write a post)/i.test(b.innerText || b.getAttribute("aria-label") || ""); });
+    var start = all.find(function (b) { return /^\s*(start a (public )?post|create a post|write a post)/i.test(b.innerText || b.getAttribute("aria-label") || ""); });
     if (start) { start.click(); return { clicked: "start" }; }
     var create = all.find(function (b) { return /^\s*create\s*$/i.test(b.innerText || ""); });
     if (create) { create.click(); return { clicked: "create" }; }
@@ -554,7 +554,10 @@
     if (!(await liSignedIn())) { await report(d.id, "failed_before_click", null, "LinkedIn is signed out in the publishing browser."); return; }
     var t = liTarget(d.target);
     if (!t) { await report(d.id, "failed_before_click", null, "No LinkedIn page set for this client."); return; }
-    var home = t.kind === "in" ? "https://www.linkedin.com/feed/" : "https://www.linkedin.com/" + t.kind + "/" + t.slug + "/admin/page-posts/published/";
+    // Groups (0.21.0): the group page has its own "Start a public post" box.
+    var home = t.kind === "in" ? "https://www.linkedin.com/feed/"
+      : t.kind === "groups" ? "https://www.linkedin.com/groups/" + t.slug + "/"
+      : "https://www.linkedin.com/" + t.kind + "/" + t.slug + "/admin/page-posts/published/";
     await navigate(w.tabId, home);
 
     var opened = false;
@@ -566,7 +569,9 @@
     }
     if (!opened) {
       await report(d.id, "failed_before_click", null,
-        t.kind === "in" ? "Could not open the LinkedIn post box." : "Could not open the post box for this LinkedIn page — is this LinkedIn account an admin of the page?");
+        t.kind === "in" ? "Could not open the LinkedIn post box."
+          : t.kind === "groups" ? "Could not open the post box of this LinkedIn group — is this LinkedIn account a member of the group?"
+          : "Could not open the post box for this LinkedIn page — is this LinkedIn account an admin of the page?");
       return;
     }
 
@@ -622,6 +627,7 @@
     if (!found) {
       var feed = t.kind === "in"
         ? "https://www.linkedin.com/in/" + t.slug + "/recent-activity/all/"
+        : t.kind === "groups" ? "https://www.linkedin.com/groups/" + t.slug + "/?sortBy=recent"
         : "https://www.linkedin.com/" + t.kind + "/" + t.slug + "/posts/?feedView=all";
       for (var pass = 0; pass < 2 && !found; pass++) {
         await navigate(w.tabId, feed);

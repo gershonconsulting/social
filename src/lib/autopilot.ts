@@ -256,6 +256,8 @@ async function writePosts(
   const ctx = await companyContext(c);
   const kb = await knowledge(orgId, c.id);
   const snap = await competitiveSnapshot(orgId, c.id).catch(() => null);
+  const target = await getTarget(orgId, c.id);
+  const inGroup = !!target.linkedinUrl && /\/groups\//.test(target.linkedinUrl);
   const icpFor = (d: string) => (kb.icps.length ? kb.icps[(Number(d.slice(8, 10)) - 1) % kb.icps.length] : null);
   const ai = await getAISettings();
   const settings = { ...ai, model: TEXT_MODEL_HINT };
@@ -267,6 +269,9 @@ async function writePosts(
       return `${i + 1}. ${d} — ${DAY_ANGLE[wd]}${icp ? ` — written for the ICP "${icp.name}"` : ""}`;
     }),
     "",
+    inGroup
+      ? `CHANNEL: the LinkedIn version is published in the LinkedIn GROUP of ${c.name} (a community of its members), posted by the group's host. Write to the members as a community: useful, conversational, first person plural ("we", "our members"); give real practical value; end with ONE question that invites members to reply or share their own experience. No hard selling; at most a light mention of ${c.website || c.name}. Hashtags: 1-2 at most.`
+      : "",
     kbForPrompt(kb),
     kb.icps.length ? `ICPs (each post speaks to the one named for its day — their pains, triggers and language):\n${kb.icps.map((i) => `- ${i.name}: ${i.description.replace(/\s+/g, " ").slice(0, 400)}`).join("\n")}` : "",
     snap && snap.competitors.length ? `COMPETITORS — what they post about (differentiate; take the gaps; never name them negatively):\n${snapshotForPrompt(snap)}` : "",

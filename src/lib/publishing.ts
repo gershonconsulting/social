@@ -254,7 +254,7 @@ export function textProblems(item: { text: string; textX: string | null; platfor
 export type Target = {
   /** X @handle, without "@". */
   xHandle: string | null;
-  /** LinkedIn company page or profile URL to post as. */
+  /** LinkedIn company page, profile or group URL to post to. */
   linkedinUrl: string | null;
   reviewerName: string | null;
   reviewerEmail: string | null;
@@ -268,6 +268,9 @@ export function normalizeHandle(h: string | null | undefined): string | null {
 export function normalizeLinkedIn(u: string | null | undefined): string | null {
   if (!u) return null;
   const s = String(u).trim();
+  // A LinkedIn group (v4.52.0, e.g. AmericanAbroad.net's group): posted from the group page.
+  const g = s.match(/linkedin\.com\/groups\/(\d+)/i);
+  if (g) return `https://www.linkedin.com/groups/${g[1]}/`;
   const m = s.match(/linkedin\.com\/(company|showcase|in)\/([^/?#]+)/i);
   return m ? `https://www.linkedin.com/${m[1].toLowerCase()}/${m[2]}/` : null;
 }
