@@ -59,9 +59,10 @@ const ABOUT: Array<{ re: RegExp; about: string }> = [
   { re: /enzymicals/i, about: "Biocatalysis / green-chemistry CDMO for US pharma process and development chemists" },
   { re: /flying secoya/i, about: "Sustainable (eco) production consultancy + SaaS for film and TV productions — carbon measurement and ESG reporting" },
   { re: /linalysis/i, about: "LinkedIn analytics SaaS (Gershon venture)" },
+  { re: /american ?abroad/i, about: "AmericanAbroad.net — hub for Americans living abroad (expats): practical resources, local representatives and partner services" },
 ];
 
-function aboutOf(name: string, industry: string | null): string | null {
+export function aboutOf(name: string, industry: string | null): string | null {
   const hit = ABOUT.find((a) => a.re.test(name));
   return hit?.about || industry || null;
 }

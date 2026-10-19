@@ -126,3 +126,14 @@ END OF HANDOFF
   rotated by client's "Rotate Promote key" workflow, now run through
   cloudflare/wrangler-action. This commit only redeploys social so the
   new PROMOTE_API_KEY secret is live. No schema change.
+
+----------------------------------------------------------------
+UPDATE 2026-10-18  -  v4.51.0  Publishing Autopilot + Knowledge Base
+----------------------------------------------------------------
+[DONE] /knowledge-base (Value Prop, Competitive Landscape, ICPs per company)
+[DONE] /publishing/autopilot  - one post/day for INTERNAL companies, next month
+       written on the 20th, one review email, auto-approve after 48h, AI rewrite
+       on "changes requested", scheduled 09:30 NY. Daily workflow autopilot.yml.
+       Full spec: docs/AUTOPILOT.md
+[TODO] Check each internal company has LinkedIn + X set in Publishing -> Accounts.
+[TODO] Review the AI-drafted Knowledge Base of each internal company.

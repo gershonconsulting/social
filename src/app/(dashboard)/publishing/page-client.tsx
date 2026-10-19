@@ -20,6 +20,7 @@ import {
 } from "@/components/publishing/shared";
 import { ItemPanel } from "@/components/publishing/item-panel";
 import { InventoryPanel } from "@/components/publishing/inventory-panel";
+import { AutopilotStrip } from "@/components/publishing/autopilot-panel";
 
 type Limits = { x: number; linkedin: number; images: number; requireImage: boolean };
 type Feed = { items: Item[]; clients: ClientLite[]; live: LiveAll; limits: Limits; canWrite: boolean };
@@ -107,6 +108,7 @@ export function PublishingContentClient() {
       />
 
       <LiveStrip live={feed?.live ?? null} />
+      <AutopilotStrip />
       <InventoryPanel refreshKey={refreshKey} onPick={setClientFilter} active={clientFilter} />
       {err && <div className="text-sm rounded-lg px-3 py-2 mb-4 bg-red-50 text-red-800">{err}</div>}
 

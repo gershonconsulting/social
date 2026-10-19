@@ -1,0 +1,30 @@
+name: Publishing Autopilot (one post per day, next month ready on the 20th)
+
+# 11:15 UTC (07:15 New York). Each call to /api/cron/autopilot writes a few
+# posts (text + X version + picture), approves what has waited 48h, rewrites
+# "changes requested" posts and schedules approved ones. We call it until it
+# answers remaining = 0: from the 20th that fills the whole next month, then
+# Olivier gets ONE review email. Idempotent — safe to re-run.
+on:
+  schedule:
+    - cron: '15 11 * * *'
+  workflow_dispatch:
+
+jobs:
+  autopilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Run Autopilot until the month is complete
+        run: |
+          for i in $(seq 1 150); do
+            code=$(curl -sS -o /tmp/out.json -w '%{http_code}' --max-time 290 \
+              -X POST 'https://social.gershon.ai/api/cron/autopilot' \
+              -H "Authorization: Bearer ${{ secrets.CF_CRON_SECRET }}")
+            remaining=$(python3 -c "import json;print(json.load(open('/tmp/out.json')).get('data',{}).get('remaining',-1))" 2>/dev/null || echo -1)
+            echo "call $i: HTTP $code remaining=$remaining"
+            if [ "$code" != "200" ]; then head -c 1500 /tmp/out.json; echo; sleep 20; continue; fi
+            if [ "$remaining" = "0" ]; then head -c 3000 /tmp/out.json; echo; exit 0; fi
+            sleep 3
+          done
+          head -c 3000 /tmp/out.json; echo
