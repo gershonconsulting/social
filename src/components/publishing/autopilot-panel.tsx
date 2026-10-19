@@ -11,7 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, BookOpen, Bot, CheckCircle2, ExternalLink, Loader2, Play } from "lucide-react";
 
-type Row = { clientId: string; name: string; planned: number; days: number; inReview: number; approved: number; changes: number; accountsOk: boolean; reviewUrl: string };
+type Row = { clientId: string; name: string; planned: number; days: number; inReview: number; approved: number; changes: number; accountsOk: boolean; networks: string[]; reviewUrl: string };
 type Status = {
   settings: { enabled: boolean | null; clientIds: string[] | null; postTime: string; autoApproveHours: number; monthDay: number };
   enabled: boolean;
@@ -128,7 +128,11 @@ export function AutopilotPage() {
                 <td>{c.inReview}</td>
                 <td>{c.approved}</td>
                 <td>{c.changes}</td>
-                <td>{c.accountsOk ? <CheckCircle2 size={14} className="text-emerald-600" /> : <Link href="/publishing/accounts" className="inline-flex items-center gap-1 text-red-700"><AlertTriangle size={14} /> set LinkedIn/X</Link>}</td>
+                <td>
+                  {c.accountsOk ? <CheckCircle2 size={14} className="text-emerald-600" /> : c.networks.length ? (
+                    <Link href="/publishing/accounts" className="inline-flex items-center gap-1 text-amber-700" title="Posts go only where an account is set"><AlertTriangle size={14} /> {c.networks.join(" + ")} only</Link>
+                  ) : <Link href="/publishing/accounts" className="inline-flex items-center gap-1 text-red-700"><AlertTriangle size={14} /> set LinkedIn/X</Link>}
+                </td>
                 <td className="text-right whitespace-nowrap">
                   <Link href={`/knowledge-base?c=${c.clientId}`} className="inline-flex items-center gap-1 text-gray-600 mr-3"><BookOpen size={13} /> KB</Link>
                   <a href={c.reviewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-gray-600"><ExternalLink size={13} /> Review</a>

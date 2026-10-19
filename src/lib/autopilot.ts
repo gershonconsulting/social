@@ -350,6 +350,13 @@ function finalTexts(d: Draft, xLimit: number): { text: string; textX: string } {
   return { text, textX: x };
 }
 
+/** The networks this company can actually post on (an account set in Publishing → Accounts). */
+async function networksFor(orgId: string, clientId: string): Promise<string> {
+  const t = await getTarget(orgId, clientId);
+  const nets = [t.linkedinUrl ? "LINKEDIN" : null, t.xHandle ? "TWITTER" : null].filter(Boolean);
+  return nets.length ? nets.join(",") : "LINKEDIN,TWITTER";
+}
+
 /** Days of the window already covered for a company (by ANY post, human or Autopilot). */
 async function coveredDays(orgId: string, clientId: string, w: PlanWindow): Promise<Set<string>> {
   const rows = await prisma.contentItem.findMany({
@@ -371,6 +378,7 @@ async function generate(orgId: string, s: AutopilotSettings, w: PlanWindow, budg
     missing += todo.length;
     if (!todo.length || written >= budget) continue;
     const chunk = todo.slice(0, Math.min(3, budget - written));
+    const platforms = await networksFor(orgId, c.id);
     const planned = await prisma.contentItem.findMany({
       where: { organizationId: orgId, clientId: c.id, createdBy: AUTOPILOT, createdAt: { gte: new Date(Date.now() - 75 * DAY) } },
       select: { title: true },
@@ -389,7 +397,7 @@ async function generate(orgId: string, s: AutopilotSettings, w: PlanWindow, budg
       const item = await prisma.contentItem.create({
         data: {
           organizationId: orgId, clientId: c.id, title: d.title || `${c.name} — ${chunk[i]}`, text, textX,
-          platforms: "LINKEDIN,TWITTER", status: "DRAFT", scheduledAt: etInstant(chunk[i], s.postTime), createdBy: AUTOPILOT,
+          platforms, status: "DRAFT", scheduledAt: etInstant(chunk[i], s.postTime), createdBy: AUTOPILOT,
         },
       });
       await addEvent(orgId, item.id, 1, "comment", "team", AUTOPILOT, `Written by Autopilot for ${chunk[i]}. Picture idea: ${d.image}`);
@@ -545,6 +553,11 @@ async function scheduleApproved(orgId: string, s: AutopilotSettings): Promise<{ 
       }
     }
     if (!when) continue;
+    // Post only where the company has an account (e.g. X only while it has no LinkedIn page).
+    if (it.clientId) {
+      const nets = await networksFor(orgId, it.clientId);
+      await prisma.contentItem.update({ where: { id: it.id }, data: { platforms: nets } });
+    }
     const p = await scheduleItem(orgId, it.id, when);
     if (p.length) problems.push(...p);
     else scheduled++;
@@ -647,6 +660,7 @@ export async function status(orgId: string, now = new Date()) {
         approved: mine.filter((i) => ["APPROVED", "SCHEDULED", "PUBLISHED", "PARTIAL"].includes(i.status)).length,
         changes: mine.filter((i) => i.status === "CHANGES_REQUESTED").length,
         accountsOk: !!t.linkedinUrl && !!t.xHandle,
+        networks: [t.linkedinUrl ? "LinkedIn" : null, t.xHandle ? "X" : null].filter(Boolean),
         reviewUrl: reviewUrl(await reviewToken(orgId, c.id)),
       };
     }),
