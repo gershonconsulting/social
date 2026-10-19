@@ -278,6 +278,16 @@ async function writePosts(
     const drafts = parseDrafts(out.text);
     if (drafts.length) return drafts.slice(0, days.length);
   }
+  // The model sometimes breaks the JSON on a multi-post answer: one post at a time.
+  if (days.length > 1) {
+    const one: Draft[] = [];
+    for (const d of days) {
+      const got = (await writePosts(orgId, c, [d], avoid, xLimit))[0];
+      if (!got) break; // keep days in order: the rest is retried on the next call
+      one.push(got);
+    }
+    return one;
+  }
   return [];
 }
 
