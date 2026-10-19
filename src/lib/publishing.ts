@@ -251,6 +251,49 @@ export function textProblems(item: { text: string; textX: string | null; platfor
 
 // ── Per-client targets + review links ────────────────────────────────────────
 
+/**
+ * Where a company's posts go (v4.53.0). Five kinds — Olivier, 2026-10-18:
+ * LinkedIn company page, LinkedIn personal profile, LinkedIn group,
+ * X company account, X personal account. A company can post to several at
+ * once: each approved post gets one delivery per enabled destination of the
+ * post's networks. The main LinkedIn URL / X handle are the first two; more
+ * live in `destinations`.
+ */
+export type DestKind = "page" | "profile" | "group" | "company" | "personal";
+export type Destination = { id: string; network: Net; kind: DestKind; target: string; enabled: boolean };
+export const DEST_LABEL: Record<DestKind, string> = {
+  page: "LinkedIn company page", profile: "LinkedIn personal profile", group: "LinkedIn group", company: "X company account", personal: "X personal account",
+};
+export function linkedInKind(url: string): DestKind {
+  return /\/groups\//.test(url) ? "group" : /\/in\//.test(url) ? "profile" : "page";
+}
+function cleanDestinations(v: unknown): Destination[] {
+  if (!Array.isArray(v)) return [];
+  const out: Destination[] = [];
+  for (const raw of v.slice(0, 12)) {
+    const d = (raw || {}) as Partial<Destination>;
+    const network = d.network === "TWITTER" ? "TWITTER" : d.network === "LINKEDIN" ? "LINKEDIN" : null;
+    if (!network) continue;
+    const target = network === "TWITTER" ? normalizeHandle(d.target) : normalizeLinkedIn(d.target);
+    if (!target) continue;
+    const kind: DestKind = network === "LINKEDIN" ? linkedInKind(target) : d.kind === "personal" ? "personal" : "company";
+    out.push({ id: d.id || Math.random().toString(36).slice(2, 10), network, kind, target, enabled: d.enabled !== false });
+  }
+  return out;
+}
+/** Every enabled place this company posts to: the main LinkedIn + X, then the extra ones. */
+export function destinationsOf(t: Target): Destination[] {
+  const all: Destination[] = [];
+  if (t.linkedinUrl) all.push({ id: "main-li", network: "LINKEDIN", kind: linkedInKind(t.linkedinUrl), target: t.linkedinUrl, enabled: true });
+  if (t.xHandle) all.push({ id: "main-x", network: "TWITTER", kind: t.xKind === "personal" ? "personal" : "company", target: t.xHandle, enabled: true });
+  for (const d of t.destinations || []) {
+    if (!d.enabled) continue;
+    if (all.some((a) => a.network === d.network && a.target.toLowerCase() === d.target.toLowerCase())) continue;
+    all.push(d);
+  }
+  return all;
+}
+
 export type Target = {
   /** X @handle, without "@". */
   xHandle: string | null;
@@ -258,6 +301,10 @@ export type Target = {
   linkedinUrl: string | null;
   reviewerName: string | null;
   reviewerEmail: string | null;
+  /** The main X account: a company or a personal account. */
+  xKind?: "company" | "personal";
+  /** More places to post (v4.53.0). */
+  destinations?: Destination[];
 };
 
 export function normalizeHandle(h: string | null | undefined): string | null {
@@ -301,6 +348,8 @@ export async function saveTarget(orgId: string, clientId: string, t: Partial<Tar
     reviewerName: t.reviewerName !== undefined ? (t.reviewerName || "").trim() || null : cur.reviewerName,
     reviewerEmail:
       t.reviewerEmail !== undefined ? (t.reviewerEmail && /.+@.+\..+/.test(t.reviewerEmail) ? t.reviewerEmail.trim() : null) : cur.reviewerEmail,
+    xKind: t.xKind !== undefined ? (t.xKind === "personal" ? "personal" : "company") : cur.xKind,
+    destinations: t.destinations !== undefined ? cleanDestinations(t.destinations) : cleanDestinations(cur.destinations),
   };
   await writeSetting(orgId, targetKey(clientId), JSON.stringify(next));
   return getTarget(orgId, clientId);
@@ -415,24 +464,27 @@ export async function scheduleItem(orgId: string, itemId: string, when: Date): P
     ? JSON.stringify(media.map((m) => ({ url: mediaUrl(m), mime: m.mime, name: m.name || `picture-${m.position + 1}.jpg` })))
     : null;
   const nets = parsePlatforms(item.platforms);
-  const target = item.clientId ? await getTarget(orgId, item.clientId) : { xHandle: null, linkedinUrl: null };
-  if (nets.includes("TWITTER") && !target.xHandle) problems.push("No X account set for this client (Publishing → Accounts).");
-  if (nets.includes("LINKEDIN") && !target.linkedinUrl) problems.push("No LinkedIn page set for this client (Publishing → Accounts).");
+  const dests = item.clientId ? destinationsOf(await getTarget(orgId, item.clientId)).filter((d) => nets.includes(d.network)) : [];
+  if (nets.includes("TWITTER") && !dests.some((d) => d.network === "TWITTER")) problems.push("No X account set for this client (Publishing → Accounts).");
+  if (nets.includes("LINKEDIN") && !dests.some((d) => d.network === "LINKEDIN")) problems.push("No LinkedIn page, profile or group set for this client (Publishing → Accounts).");
   if (problems.length) return problems;
 
   // Replace whatever has not gone out yet; keep what already went out.
+  // One delivery per destination (v4.53.0): e.g. the company page AND the group.
   const existing = await prisma.scheduledPost.findMany({ where: { contentId: item.id } });
-  const done = new Set(existing.filter((d) => d.status === "POSTED" || d.status === "POSTING").map((d) => d.platform));
+  const key = (p: string, t: string | null) => `${p}|${(t || "").toLowerCase()}`;
+  const done = new Set(existing.filter((d) => d.status === "POSTED" || d.status === "POSTING").map((d) => key(d.platform, d.target)));
   await prisma.scheduledPost.deleteMany({ where: { contentId: item.id, status: { in: ["SCHEDULED", "FAILED", "MISSED"] } } });
-  for (const net of nets) {
-    if (done.has(net)) continue;
+  for (const dest of dests) {
+    const net = dest.network;
+    if (done.has(key(net, dest.target))) continue;
     await prisma.scheduledPost.create({
       data: {
         organizationId: orgId,
         contentId: item.id,
         clientId: item.clientId,
         platform: net,
-        target: net === "TWITTER" ? target.xHandle : target.linkedinUrl,
+        target: dest.target,
         text: textFor(item, net),
         mediaJson,
         status: "SCHEDULED",

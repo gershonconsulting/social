@@ -36,3 +36,15 @@ Code: `src/lib/autopilot.ts`.
 - Each internal company has its LinkedIn page + X handle in Publishing → Accounts (the Autopilot
   page shows a red "set LinkedIn/X" otherwise, and the team gets one email a day).
 - The publishing Chrome browser is online and signed in to LinkedIn and X.
+
+## v4.52–4.53 (2026-10-18)
+- **LinkedIn groups** as a destination (extension 0.21.0 posts from the group's "Start a public post" box).
+  AmericanAbroad.net → group 42835334 + X @AmericanAbroadN. Autopilot writes group-style posts
+  (community, conversational, ends with a question) when a company posts to a group.
+- **Destinations** (Publishing → Accounts): main LinkedIn + main X, plus any number of extra ones —
+  the 5 kinds Olivier listed: LinkedIn company page, LinkedIn personal profile, LinkedIn group,
+  X company account, X personal account. One delivery per destination.
+- Extension 0.22.0 switches X account (X's account switcher) when a post is for another signed-in
+  X account. Each X account must be added once in the publishing browser (X → Add an existing account).
+- **ICP upload** (Knowledge Base → ICPs): upload a PDF/Word/Excel/CSV/text or paste text;
+  Workers AI toMarkdown + Intelligence add the ICPs found (source doc kept in kb-doc:<clientId>:<ts>).

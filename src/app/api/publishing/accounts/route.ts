@@ -59,12 +59,14 @@ async function clientOf(orgId: string, id: unknown) {
 export async function PUT(req: NextRequest) {
   const c = await publishingCaller(true);
   if (c instanceof NextResponse) return c;
-  const b = ((await req.json().catch(() => null)) || {}) as Record<string, string | null | undefined>;
+  const b = ((await req.json().catch(() => null)) || {}) as Record<string, string | null | undefined> & { destinations?: unknown; xKind?: string };
   const cl = await clientOf(c.orgId, b.clientId);
   if (!cl) return NextResponse.json({ success: false, error: "Unknown client." }, { status: 400 });
   if (b.route === "client" || b.route === "workspace") await setRoute(c.orgId, cl.id, b.route);
   await saveTarget(c.orgId, cl.id, {
     xHandle: b.xHandle, linkedinUrl: b.linkedinUrl, reviewerName: b.reviewerName, reviewerEmail: b.reviewerEmail,
+    xKind: b.xKind === undefined ? undefined : b.xKind === "personal" ? "personal" : "company",
+    destinations: b.destinations === undefined ? undefined : (b.destinations as never),
   });
   return NextResponse.json({ success: true, data: await row(c.orgId, cl) });
 }

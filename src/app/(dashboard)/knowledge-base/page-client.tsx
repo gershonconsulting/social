@@ -12,10 +12,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Header } from "@/components/layout/header";
-import { Building2, ChevronDown, ChevronRight, Loader2, Plus, Save, Sparkles, Swords, Target, Trash2, Wand2 } from "lucide-react";
+import { Building2, ChevronDown, ChevronRight, ClipboardPaste, FileUp, Loader2, Plus, Save, Sparkles, Swords, Target, Trash2, Wand2 } from "lucide-react";
 
 type Source = "ai" | "manual";
-type Icp = { id: string; name: string; description: string; source: Source; updatedAt: string };
+type Icp = { id: string; name: string; description: string; source: Source; updatedAt: string; from?: string };
 type KB = {
   valueProp: { text: string; source: Source; updatedAt: string | null };
   competitive: { notes: string; source: Source; updatedAt: string | null };
@@ -227,6 +227,7 @@ export function KnowledgeBaseClient() {
               {view === "icps" && (
                 <div className="space-y-4">
                   <p className="text-xs text-gray-500">Each Autopilot post is written for one ICP, in rotation.</p>
+                  {canWrite && <IcpUpload clientId={open} dirty={dirty} onDone={(k, n, from) => { setKb(k); setDirty(false); setMsg(`${n} ICP${n === 1 ? "" : "s"} added from “${from}”.`); void loadList(); }} />}
                   {!kb.icps.length && <p className="text-sm text-amber-700">No ICP yet — press “Draft with Intelligence” or add one.</p>}
                   {kb.icps.map((icp, idx) => (
                     <div key={icp.id || idx} className="rounded-lg border border-gray-200 p-3">
@@ -239,6 +240,7 @@ export function KnowledgeBaseClient() {
                           className="flex-1 font-medium text-sm border-b border-transparent focus:border-gray-300 outline-none"
                         />
                         <AiTag s={icp.source} />
+                        {icp.from && <span className="text-[11px] text-gray-500 truncate max-w-[200px]" title={icp.from}>from {icp.from}</span>}
                         {canWrite && <button onClick={() => edit((k) => { k.icps.splice(idx, 1); return k; })} className="text-gray-400 hover:text-red-600" title="Remove"><Trash2 size={14} /></button>}
                       </div>
                       <textarea
@@ -261,6 +263,62 @@ export function KnowledgeBaseClient() {
           )}
         </section>
       </div>
+    </div>
+  );
+}
+
+/** Upload a file or paste text → Intelligence adds the ICPs it finds (v4.53.0). */
+function IcpUpload({ clientId, dirty, onDone }: { clientId: string; dirty: boolean; onDone: (kb: KB, added: number, from: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [paste, setPaste] = useState<string | null>(null);
+  const [docs, setDocs] = useState<Array<{ from: string; uploadedAt: string; chars: number }>>([]);
+  useEffect(() => {
+    void fetch(`/api/knowledge-base/${clientId}/icp-upload`, { cache: "no-store" }).then((r) => r.json()).then((j) => j?.success && setDocs(j.data.docs)).catch(() => {});
+  }, [clientId]);
+
+  async function send(body: FormData | string) {
+    if (dirty && !confirm("You have unsaved edits — they will be lost. Continue?")) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch(`/api/knowledge-base/${clientId}/icp-upload`, typeof body === "string"
+        ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: body, name: "Pasted text" }) }
+        : { method: "POST", body });
+      const j = await r.json();
+      if (!j?.success) throw new Error(j?.error || "Could not read it.");
+      setDocs(j.data.docs); setPaste(null);
+      onDone(j.data.kb, j.data.added, j.data.from);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Could not read it."); }
+    setBusy(false);
+  }
+
+  return (
+    <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium text-gray-800">Upload ICP information</span>
+        <span className="text-xs text-gray-500">PDF, Word, Excel, CSV or text — Intelligence adds the ICPs it finds.</span>
+        <label className={`ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 bg-white cursor-pointer ${busy ? "opacity-50 pointer-events-none" : ""}`}>
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <FileUp size={14} />} Upload a file
+          <input type="file" className="hidden" accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.txt,.md,.pptx,.odt" onChange={(e) => {
+            const f = e.target.files?.[0]; e.target.value = "";
+            if (!f) return;
+            const fd = new FormData(); fd.append("file", f); void send(fd);
+          }} />
+        </label>
+        <button disabled={busy} onClick={() => setPaste(paste === null ? "" : null)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white"><ClipboardPaste size={14} /> Paste text</button>
+      </div>
+      {paste !== null && (
+        <div className="mt-2">
+          <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={6} placeholder="Paste the ICP brief, persona descriptions, target list criteria…" className="w-full border border-gray-300 rounded-lg p-2 text-sm" />
+          <button disabled={busy || paste.trim().length < 40} onClick={() => void send(paste)} className="mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-lg disabled:opacity-40">
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />} Find the ICPs
+          </button>
+        </div>
+      )}
+      {err && <p className="mt-2 text-sm text-red-700">{err}</p>}
+      {docs.length > 0 && (
+        <p className="mt-2 text-xs text-gray-500">Uploaded: {docs.slice(0, 5).map((d) => `${d.from} (${new Date(d.uploadedAt).toLocaleDateString()})`).join(" · ")}</p>
+      )}
     </div>
   );
 }

@@ -375,12 +375,42 @@
     return out;
   }
 
+  // Runs in x.com: open the account switcher, then pick @handle in it.
+  function xOpenSwitcher() {
+    var b = document.querySelector('[data-testid="SideNav_AccountSwitcher_Button"]');
+    if (!b) return false;
+    b.click();
+    return true;
+  }
+  function xPickAccount(handle) {
+    var want = "@" + String(handle).toLowerCase();
+    var cells = Array.from(document.querySelectorAll('[data-testid="UserCell"], [role="menuitem"], [data-testid="Dropdown"] [role="button"]'));
+    var hit = cells.find(function (c) { return (c.innerText || "").toLowerCase().split(/\s+/).indexOf(want) !== -1; });
+    if (!hit) return false;
+    hit.click();
+    return true;
+  }
+  async function xSwitchTo(w, handle) {
+    await navigate(w.tabId, "https://x.com/home");
+    for (var i = 0; i < 8; i++) { if (await run(w.tabId, xOpenSwitcher)) break; await sleep(1000); }
+    var picked = false;
+    for (var j = 0; j < 6 && !picked; j++) { await sleep(800); picked = !!(await run(w.tabId, xPickAccount, [handle])); }
+    if (!picked) { try { await run(w.tabId, function () { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); }); } catch (e) {} return await xWhoAmI(true); }
+    await sleep(5000);
+    return await xWhoAmI(true);
+  }
+
   async function publishX(d, w) {
     var clicked = false;
     if (!(await xSignedIn())) { await report(d.id, "failed_before_click", null, "X is signed out in the publishing browser."); await onXSignedOut(); return; }
     var me = await xWhoAmI(false);
     if (me && d.target && me.toLowerCase() !== String(d.target).toLowerCase()) {
-      await report(d.id, "failed_before_click", null, "This browser is signed in to X as @" + me + ", the post is for @" + d.target + ".");
+      // 0.21.0: a company can post on a company AND a personal X account. X keeps
+      // several accounts signed in at once — switch to the one this post is for.
+      me = await xSwitchTo(w, d.target);
+    }
+    if (me && d.target && me.toLowerCase() !== String(d.target).toLowerCase()) {
+      await report(d.id, "failed_before_click", null, "This browser is signed in to X as @" + me + ", the post is for @" + d.target + ". Add @" + d.target + " to this browser's X accounts (X → your photo → Add an existing account).");
       return;
     }
     await navigate(w.tabId, "https://x.com/intent/post?text=" + encodeURIComponent(d.text));

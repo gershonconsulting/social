@@ -21,7 +21,7 @@ import { getCompetitorIds } from "@/lib/competitors/store";
 import { aboutOf } from "@/lib/reports/ops/intelligence";
 
 export type Source = "ai" | "manual";
-export type Icp = { id: string; name: string; description: string; source: Source; updatedAt: string };
+export type Icp = { id: string; name: string; description: string; source: Source; updatedAt: string; from?: string };
 export type KnowledgeBase = {
   valueProp: { text: string; source: Source; updatedAt: string | null };
   competitive: { notes: string; source: Source; updatedAt: string | null };
@@ -61,6 +61,7 @@ export async function saveKB(orgId: string, clientId: string, kb: KnowledgeBase)
       description: String(i.description || "").slice(0, 4000),
       source: i.source === "ai" ? "ai" : "manual",
       updatedAt: i.updatedAt || new Date().toISOString(),
+      ...(i.from ? { from: String(i.from).slice(0, 160) } : {}),
     })),
   };
   const value = JSON.stringify(clean);
@@ -238,4 +239,72 @@ export function kbForPrompt(kb: KnowledgeBase): string {
   if (kb.valueProp.text.trim()) out.push(`VALUE PROPOSITION:\n${kb.valueProp.text.trim().slice(0, 1500)}`);
   if (kb.competitive.notes.trim()) out.push(`COMPETITIVE POSITIONING:\n${kb.competitive.notes.trim().slice(0, 1200)}`);
   return out.join("\n\n");
+}
+
+// ── ICP upload (v4.53.0) ─────────────────────────────────────────────────────
+//
+// Olivier, 2026-10-18: "I need to be able to upload ICP information somewhere
+// for the campaign." A file (PDF, Word, Excel, CSV, text) or pasted text is
+// turned into text (Workers AI toMarkdown for documents), Intelligence pulls
+// the ICPs out of it, and they are ADDED to the company's ICPs (an ICP with
+// the same name is replaced). The text itself is kept (kb-doc:<clientId>:…)
+// so the source of each ICP stays visible.
+
+type ToMarkdown = { toMarkdown?: (docs: Array<{ name: string; blob: Blob }>) => Promise<Array<{ data?: string; format?: string; error?: string }>> };
+
+export async function fileToText(name: string, blob: Blob): Promise<string> {
+  const lower = name.toLowerCase();
+  if (/\.(txt|md|csv|tsv|json)$/.test(lower) || blob.type.startsWith("text/")) return (await blob.text()).slice(0, 60000);
+  const { getAIBinding } = await import("@/lib/content/provider");
+  const ai = getAIBinding() as unknown as ToMarkdown | null;
+  if (!ai?.toMarkdown) throw new Error("This file type can't be read here — upload a PDF, Word or Excel file, or paste the text.");
+  const out = await ai.toMarkdown([{ name, blob }]);
+  const text = (out?.[0]?.data || "").trim();
+  if (!text) throw new Error(out?.[0]?.error || "No text could be read from this file.");
+  return text.slice(0, 60000);
+}
+
+export async function importIcps(orgId: string, clientId: string, text: string, from: string): Promise<{ kb: KnowledgeBase; added: number }> {
+  const client = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId }, select: { name: true, industry: true } });
+  if (!client) throw new Error("Company not found");
+  const clean = text.replace(/\r\n/g, "\n").trim();
+  if (clean.length < 40) throw new Error("There is not enough text to find an ICP in.");
+  const about = aboutOf(client.name, client.industry);
+  const ai = { ...(await getAISettings()), model: MODEL };
+  const system = `You extract Ideal Customer Profiles (ICPs) for ${client.name}${about ? ` (${about})` : ""} from a document the team uploaded.
+Keep ONLY what the document says — do not invent industries, sizes, titles or numbers. If the document lists several segments or personas, return one ICP each (max 8).
+Answer ONLY with JSON: { "icps": [ { "name": string, "description": string } ] }
+name = "<Job title / persona> at <company type>" (or the segment name the document uses).
+description = short lines, using what the document gives: Company (industry, size, geography) · Role & seniority · Pains · Triggers to buy now · What they need to hear from us · Any other criteria in the document (budget, tech stack, exclusions…).`;
+  let parsed: { icps?: Array<{ name?: string; description?: string }> } | null = null;
+  for (let i = 0; i < 2 && !parsed; i++) {
+    const out = await runChat(ai, system, `DOCUMENT (${from}):\n${clean.slice(0, 24000)}`, 3000);
+    const a = out.text.indexOf("{"), b = out.text.lastIndexOf("}");
+    try { parsed = JSON.parse(out.text.slice(a, b + 1)); } catch { parsed = null; }
+  }
+  const found = (parsed?.icps || []).filter((i) => i && i.name && i.description).slice(0, 8);
+  if (!found.length) throw new Error("Intelligence found no ICP in this document.");
+  const kb = await getKB(orgId, clientId);
+  const now = new Date().toISOString();
+  for (const f of found) {
+    const name = String(f.name).slice(0, 120);
+    const description = Array.isArray(f.description) ? (f.description as unknown[]).join("\n") : String(f.description);
+    const icp: Icp = { id: newId(), name, description, source: "ai", updatedAt: now, from };
+    const k = kb.icps.findIndex((x) => x.name.trim().toLowerCase() === name.trim().toLowerCase());
+    if (k >= 0) kb.icps[k] = { ...icp, id: kb.icps[k].id };
+    else kb.icps.push(icp);
+  }
+  kb.icps = kb.icps.slice(-12);
+  const docKey = `kb-doc:${clientId}:${Date.now()}`;
+  await prisma.orgSetting.create({ data: { organizationId: orgId, key: docKey, value: JSON.stringify({ from, uploadedAt: now, text: clean.slice(0, 60000) }) } });
+  return { kb: await saveKB(orgId, clientId, kb), added: found.length };
+}
+
+/** The ICP documents uploaded for a company (names and dates). */
+export async function icpDocs(orgId: string, clientId: string): Promise<Array<{ from: string; uploadedAt: string; chars: number }>> {
+  const rows = await prisma.orgSetting.findMany({ where: { organizationId: orgId, key: { startsWith: `kb-doc:${clientId}:` } }, select: { value: true }, take: 30 });
+  return rows
+    .map((r) => { try { const v = JSON.parse(r.value) as { from: string; uploadedAt: string; text: string }; return { from: v.from, uploadedAt: v.uploadedAt, chars: v.text.length }; } catch { return null; } })
+    .filter((x): x is { from: string; uploadedAt: string; chars: number } => !!x)
+    .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
 }

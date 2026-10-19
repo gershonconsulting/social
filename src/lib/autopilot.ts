@@ -31,7 +31,7 @@ import prisma from "@/lib/db-raw";
 import { getAIBinding, getAISettings, runChat } from "@/lib/content/provider";
 import { objectivesFor, saveObjectives } from "@/lib/campaigns/objectives";
 import {
-  addEvent, alertTeam, esc, getSettings, getTarget, LINKEDIN_MAX, MEDIA_SELECT, reviewToken, reviewUrl, scheduleItem, SITE, xLength, xMax,
+  addEvent, alertTeam, destinationsOf, esc, getSettings, getTarget, LINKEDIN_MAX, MEDIA_SELECT, reviewToken, reviewUrl, scheduleItem, SITE, xLength, xMax,
 } from "@/lib/publishing";
 import { submitForReview } from "@/lib/publishing-review";
 import { aboutOf } from "@/lib/reports/ops/intelligence";
@@ -257,7 +257,7 @@ async function writePosts(
   const kb = await knowledge(orgId, c.id);
   const snap = await competitiveSnapshot(orgId, c.id).catch(() => null);
   const target = await getTarget(orgId, c.id);
-  const inGroup = !!target.linkedinUrl && /\/groups\//.test(target.linkedinUrl);
+  const inGroup = destinationsOf(target).some((d) => d.kind === "group");
   const icpFor = (d: string) => (kb.icps.length ? kb.icps[(Number(d.slice(8, 10)) - 1) % kb.icps.length] : null);
   const ai = await getAISettings();
   const settings = { ...ai, model: TEXT_MODEL_HINT };
@@ -367,8 +367,8 @@ function finalTexts(d: Draft, xLimit: number): { text: string; textX: string } {
 
 /** The networks this company can actually post on (an account set in Publishing → Accounts). */
 async function networksFor(orgId: string, clientId: string): Promise<string> {
-  const t = await getTarget(orgId, clientId);
-  const nets = [t.linkedinUrl ? "LINKEDIN" : null, t.xHandle ? "TWITTER" : null].filter(Boolean);
+  const dests = destinationsOf(await getTarget(orgId, clientId));
+  const nets = Array.from(new Set(dests.map((d) => d.network)));
   return nets.length ? nets.join(",") : "LINKEDIN,TWITTER";
 }
 
@@ -674,8 +674,8 @@ export async function status(orgId: string, now = new Date()) {
         inReview: mine.filter((i) => i.status === "IN_REVIEW").length,
         approved: mine.filter((i) => ["APPROVED", "SCHEDULED", "PUBLISHED", "PARTIAL"].includes(i.status)).length,
         changes: mine.filter((i) => i.status === "CHANGES_REQUESTED").length,
-        accountsOk: !!t.linkedinUrl && !!t.xHandle,
-        networks: [t.linkedinUrl ? "LinkedIn" : null, t.xHandle ? "X" : null].filter(Boolean),
+        accountsOk: destinationsOf(t).some((d) => d.network === "LINKEDIN") && destinationsOf(t).some((d) => d.network === "TWITTER"),
+        networks: Array.from(new Set(destinationsOf(t).map((d) => (d.network === "LINKEDIN" ? "LinkedIn" : "X")))),
         reviewUrl: reviewUrl(await reviewToken(orgId, c.id)),
       };
     }),
