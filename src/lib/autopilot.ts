@@ -31,7 +31,7 @@ import prisma from "@/lib/db-raw";
 import { getAIBinding, getAISettings, runChat } from "@/lib/content/provider";
 import { objectivesFor, saveObjectives } from "@/lib/campaigns/objectives";
 import {
-  addEvent, alertTeam, destinationsOf, esc, getSettings, getTarget, LINKEDIN_MAX, MEDIA_SELECT, reviewToken, reviewUrl, scheduleItem, SITE, xLength, xMax,
+  addEvent, alertTeam, destinationsOf, esc, notifyReadyForPublishing, sendMail, validatorOf, getSettings, getTarget, LINKEDIN_MAX, MEDIA_SELECT, reviewToken, reviewUrl, scheduleItem, SITE, xLength, xMax,
 } from "@/lib/publishing";
 import { submitForReview } from "@/lib/publishing-review";
 import { aboutOf } from "@/lib/reports/ops/intelligence";
@@ -460,26 +460,36 @@ async function submitMonth(orgId: string, s: AutopilotSettings, w: PlanWindow): 
   }
   const submitted = [...byClient.values()].reduce((a, b) => a + b, 0);
   if (!submitted) return { submitted, emailed: false };
+  // One email per company to whoever validates it (its reviewer, else the team).
   const deadline = new Date(Date.now() + s.autoApproveHours * 3600000);
-  const rows: string[] = [];
+  const deadlineTxt = deadline.toLocaleString("en-US", { timeZone: TZ, weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" });
+  let emailed = false;
   for (const [clientId, n] of byClient) {
     const c = clients.find((x) => x.id === clientId)!;
     const link = reviewUrl(await reviewToken(orgId, clientId));
-    rows.push(`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee"><b>${esc(c.name)}</b></td><td style="padding:6px 10px;border-bottom:1px solid #eee">${n} posts</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #eee"><a href="${link}">Review &amp; approve</a></td></tr>`);
+    const v = await validatorOf(orgId, clientId);
+    const hi = v.name ? `Hi ${esc(v.name.split(/\s+/)[0])},` : "Hello,";
+    const list = (await prisma.contentItem.findMany({
+      where: { organizationId: orgId, clientId, createdBy: AUTOPILOT, status: "IN_REVIEW", scheduledAt: { gte: w.from, lt: w.to } },
+      select: { title: true, text: true, scheduledAt: true },
+      orderBy: { scheduledAt: "asc" },
+    }))
+      .slice(0, 31)
+      .map((i) => `<li style="margin:3px 0"><span style="color:#666">${esc(i.scheduledAt ? i.scheduledAt.toLocaleDateString("en-US", { timeZone: TZ, weekday: "short", month: "short", day: "numeric" }) : "")}</span> — ${esc((i.title || i.text).split("\n")[0].slice(0, 110))}</li>`)
+      .join("");
+    const ok = await sendMail(
+      v.email,
+      `${c.name} — ${w.label}: ${n} posts to validate`,
+      `<p>${hi}</p>
+       <p>The <b>${esc(w.label)}</b> content of <b>${esc(c.name)}</b> is ready for your validation — ${n} posts, one per day (text, X version and picture):</p>
+       <ul>${list}</ul>
+       <p>Read the month, comment, ask for changes or press <b>Approve all</b>. Anything not answered is <b>approved automatically on ${esc(deadlineTxt)}</b> (New York).
+       When it is validated, social@gershonconsulting.com is told it is ready for publishing.</p>
+       ${skipped.length ? `<p style="color:#b45309;font-size:13px">Not sent: ${esc(skipped.slice(0, 5).join(" · "))}</p>` : ""}`,
+      { href: link, label: "Validate the content" },
+    );
+    emailed = emailed || ok;
   }
-  const deadlineTxt = deadline.toLocaleString("en-US", { timeZone: TZ, weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" });
-  const emailed = await alertTeam(
-    orgId,
-    `Autopilot: ${w.label} content is ready — ${submitted} posts to approve`,
-    `<p>Autopilot wrote <b>one post per day</b> for ${w.label} — LinkedIn text, X version and picture — for each internal company:</p>
-     <table style="border-collapse:collapse;font-size:14px">${rows.join("")}</table>
-     <p>Open each link to read the month, comment, ask for changes or press <b>Approve all</b>.
-     Anything you have not answered is <b>approved automatically on ${esc(deadlineTxt)}</b> (New York) and then published on its day at ${esc(s.postTime)}.</p>
-     <p style="color:#555;font-size:13px">"Ask for changes" on a post: Autopilot rewrites it from your comment and sends it back to you.</p>
-     ${skipped.length ? `<p style="color:#b45309;font-size:13px">Not sent: ${esc(skipped.slice(0, 5).join(" · "))}</p>` : ""}`,
-    `${SITE}/publishing/calendar`,
-  );
   return { submitted, emailed };
 }
 
@@ -495,6 +505,7 @@ async function autoApprove(orgId: string, s: AutopilotSettings): Promise<number>
     await prisma.contentItem.update({ where: { id: d.id }, data: { status: "APPROVED", approvedAt: now, approvedBy: AUTOPILOT, approvedRole: "team" } });
     await addEvent(orgId, d.id, d.version, "approved", "team", AUTOPILOT, `Approved automatically — no answer within ${s.autoApproveHours} hours.`);
   }
+  if (due.length) await notifyReadyForPublishing(orgId, due.map((d) => d.id), AUTOPILOT, `approved automatically after ${s.autoApproveHours}h without an answer`);
   return due.length;
 }
 

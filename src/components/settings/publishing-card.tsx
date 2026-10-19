@@ -15,7 +15,7 @@ import { CheckCircle2, Loader2, Send } from "lucide-react";
 import { LiveStrip, type LiveAll } from "@/components/publishing/shared";
 
 type Data = {
-  settings: { enabled: boolean; longPostsX: boolean; graceMinutes: number; alertEmail: string | null; requireImage: boolean };
+  settings: { enabled: boolean; longPostsX: boolean; graceMinutes: number; alertEmail: string | null; requireImage: boolean; readyEmail?: string };
   publisher: { lastSeenAt: string | null; version: string | null; lastPostAt: string | null; lastError: string | null; x: { as: string | null }; linkedin: { as: string | null } };
   live: LiveAll;
   waiting: number;
@@ -39,7 +39,8 @@ export function PublishingCard() {
   const [msg, setMsg] = useState<string | null>(null);
   const [hidden, setHidden] = useState(false);
 
-  const apply = (j: Data) => { setD(j); setGrace(j.settings.graceMinutes); setEmail(j.settings.alertEmail || ""); };
+  const [ready, setReady] = useState("");
+  const apply = (j: Data) => { setD(j); setGrace(j.settings.graceMinutes); setEmail(j.settings.alertEmail || ""); setReady(j.settings.readyEmail || "social@gershonconsulting.com"); };
   const load = useCallback(async () => {
     try {
       const r = await fetch("/api/publishing/settings", { cache: "no-store" });
@@ -115,9 +116,14 @@ export function PublishingCard() {
               </label>
             </div>
           </div>
+          <label className="block mt-4 text-sm text-gray-800">
+            “Validated — ready for publishing” emails go to
+            <input disabled={ro} value={ready} onChange={(e) => setReady(e.target.value)} className="block w-full max-w-sm mt-1 text-sm border border-gray-300 rounded-lg px-2.5 py-1.5" placeholder="social@gershonconsulting.com" />
+            <span className="text-[11px] text-gray-500">Sent every time content is approved — by the client, by the team or automatically after 48h.</span>
+          </label>
           {!ro && (
             <div className="flex items-center gap-3 mt-4">
-              <button disabled={busy} onClick={() => save({ graceMinutes: grace, alertEmail: email })} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-lg disabled:opacity-50">
+              <button disabled={busy} onClick={() => save({ graceMinutes: grace, alertEmail: email, readyEmail: ready })} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-lg disabled:opacity-50">
                 {busy ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Save
               </button>
               {msg && <span className="text-xs text-gray-600">{msg}</span>}

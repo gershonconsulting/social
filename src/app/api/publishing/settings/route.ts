@@ -33,6 +33,7 @@ export async function PUT(req: NextRequest) {
   if (b.graceMinutes !== undefined) patch.graceMinutes = Number(b.graceMinutes);
   if (b.alertEmail !== undefined) patch.alertEmail = b.alertEmail || null;
   if (typeof b.requireImage === "boolean") patch.requireImage = b.requireImage;
+  if (typeof b.readyEmail === "string") patch.readyEmail = b.readyEmail;
   await saveSettings(c.orgId, patch);
   return NextResponse.json({ success: true, data: { ...(await payload(c.orgId)), canWrite: c.canWrite } });
 }

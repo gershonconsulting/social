@@ -14,8 +14,7 @@ import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
 import {
   ITEM_STATUSES, LINKEDIN_MAX, MAX_IMAGES, MEDIA_SELECT, addEvent, getPublisherState, getSettings, liveStatus, parsePlatforms, sweep, textProblems, xMax,
-  PUBLISHING_CLIENT_WHERE,
-} from "@/lib/publishing";
+  PUBLISHING_CLIENT_WHERE, notifyReadyForPublishing } from "@/lib/publishing";
 import { submitForReview } from "@/lib/publishing-review";
 
 export async function GET(req: NextRequest) {
@@ -122,7 +121,10 @@ export async function POST(req: NextRequest) {
       },
     });
     await addEvent(c.orgId, item.id, 1, "created", "team", c.name);
-    if (b?.approve) await addEvent(c.orgId, item.id, 1, "approved", "team", c.name, "Approved internally");
+    if (b?.approve) {
+      await addEvent(c.orgId, item.id, 1, "approved", "team", c.name, "Approved internally");
+      await notifyReadyForPublishing(c.orgId, [item.id], c.name, "approved internally");
+    }
     if (b?.submit && !b?.approve) {
       const err = await submitForReview(c.orgId, item.id, c.name);
       if (err) return NextResponse.json({ success: true, data: item, warning: err });

@@ -23,8 +23,7 @@ import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
 import {
   MEDIA_SELECT, addEvent, getSettings, parsePlatforms, reviewToken, reviewUrl, rollUp, scheduleItem, textProblems, unscheduleItem,
-  PUBLISHING_CLIENT_WHERE,
-} from "@/lib/publishing";
+  PUBLISHING_CLIENT_WHERE, notifyReadyForPublishing } from "@/lib/publishing";
 import { submitForReview } from "@/lib/publishing-review";
 
 function bad(error: string, status = 400) {
@@ -107,6 +106,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         if (problems.length) return bad(problems.join(" "));
         await prisma.contentItem.update({ where: { id: item.id }, data: { status: "APPROVED", approvedAt: now, approvedBy: c.name, approvedRole: "team" } });
         await addEvent(c.orgId, item.id, item.version, "approved", "team", c.name, "Approved internally");
+        await notifyReadyForPublishing(c.orgId, [item.id], c.name, "approved internally");
         break;
       }
       case "reopen": {

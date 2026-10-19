@@ -8,7 +8,7 @@
  */
 import prisma from "@/lib/db-raw";
 import {
-  addEvent, alertTeam, mediaCount, esc, getSettings, getTarget, quote, reviewToken, reviewUrl, sendMail, textProblems, SITE,
+  addEvent, alertTeam, mediaCount, esc, getSettings, getTarget, notifyReadyForPublishing, quote, reviewToken, reviewUrl, sendMail, textProblems, SITE, validatorOf,
 } from "@/lib/publishing";
 
 /** Default batch name, CloudCampaign-style: "<Company> — <Month YYYY>". */
@@ -34,7 +34,8 @@ export async function submitForReview(
   await addEvent(orgId, item.id, item.version, "submitted", "team", by, opts.batch ? `batch:${opts.batch}` : null);
   if (opts.notify === false) return null;
 
-  const target = await getTarget(orgId, item.clientId);
+  const v = await validatorOf(orgId, item.clientId);
+  const target = { reviewerEmail: v.email, reviewerName: v.name };
   const token = await reviewToken(orgId, item.clientId);
   if (target.reviewerEmail) {
     const client = await prisma.client.findFirst({ where: { id: item.clientId }, select: { name: true } });
@@ -82,7 +83,8 @@ export async function submitBatch(
   }
   let emailed = false;
   if (sent.length) {
-    const target = await getTarget(orgId, clientId);
+    const v = await validatorOf(orgId, clientId);
+    const target = { reviewerEmail: v.email, reviewerName: v.name };
     if (target.reviewerEmail) {
       const token = await reviewToken(orgId, clientId);
       const hi = target.reviewerName ? `Hi ${esc(target.reviewerName.split(/\s+/)[0])},` : "Hello,";
@@ -121,13 +123,7 @@ export async function clientAction(
       await prisma.contentItem.update({ where: { id: w.id }, data: { status: "APPROVED", approvedAt: now, approvedBy: who0, approvedRole: "client" } });
       await addEvent(orgId, w.id, w.version, "approved", "client", who0, "Approved with “Approve all”");
     }
-    const cl = await prisma.client.findFirst({ where: { id: clientId }, select: { name: true } });
-    await alertTeam(
-      orgId,
-      `${cl?.name || "The client"} approved ${waiting.length} post${waiting.length === 1 ? "" : "s"} — ready to schedule`,
-      `<p><b>${esc(who0)}</b> (${esc(cl?.name || "client")}) approved all ${waiting.length} posts waiting for review.</p>`,
-      `${SITE}/publishing`,
-    );
+    await notifyReadyForPublishing(orgId, waiting.map((w) => w.id), who0, "“Approve all”");
     return null;
   }
   const item = await prisma.contentItem.findFirst({ where: { id: itemId, organizationId: orgId, clientId } });
@@ -158,12 +154,7 @@ export async function clientAction(
       data: { status: "APPROVED", approvedAt: new Date(), approvedBy: who, approvedRole: "client" },
     });
     await addEvent(orgId, item.id, item.version, "approved", "client", who, text || null);
-    await alertTeam(
-      orgId,
-      `${label} approved a post — ready to schedule`,
-      `<p><b>${esc(who)}</b> (${esc(label)}) approved:</p>${quote(item.text)}${text ? `<p>Note: ${esc(text)}</p>` : ""}`,
-      `${SITE}/publishing`,
-    );
+    await notifyReadyForPublishing(orgId, [item.id], who, text ? `approved with the note “${text.slice(0, 200)}”` : "approved");
     return null;
   }
   return "Unknown action.";

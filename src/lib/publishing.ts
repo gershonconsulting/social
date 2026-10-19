@@ -63,8 +63,11 @@ export type PublishSettings = {
   alertEmail: string | null;
   /** Every post needs at least one picture before it can go to review, be approved or scheduled. */
   requireImage: boolean;
+  /** Who is told content is validated and ready for publishing (Olivier, 2026-10-18). */
+  readyEmail: string;
 };
-export const DEFAULT_SETTINGS: PublishSettings = { enabled: true, longPostsX: false, graceMinutes: 120, alertEmail: null, requireImage: true };
+export const READY_EMAIL_DEFAULT = "social@gershonconsulting.com";
+export const DEFAULT_SETTINGS: PublishSettings = { enabled: true, longPostsX: false, graceMinutes: 120, alertEmail: null, requireImage: true, readyEmail: READY_EMAIL_DEFAULT };
 
 // ── Pictures ─────────────────────────────────────────────────────────────────
 
@@ -122,6 +125,7 @@ export async function saveSettings(orgId: string, patch: Partial<PublishSettings
   next.graceMinutes = Math.min(1440, Math.max(15, Math.round(Number(next.graceMinutes) || 120)));
   next.alertEmail = next.alertEmail && /.+@.+\..+/.test(next.alertEmail) ? next.alertEmail.trim() : null;
   next.requireImage = next.requireImage !== false;
+  next.readyEmail = next.readyEmail && /.+@.+\..+/.test(next.readyEmail) ? next.readyEmail.trim() : READY_EMAIL_DEFAULT;
   await writeSetting(orgId, SETTINGS_KEY, JSON.stringify(next));
   return next;
 }
@@ -405,7 +409,7 @@ export function nyTime(d: Date | null): string {
   return d.toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" }) + " (New York)";
 }
 
-async function teamRecipient(orgId: string): Promise<string | null> {
+export async function teamRecipient(orgId: string): Promise<string | null> {
   const s = await getSettings(orgId);
   if (s.alertEmail) return s.alertEmail;
   const u = await prisma.user.findFirst({
@@ -674,4 +678,49 @@ export async function orgsWithDeliveries(): Promise<string[]> {
     distinct: ["organizationId"],
   });
   return rows.map((r) => r.organizationId).filter((x): x is string => !!x);
+}
+
+// ── Validation done → "ready for publishing" (v4.54.0) ───────────────────────
+//
+// Olivier, 2026-10-18: content ready to validate → email to whoever validates
+// it (the company's reviewer); validation done → email to
+// social@gershonconsulting.com saying it is ready for publishing. One email
+// per approval action (an "Approve all" or an auto-approval batch = one email).
+
+export async function notifyReadyForPublishing(orgId: string, itemIds: string[], by: string, how: string): Promise<boolean> {
+  if (!itemIds.length) return false;
+  const items = await prisma.contentItem.findMany({
+    where: { organizationId: orgId, id: { in: itemIds } },
+    select: { id: true, clientId: true, title: true, text: true, scheduledAt: true, platforms: true },
+    orderBy: { scheduledAt: "asc" },
+  });
+  if (!items.length) return false;
+  const clientIds = Array.from(new Set(items.map((i) => i.clientId).filter((x): x is string => !!x)));
+  const clients = await prisma.client.findMany({ where: { id: { in: clientIds } }, select: { id: true, name: true } });
+  const nameOf = (id: string | null) => clients.find((c) => c.id === id)?.name || "—";
+  const companies = Array.from(new Set(items.map((i) => nameOf(i.clientId))));
+  const rows = items
+    .slice(0, 40)
+    .map((i) => `<tr><td style="padding:4px 8px;border-bottom:1px solid #eee;white-space:nowrap">${esc(i.scheduledAt ? nyTime(i.scheduledAt).replace(" (New York)", "") : "no date yet")}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee">${esc(nameOf(i.clientId))}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee">${esc((i.title || i.text).split("\n")[0].slice(0, 110))}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee;color:#666">${esc(parsePlatforms(i.platforms).map((n) => NET_LABEL[n]).join(" + "))}</td></tr>`)
+    .join("");
+  const s = await getSettings(orgId);
+  return sendMail(
+    s.readyEmail || READY_EMAIL_DEFAULT,
+    `Ready for publishing: ${items.length} post${items.length === 1 ? "" : "s"} validated — ${companies.join(", ")}`,
+    `<p><b>${items.length} post${items.length === 1 ? " is" : "s are"} validated and ready for publishing</b> (${esc(how)} by ${esc(by)}).</p>
+     <table style="border-collapse:collapse;font-size:13px">${rows}</table>
+     ${items.length > 40 ? `<p>…and ${items.length - 40} more.</p>` : ""}
+     <p style="color:#555;font-size:13px">They go out on their planned day through the publishing browser; Publishing → Calendar shows each one.</p>`,
+    { href: `${SITE}/publishing/calendar`, label: "Open the publishing calendar" },
+  );
+}
+
+/** Who validates a company's content: its reviewer, or the team when none is set. */
+export async function validatorOf(orgId: string, clientId: string): Promise<{ email: string | null; name: string | null; isTeam: boolean }> {
+  const t = await getTarget(orgId, clientId);
+  if (t.reviewerEmail) return { email: t.reviewerEmail, name: t.reviewerName, isTeam: false };
+  return { email: await teamRecipient(orgId), name: null, isTeam: true };
 }

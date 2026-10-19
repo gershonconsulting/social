@@ -48,3 +48,10 @@ Code: `src/lib/autopilot.ts`.
   X account. Each X account must be added once in the publishing browser (X → Add an existing account).
 - **ICP upload** (Knowledge Base → ICPs): upload a PDF/Word/Excel/CSV/text or paste text;
   Workers AI toMarkdown + Intelligence add the ICPs found (source doc kept in kb-doc:<clientId>:<ts>).
+
+## v4.54.0 — validation emails (2026-10-18)
+- Content ready to validate → email to whoever validates it: the company's reviewer (Publishing → Accounts),
+  else the team address. Autopilot sends one email per company with the month's list and the review link.
+- Validation done (client approve / Approve all, team approval, or 48h auto-approval) → ONE email per action to
+  **social@gershonconsulting.com** ("Ready for publishing", list of posts + calendar link). Address editable in
+  Settings → Publishing. Code: notifyReadyForPublishing() in lib/publishing.ts.
