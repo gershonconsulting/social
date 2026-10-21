@@ -161,13 +161,18 @@ function Post({ i, token, name, onDone, actionable, compact }: { i: Item; token:
       const j = await r.json();
       if (!j?.success) throw new Error(j?.error || "Could not send.");
       setBody("");
-      setMsg(action === "approve" ? "Approved — thank you." : action === "request_changes" ? "Sent — the copywriter will revise it." : "Comment sent.");
+      const rv = j.revised as { revised: boolean; version?: number } | null;
+      setMsg(
+        action === "approve" ? "Approved — thank you."
+          : rv?.revised ? `Done — version ${rv.version} is above, written from your comment. Approve it or comment again.`
+          : action === "request_changes" ? "Sent — the copywriter will revise it." : "Comment sent.",
+      );
       onDone();
     } catch (e) { setMsg(e instanceof Error ? e.message : "Could not send."); }
     setBusy(false);
   }
 
-  const thread = i.comments.filter((c) => c.kind === "comment" || c.kind === "changes_requested" || (c.kind === "approved" && c.authorRole === "client"));
+  const thread = i.comments.filter((c) => c.kind === "comment" || c.kind === "changes_requested" || c.kind === "revised" || (c.kind === "approved" && c.authorRole === "client"));
 
   return (
     <article className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -207,6 +212,7 @@ function Post({ i, token, name, onDone, actionable, compact }: { i: Item; token:
                     <strong className="text-gray-800">{c.authorName || (c.authorRole === "client" ? "You" : "Copywriter")}</strong> · v{c.version} · {fmt(c.createdAt)}
                     {c.kind === "changes_requested" && <span className="ml-1 text-orange-700">asked for changes</span>}
                     {c.kind === "approved" && <span className="ml-1 text-sky-700">approved</span>}
+                    {c.kind === "revised" && <span className="ml-1 text-emerald-700">new version</span>}
                   </div>
                   {c.body && <div className="whitespace-pre-wrap text-gray-900">{c.body}</div>}
                 </div>
@@ -215,7 +221,7 @@ function Post({ i, token, name, onDone, actionable, compact }: { i: Item; token:
           )}
           {(actionable || i.status === "CHANGES_REQUESTED") && (
             <>
-              <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2} placeholder={actionable ? "Comment, or describe the changes you want…" : "Add a comment…"} className="w-full text-sm border border-gray-300 rounded-lg p-2 bg-white" />
+              <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2} placeholder={actionable ? "Comment, or describe the changes you want — a new version is written from it…" : "Add a comment — a new version is written from it…"} className="w-full text-sm border border-gray-300 rounded-lg p-2 bg-white" />
               <div className="flex flex-wrap items-center gap-2 mt-2">
                 {actionable && (
                   <button disabled={busy} onClick={() => send("approve")} className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-emerald-600 rounded-lg disabled:opacity-50">
@@ -230,7 +236,7 @@ function Post({ i, token, name, onDone, actionable, compact }: { i: Item; token:
                 <button disabled={busy} onClick={() => send("comment")} className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg disabled:opacity-50">
                   <MessageSquare size={14} /> Comment only
                 </button>
-                {busy && <Loader2 size={14} className="animate-spin text-gray-400" />}
+                {busy && <span className="inline-flex items-center gap-1 text-xs text-gray-500"><Loader2 size={14} className="animate-spin text-gray-400" /> {body.trim() ? "Writing the new version…" : ""}</span>}
                 {msg && <span className="text-xs text-gray-600">{msg}</span>}
               </div>
             </>

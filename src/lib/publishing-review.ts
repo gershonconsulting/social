@@ -7,6 +7,7 @@
  * written to the item's thread and emailed to the team.
  */
 import prisma from "@/lib/db-raw";
+import type { ReviseResult } from "@/lib/publishing-revise";
 import {
   addEvent, alertTeam, mediaCount, esc, getSettings, getTarget, notifyReadyForPublishing, quote, reviewToken, reviewUrl, sendMail, textProblems, SITE, validatorOf,
 } from "@/lib/publishing";
@@ -113,6 +114,7 @@ export async function clientAction(
   action: ClientAction,
   name: string | null,
   body: string | null,
+  out?: { revised?: ReviseResult },
 ): Promise<string | null> {
   if (action === "approve_all") {
     const who0 = (name || "").trim().slice(0, 80) || "Client";
@@ -136,7 +138,10 @@ export async function clientAction(
   if (action === "comment") {
     if (!text) return "Write a comment first.";
     await addEvent(orgId, item.id, item.version, "comment", "client", who, text);
-    await alertTeam(orgId, `${label} commented on a post`, `<p><b>${esc(who)}</b> (${esc(label)}) wrote:</p>${quote(text)}<p>On:</p>${quote(item.text)}`);
+    // v4.55.0 — the comment becomes a new version of the post.
+    const r = await reviseNow(orgId, item.id, text, who);
+    if (out) out.revised = r;
+    await alertTeam(orgId, `${label} commented on a post`, `<p><b>${esc(who)}</b> (${esc(label)}) wrote:</p>${quote(text)}${revisedHtml(r, item.text)}`);
     return null;
   }
   if (action === "request_changes") {
@@ -144,7 +149,10 @@ export async function clientAction(
     if (!text) return "Tell the copywriter what to change.";
     await prisma.contentItem.update({ where: { id: item.id }, data: { status: "CHANGES_REQUESTED" } });
     await addEvent(orgId, item.id, item.version, "changes_requested", "client", who, text);
-    await alertTeam(orgId, `${label} asked for changes`, `<p><b>${esc(who)}</b> (${esc(label)}) asked for changes:</p>${quote(text)}<p>On:</p>${quote(item.text)}`);
+    // v4.55.0 — the requested changes are written straight away as a new version.
+    const r = await reviseNow(orgId, item.id, text, who);
+    if (out) out.revised = r;
+    await alertTeam(orgId, `${label} asked for changes`, `<p><b>${esc(who)}</b> (${esc(label)}) asked for changes:</p>${quote(text)}${revisedHtml(r, item.text)}`);
     return null;
   }
   if (action === "approve") {
@@ -158,4 +166,21 @@ export async function clientAction(
     return null;
   }
   return "Unknown action.";
+}
+
+// ── New version from a comment (v4.55.0) ─────────────────────────────────────
+
+async function reviseNow(orgId: string, itemId: string, text: string, who: string): Promise<ReviseResult> {
+  // Imported on demand: publishing-revise → autopilot → publishing-review would otherwise be a cycle.
+  const { reviseFromComment } = await import("@/lib/publishing-revise");
+  return reviseFromComment(orgId, itemId, text, { role: "client", name: who });
+}
+
+/** The part of the team email that shows what happened to the post. */
+export function revisedHtml(r: ReviseResult, before: string): string {
+  if (r.revised) {
+    return `<p>Intelligence wrote <b>version ${r.version}</b> from it${r.picture ? " (with a new picture)" : ""}${r.status === "IN_REVIEW" ? " and sent it back for review" : ""}:</p>${quote(r.text)}<p style="color:#6b7280;font-size:12px">Previous version:</p>${quote(before)}`;
+  }
+  const why = r.reason === "the comment asks for no change" ? "The comment asks for no change, so the post stays as it is." : `No new version was written (${esc(r.reason)}) — please revise it by hand.`;
+  return `<p>${why}</p><p>On:</p>${quote(before)}`;
 }
