@@ -33,6 +33,8 @@ export function ItemPanel({
   const [clientId, setClientId] = useState<string>("");
   const [when, setWhen] = useState(toLocalInput(null));
   const [comment, setComment] = useState("");
+  const [reviseOn, setReviseOn] = useState(true);
+  const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -99,11 +101,17 @@ export function ItemPanel({
     const r = await fetch(`/api/publishing/content/${id}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body: comment }),
+      body: JSON.stringify({ body: comment, revise: reviseOn }),
     });
     const j = await r.json().catch(() => null);
+    setNote(null);
     if (!j?.success) setErr(j?.error || "Could not send.");
-    else setComment("");
+    else {
+      setComment("");
+      const rv = j.revised as { revised: boolean; version?: number; reason?: string } | null;
+      if (rv?.revised) setNote(`New version ${rv.version} written from your comment — check it above.`);
+      else if (rv && reviseOn) setNote(`Comment saved. No new version: ${rv.reason}.`);
+    }
     await load();
     onChanged();
     setBusy(false);
@@ -327,7 +335,14 @@ export function ItemPanel({
           <h3 className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1"><MessageSquare size={12} /> Review thread</h3>
           <div className="space-y-2">
             {(item.comments || []).map((c) =>
-              c.kind === "comment" || c.kind === "changes_requested" || (c.kind === "approved" && c.body && c.body !== "Approved internally") ? (
+              c.kind === "previous_version" ? (
+                <PreviousVersion key={c.id} c={c} canUse={editable} onUse={(t, tx) => { setText(t); setTextX(tx); }} />
+              ) : c.kind === "revised" ? (
+                <div key={c.id} className="rounded-lg px-3 py-2 text-sm bg-emerald-50 border border-emerald-100">
+                  <div className="text-[11px] text-emerald-800 mb-0.5"><strong>{c.authorName || "Intelligence"}</strong> · v{c.version} · {fmt(c.createdAt)}</div>
+                  <div className="whitespace-pre-wrap break-words text-gray-900">{c.body}</div>
+                </div>
+              ) : c.kind === "comment" || c.kind === "changes_requested" || (c.kind === "approved" && c.body && c.body !== "Approved internally") ? (
                 <div key={c.id} className={`rounded-lg px-3 py-2 text-sm ${c.authorRole === "client" ? "bg-violet-50 border border-violet-100" : "bg-gray-50 border border-gray-100"}`}>
                   <div className="text-[11px] text-gray-500 mb-0.5">
                     <strong className="text-gray-800">{c.authorName || (c.authorRole === "client" ? "Client" : "Team")}</strong>
@@ -351,10 +366,19 @@ export function ItemPanel({
           {canWrite && (
             <div className="mt-3">
               <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="Reply to the client or leave a note…" className="w-full text-sm border border-gray-300 rounded-lg p-2" />
-              <button disabled={busy || !comment.trim()} onClick={sendComment} className={`${btn} bg-white text-gray-800 border-gray-300 mt-1`}>
-                <MessageSquare size={12} /> Comment
-              </button>
-              {["IN_REVIEW", "CHANGES_REQUESTED"].includes(item.status) && <span className="text-[11px] text-gray-500 ml-2">The client&apos;s reviewer is emailed.</span>}
+              <div className="flex flex-wrap items-center gap-2 mt-1">
+                <button disabled={busy || !comment.trim()} onClick={sendComment} className={`${btn} bg-white text-gray-800 border-gray-300`}>
+                  {busy ? <Loader2 size={12} className="animate-spin" /> : <MessageSquare size={12} />} {busy && reviseOn ? "Writing the new version…" : "Comment"}
+                </button>
+                {["DRAFT", "IN_REVIEW", "CHANGES_REQUESTED"].includes(item.status) && (
+                  <label className="text-[11px] text-gray-600 inline-flex items-center gap-1">
+                    <input type="checkbox" checked={reviseOn} onChange={(e) => setReviseOn(e.target.checked)} />
+                    Write a new version from this comment
+                  </label>
+                )}
+                {["IN_REVIEW", "CHANGES_REQUESTED"].includes(item.status) && <span className="text-[11px] text-gray-500">The client&apos;s reviewer is emailed.</span>}
+              </div>
+              {note && <div className="text-[11px] text-emerald-700 mt-1">{note}</div>}
             </div>
           )}
         </section>
@@ -373,6 +397,32 @@ function Shell({ children, onClose }: { children: React.ReactNode; onClose: () =
         </button>
         {children}
       </div>
+    </div>
+  );
+}
+
+/** The text of a version that a comment replaced (v4.55.0) — can be put back in the editor. */
+function PreviousVersion({ c, canUse, onUse }: { c: { id: string; version: number; createdAt: string; body: string | null }; canUse: boolean; onUse: (text: string, textX: string) => void }) {
+  const [open, setOpen] = useState(false);
+  let v: { text?: string; textX?: string } = {};
+  try { v = JSON.parse(c.body || "{}"); } catch {}
+  if (!v.text) return null;
+  return (
+    <div className="text-[11px] text-gray-500 pl-1">
+      <button onClick={() => setOpen((o) => !o)} className="underline">{open ? "Hide" : "Show"} version {c.version} (before the comment)</button>
+      {open && (
+        <div className="mt-1 rounded-lg border border-gray-200 bg-white p-2 text-sm text-gray-800 whitespace-pre-wrap break-words">
+          {v.text}
+          {canUse && (
+            <div className="mt-2">
+              <button onClick={() => onUse(v.text || "", v.textX || "")} className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md border border-gray-300 bg-white">
+                <Undo2 size={11} /> Put this version back in the editor
+              </button>
+              <span className="ml-2 text-gray-500">then “Save changes”.</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
