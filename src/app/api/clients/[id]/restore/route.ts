@@ -1,12 +1,28 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { ClientStatus } from "@prisma/client";
+import { ClientStatus, UserRole } from "@prisma/client";
+import { requireRole } from "@/lib/auth";
+
+// v4.59.0 audit: mutating routes need OPERATIONS or above (ADMIN — the owner —
+// keeps access). Middleware already makes /api session-only; this adds the role.
+async function guardRole(): Promise<NextResponse | null> {
+  try {
+    await requireRole(UserRole.OPERATIONS);
+    return null;
+  } catch (e) {
+    const m = e instanceof Error ? e.message : "";
+    if (m === "FORBIDDEN") return NextResponse.json({ success: false, error: "You do not have permission to do this" }, { status: 403 });
+    return NextResponse.json({ success: false, error: "Not signed in" }, { status: 401 });
+  }
+}
 
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const denied = await guardRole(); // v4.59.0 audit: role check
+  if (denied) return denied;
   const { id } = await params;
   const client = await prisma.client.findUnique({ where: { id } });
   if (!client) {

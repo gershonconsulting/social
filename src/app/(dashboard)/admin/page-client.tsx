@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { Plus, Loader2, RefreshCw, Archive, RotateCcw, Globe, Search, Pencil, Check, X, ExternalLink, Trash2 } from "lucide-react";
 import { slugify, formatDate, formatRelative, PLATFORM_LABELS } from "@/lib/utils";
@@ -19,7 +20,7 @@ interface PlatformConn {
   connectionStatus: string;
   isMandatory: boolean;
   externalAccountUrl: string | null;
-  latestPost: LatestPost | null;
+  latestPost?: LatestPost | null; // v4.59.0 audit: absent in ?light=1 responses
 }
 
 interface Client {
@@ -65,6 +66,9 @@ const PLATFORM_ICONS: Record<string, string> = {
   PINTEREST: "P",
   THREADS: "@",
 };
+
+// v4.59.0 audit: the list loads with ?light=1, which skips latest-post enrichment.
+const ADMIN_LIST_LIGHT = true;
 
 export default function AdminPage() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -134,7 +138,8 @@ export default function AdminPage() {
     let lastError: string | null = null;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const res = await fetch(`/api/clients?light=1&includeArchived=${showArchived}`);
+        // v4.59.0 audit: no-store so edits/category changes show immediately.
+        const res = await fetch(`/api/clients?light=${ADMIN_LIST_LIGHT ? 1 : 0}&includeArchived=${showArchived}`, { cache: "no-store" });
         if (!res.ok) {
           if (res.status === 401 || res.status === 403 || res.redirected) {
             window.location.href = "/login";
@@ -175,6 +180,20 @@ export default function AdminPage() {
   }
 
   useEffect(() => { loadClients(); }, [showArchived]);
+
+  // v4.59.0 audit: honour deep links like /admin?tab=clients&action=new (Companies page "Add company").
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const tabParam = (searchParams?.get("tab") || "").toUpperCase();
+    const validTabs = ["ALL", "CAMPAIGN", "CLIENT", "PROSPECT", "PARTNER", "COMPETITION", "INTERNAL", "RECYCLED"];
+    const tabKey = validTabs.includes(tabParam) ? tabParam
+      : validTabs.includes(tabParam.replace(/S$/, "")) ? tabParam.replace(/S$/, "") : null;
+    if (tabKey) {
+      setActiveTab(tabKey);
+      if (tabKey !== "ALL") setNewClientType(tabKey);
+    }
+    if (searchParams?.get("action") === "new") setShowCreateForm(true);
+  }, [searchParams]);
 
   async function handleDiscover() {
     if (!websiteInput.trim()) return;
@@ -702,7 +721,7 @@ export default function AdminPage() {
                 <tr>
                   <th className="text-left px-6 py-3 font-medium text-gray-500">Company</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
-                      <th className="text-left px-4 py-3 font-medium text-gray-500">Category</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Category</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-500">Platforms &amp; Last Posts</th>
                   <th className="text-right px-6 py-3 font-medium text-gray-500">Actions</th>
                 </tr>
@@ -729,6 +748,22 @@ export default function AdminPage() {
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${CLIENT_STATUS_COLORS[client.status] ?? ""}`}>
                         {client.status}
                       </span>
+                    </td>
+                    {/* v4.59.0 audit: missing Category cell (header had 5 columns, rows had 4). */}
+                    <td className="px-4 py-3">
+                      <select
+                        value={client.clientType}
+                        onChange={(e) => handleChangeCategory(client.id, e.target.value)}
+                        className="px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-red-500"
+                      >
+                        <option value="CAMPAIGN">Campaign</option>
+                        <option value="CLIENT">Client</option>
+                        <option value="PROSPECT">Prospect</option>
+                        <option value="PARTNER">Partner</option>
+                        <option value="COMPETITION">Competition</option>
+                        <option value="INTERNAL">Internal</option>
+                        <option value="RECYCLED">Recycled</option>
+                      </select>
                     </td>
                     <td className="px-4 py-3">
                       {client.platformConnections.length > 0 ? (
@@ -822,9 +857,9 @@ export default function AdminPage() {
                                       &middot; {formatRelative(conn.latestPost.publishedAt)}
                                     </span>
                                   </div>
-                                ) : (
+                                ) : !ADMIN_LIST_LIGHT ? (
                                   <span className="text-xs text-gray-400 mt-0.5 block">No posts yet</span>
-                                )}
+                                ) : null /* v4.59.0 audit: light=1 never enriches latestPost (API returns null) — don't claim "No posts yet" */}
                               </div>
                             </div>
                           ))}

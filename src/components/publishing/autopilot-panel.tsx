@@ -23,16 +23,22 @@ type Status = {
 function useStatus() {
   const [s, setS] = useState<Status | null>(null);
   const [hidden, setHidden] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => {
+    // v4.59.0 audit: only 401/403 mean "not available"; any other failure is an
+    // error the page shows with a Retry button (was an endless spinner).
     try {
       const r = await fetch("/api/publishing/autopilot", { cache: "no-store" });
-      if (!r.ok) { setHidden(true); return; }
-      const j = await r.json();
-      if (j?.success) setS(j.data);
-    } catch {}
+      if (r.status === 401 || r.status === 403) { setHidden(true); return; }
+      const j = await r.json().catch(() => null);
+      if (r.ok && j?.success) { setS(j.data); setError(null); }
+      else setError(j?.error || `Could not load Autopilot (HTTP ${r.status}).`);
+    } catch {
+      setError("Could not reach the server.");
+    }
   }, []);
   useEffect(() => { void load(); }, [load]);
-  return { s, setS, hidden, load };
+  return { s, setS, hidden, error, setError, load };
 }
 
 export function AutopilotStrip() {
@@ -51,7 +57,7 @@ export function AutopilotStrip() {
 }
 
 export function AutopilotPage() {
-  const { s, setS, hidden, load } = useStatus();
+  const { s, setS, hidden, error, setError, load } = useStatus();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -84,6 +90,15 @@ export function AutopilotPage() {
   }
 
   if (hidden) return <p className="text-sm text-gray-500">Autopilot is not available for this account.</p>;
+  // v4.59.0 audit: show the load error with a Retry instead of spinning forever.
+  if (!s && error) {
+    return (
+      <div className="text-sm rounded-lg px-3 py-2 bg-red-50 text-red-800 flex items-center gap-3">
+        <span>{error}</span>
+        <button onClick={() => { setError(null); void load(); }} className="ml-auto px-3 py-1 text-sm font-medium text-red-800 bg-white border border-red-200 rounded-lg">Retry</button>
+      </div>
+    );
+  }
   if (!s) return <Loader2 className="animate-spin text-gray-400" />;
   const chosen = new Set(s.settings.clientIds ?? s.internal.filter((c) => (c.clientType || "INTERNAL") === "INTERNAL").map((c) => c.id));
 

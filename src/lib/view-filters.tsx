@@ -59,15 +59,17 @@ interface Ctx extends ViewFilters {
 
 const STORAGE_KEY = "social.viewFilters.v1";
 
+// v4.59.0 audit: months follow the viewer's own clock, not UTC — in Sint
+// Maarten / New York "this month" used to roll over at 8pm on the last day.
 export function currentMonthKey(now = new Date()): string {
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
 /** The last `n` months, newest first, as { key, label }. */
 export function recentMonths(n = 12, now = new Date()): Array<{ key: string; label: string }> {
   const out: Array<{ key: string; label: string }> = [];
   for (let i = 0; i < n; i++) {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    const d = new Date(Date.UTC(now.getFullYear(), now.getMonth() - i, 1));
     const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
     out.push({
       key,
@@ -79,7 +81,7 @@ export function recentMonths(n = 12, now = new Date()): Array<{ key: string; lab
 
 /** First and last day of a month key, capped at today. "ALL" spans everything. */
 export function monthRange(month: string, now = new Date()): { from: string; to: string } {
-  const today = now.toISOString().slice(0, 10);
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   if (month === "ALL") return { from: "2000-01-01", to: today };
   const [y, m] = month.split("-").map(Number);
   const first = `${month}-01`;

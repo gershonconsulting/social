@@ -166,6 +166,13 @@ export function AnalyticsPageClient() {
             lastErr = body?.error || `HTTP ${r.status}`;
           } else {
             const j = await r.json();
+            // v4.59.0 audit: a 200 with success:false / data:null used to
+            // render a blank page — treat it as an error (retried, then shown).
+            if (!j?.success || !j.data) {
+              lastErr = j?.error || "Analytics returned no data";
+              await new Promise((res) => setTimeout(res, 250 * (i + 1)));
+              continue;
+            }
             if (!cancelled) {
               setData(j?.data ?? null);
               if (Array.isArray(j?.data?.clients) && j.data.clients.length) {

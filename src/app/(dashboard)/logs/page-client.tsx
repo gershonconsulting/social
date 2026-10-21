@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Loader2, AlertTriangle, RefreshCw, ChevronDown, ChevronRight, XCircle } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { DailyCollectionGrid } from "@/components/admin/daily-collection-grid";
@@ -98,7 +98,9 @@ export function LogsPageClient() {
           } else {
             const j = await r.json();
             if (!cancelled) {
-              setJobs(j?.data ?? []);
+              // v4.59.0 audit: a 500 / success:false used to show as an empty log.
+              if (j?.success) setJobs(j?.data ?? []);
+              else setError(j?.error || `Could not load logs (HTTP ${r.status})`);
               setLoading(false);
             }
             return;
@@ -228,8 +230,9 @@ export function LogsPageClient() {
                 const unreachable = rowResults.filter((p) => !p.success && classifyError(p.error) === "unreachable");
                 const hasDetail = errors.length > 0 || !!job.notes || rowResults.length > 0;
                 return (
-                  <>
-                    <tr key={job.id} className="hover:bg-gray-50">
+                  // v4.59.0 audit: keyed Fragment (a bare <> cannot carry a key).
+                  <Fragment key={job.id}>
+                    <tr className="hover:bg-gray-50">
                       <td className="px-3 py-2 text-gray-400">
                         {hasDetail && (
                           <button onClick={() => toggle(job.id)}>
@@ -262,7 +265,7 @@ export function LogsPageClient() {
                       <td className="px-4 py-2 text-xs text-gray-500 truncate max-w-[160px]">{job.triggeredBy?.name ?? job.triggeredBy?.email ?? "system"}</td>
                     </tr>
                     {isOpen && (
-                      <tr key={job.id + "-d"} className="bg-gray-50">
+                      <tr className="bg-gray-50">
                         <td colSpan={8} className="px-8 py-3 text-xs">
                           {job.notes && (<div className="mb-2"><span className="font-semibold">Notes:</span> <span className="text-gray-700">{job.notes}</span></div>)}
                           {(() => {
@@ -326,7 +329,7 @@ export function LogsPageClient() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>

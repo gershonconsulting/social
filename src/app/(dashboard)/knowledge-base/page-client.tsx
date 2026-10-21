@@ -9,7 +9,7 @@
  * Autopilot reads all three before writing a post.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { Building2, ChevronDown, ChevronRight, ClipboardPaste, FileUp, Loader2, Plus, Save, Sparkles, Swords, Target, Trash2, Wand2 } from "lucide-react";
@@ -48,26 +48,51 @@ export function KnowledgeBaseClient() {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  // v4.59.0 audit: load errors are shown instead of an endless spinner.
+  const [listErr, setListErr] = useState<string | null>(null);
+  const [kbErr, setKbErr] = useState<string | null>(null);
+  // v4.59.0 audit: the company whose KB was last requested — a slower response
+  // for an earlier company must not show (or later be saved) under this one.
+  const wanted = useRef("");
 
   const loadList = useCallback(async () => {
-    const r = await fetch("/api/knowledge-base", { cache: "no-store" });
-    const j = await r.json();
-    if (j?.success) {
+    try {
+      const r = await fetch("/api/knowledge-base", { cache: "no-store" });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.success) throw new Error(j?.error || `Could not load the companies (HTTP ${r.status}).`);
+      setListErr(null);
       setCompanies(j.data.companies);
       setCanWrite(j.data.canWrite);
       setOpen((o) => o || params.get("c") || j.data.companies.find((c: Company) => /gershon/i.test(c.name))?.id || j.data.companies[0]?.id || "");
+    } catch (e) {
+      setListErr(e instanceof Error ? e.message : "Could not load the companies.");
     }
   }, [params]);
   useEffect(() => { void loadList(); }, [loadList]);
 
   const loadKb = useCallback(async (id: string) => {
+    wanted.current = id;
     if (!id) return;
-    setKb(null); setSnap(null); setMsg(null); setDirty(false);
-    const r = await fetch(`/api/knowledge-base/${id}`, { cache: "no-store" });
-    const j = await r.json();
-    if (j?.success) { setKb(j.data.kb); setSnap(j.data.snapshot); }
+    setKb(null); setSnap(null); setMsg(null); setDirty(false); setKbErr(null);
+    try {
+      const r = await fetch(`/api/knowledge-base/${id}`, { cache: "no-store" });
+      const j = await r.json().catch(() => null);
+      if (wanted.current !== id) return;
+      if (!r.ok || !j?.success) throw new Error(j?.error || `Could not load this Knowledge Base (HTTP ${r.status}).`);
+      setKb(j.data.kb); setSnap(j.data.snapshot);
+    } catch (e) {
+      if (wanted.current !== id) return;
+      setKbErr(e instanceof Error ? e.message : "Could not load this Knowledge Base.");
+    }
   }, []);
   useEffect(() => { void loadKb(open); }, [open, loadKb]);
+
+  // v4.59.0 audit: switching company drops unsaved edits — ask first.
+  function pick(id: string) {
+    if (id === open) { setView("valueProp"); return; }
+    if (dirty && !confirm("Discard unsaved edits?")) return;
+    setOpen(id); setView("valueProp");
+  }
 
   const current = useMemo(() => companies?.find((c) => c.id === open), [companies, open]);
 
@@ -75,10 +100,13 @@ export function KnowledgeBaseClient() {
     if (!kb) return;
     setBusy("save"); setMsg(null);
     try {
-      const r = await fetch(`/api/knowledge-base/${open}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(kb) });
+      const id = open;
+      const r = await fetch(`/api/knowledge-base/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(kb) });
       const j = await r.json();
       if (!j?.success) throw new Error(j?.error || "Could not save.");
-      setKb(j.data.kb); setDirty(false); setMsg("Saved."); void loadList();
+      // v4.59.0 audit: don't paint this company's KB over another one opened meanwhile.
+      if (wanted.current === id) { setKb(j.data.kb); setDirty(false); setMsg("Saved."); }
+      void loadList();
     } catch (e) { setMsg(e instanceof Error ? e.message : "Could not save."); }
     setBusy(null);
   }
@@ -87,10 +115,13 @@ export function KnowledgeBaseClient() {
     if (dirty && !confirm("You have unsaved edits — Intelligence will replace this section. Continue?")) return;
     setBusy("draft:" + section); setMsg("Intelligence is drafting…");
     try {
-      const r = await fetch(`/api/knowledge-base/${open}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ section, overwrite: section !== "all" }) });
+      const id = open;
+      const r = await fetch(`/api/knowledge-base/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ section, overwrite: section !== "all" }) });
       const j = await r.json();
       if (!j?.success) throw new Error(j?.error || "Intelligence failed.");
-      setKb(j.data.kb); setDirty(false); setMsg("Drafted — read it, edit what's wrong, and save."); void loadList();
+      // v4.59.0 audit: only show the draft if the same company is still open.
+      if (wanted.current === id) { setKb(j.data.kb); setDirty(false); setMsg("Drafted — read it, edit what's wrong, and save."); }
+      void loadList();
     } catch (e) { setMsg(e instanceof Error ? e.message : "Intelligence failed."); }
     setBusy(null);
   }
@@ -106,12 +137,20 @@ export function KnowledgeBaseClient() {
       />
       <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6">
         <nav className="rounded-xl border border-gray-200 bg-white p-2 h-fit">
-          {!companies && <Loader2 className="animate-spin text-gray-400 m-3" />}
+          {!companies && !listErr && <Loader2 className="animate-spin text-gray-400 m-3" />}
+          {!companies && listErr && (
+            <div className="m-2 text-sm text-red-700">
+              {listErr} <button onClick={() => { setListErr(null); void loadList(); }} className="underline ml-1">Retry</button>
+            </div>
+          )}
+          {companies && companies.length === 0 && (
+            <p className="m-2 text-sm text-gray-500">No campaign or internal companies yet.</p>
+          )}
           {companies?.map((c) => {
             const isOpen = c.id === open;
             return (
               <div key={c.id} className="mb-1">
-                <button onClick={() => { setOpen(c.id); setView("valueProp"); }} className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm ${isOpen ? "font-semibold text-gray-900" : "text-gray-700 hover:bg-gray-50"}`}>
+                <button onClick={() => pick(c.id)} className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-sm ${isOpen ? "font-semibold text-gray-900" : "text-gray-700 hover:bg-gray-50"}`}>
                   <Building2 size={15} className="shrink-0" />
                   <span className="truncate">{c.name}</span>
                   <span className="ml-auto text-[10px] text-gray-400">{c.clientType === "INTERNAL" ? "internal" : "campaign"}</span>
@@ -137,7 +176,16 @@ export function KnowledgeBaseClient() {
         </nav>
 
         <section className="rounded-xl border border-gray-200 bg-white p-5 min-h-[420px]">
-          {!kb && <Loader2 className="animate-spin text-gray-400" />}
+          {/* v4.59.0 audit: spinner only while something is actually loading. */}
+          {!kb && kbErr && (
+            <p className="text-sm text-red-700">
+              {kbErr} <button onClick={() => void loadKb(open)} className="underline ml-1">Retry</button>
+            </p>
+          )}
+          {!kb && !kbErr && companies && companies.length === 0 && (
+            <p className="text-sm text-gray-500">Nothing to show — there is no company with publishing yet.</p>
+          )}
+          {!kb && !kbErr && !listErr && !(companies && companies.length === 0) && <Loader2 className="animate-spin text-gray-400" />}
           {kb && current && (
             <>
               <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -189,7 +237,12 @@ export function KnowledgeBaseClient() {
                   <div>
                     <h3 className="text-sm font-semibold text-gray-900 mb-2">What competitors are posting (last {snap?.windowDays ?? 90} days, live)</h3>
                     {!snap || !snap.competitors.length ? (
-                      <p className="text-sm text-amber-700">No competitors linked to this company yet — add them in the company&apos;s Competitor Watch tab and their posts appear here.</p>
+                      // v4.59.0 audit: the Competitor Watch tab only exists on INTERNAL companies.
+                      <p className="text-sm text-amber-700">
+                        {current.clientType === "INTERNAL"
+                          ? <>No competitors linked to this company yet — add them in the company&apos;s Competitor Watch tab and their posts appear here.</>
+                          : <>No competitors linked to this company yet. Competitors are tracked from an Internal company&apos;s Competitor Watch tab — ask Gershon to add this company&apos;s competitors and their posts appear here.</>}
+                      </p>
                     ) : (
                       <div className="space-y-4">
                         <table className="w-full text-sm">

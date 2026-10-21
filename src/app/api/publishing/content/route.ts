@@ -35,6 +35,11 @@ export async function GET(req: NextRequest) {
       if (from && !Number.isNaN(Date.parse(from))) range.gte = new Date(from);
       if (to && !Number.isNaN(Date.parse(to))) range.lt = new Date(to);
       where.scheduledAt = range;
+    } else {
+      // v4.59.0 audit: take:500 by updatedAt desc used to push older unpublished
+      // items (drafts, scheduled…) off the board. Without a date range, keep every
+      // non-published item and only the last 60 days of published ones.
+      where.OR = [{ status: { not: "PUBLISHED" } }, { updatedAt: { gte: new Date(Date.now() - 60 * 86400000) } }];
     }
 
     const [items, clients, settings, publisher] = await Promise.all([

@@ -3,18 +3,21 @@
 import { Header } from "@/components/layout/header";
 import {
   MONTHLY, SNAPSHOT_AT, FUNNEL_COLORS,
-  clientMonth, fmtMonth, workingDays, focusMonths, isFutureMonth, isStale, clientTarget, WEEKLY_CADENCE, type Funnel,
+  clientMonth, fmtMonth, workingDays, focusMonths, isFutureMonth, isStale, clientTarget, WEEKLY_CADENCE, windowAnchor, type Funnel,
 } from "@/lib/heropost-data";
 
 const C = FUNNEL_COLORS;
 
 export function ByHeroPostClient() {
-  // Rolling window anchored to today: last month · this month · next month.
-  const { lastM, thisM, nextM } = focusMonths();
+  // Rolling window: last month · this month · next month.
+  // v4.59.0 audit: anchored to the snapshot's month when the snapshot is older than
+  // today (was always today → 0% for every client); isStale() still flags it.
+  const anchor = windowAnchor();
+  const { lastM, thisM, nextM } = focusMonths(anchor);
   const months = [lastM, thisM, nextM];
   const snapLabel = new Date(SNAPSHOT_AT).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
   const subtitle = `${fmtMonth(lastM)} · ${fmtMonth(thisM)} · ${fmtMonth(nextM)} · created → validated → scheduled → published · data as of ${snapLabel}`;
-  const wd = Object.fromEntries(months.map((m) => [m, workingDays(m)])) as Record<string, { target: number; current: boolean }>;
+  const wd = Object.fromEntries(months.map((m) => [m, workingDays(m, anchor)])) as Record<string, { target: number; current: boolean }>;
   const staleMonths = months.filter(isStale);
 
   const hasHistory = (n: string) => Object.values(MONTHLY[n] ?? {}).some((f) => f.some(Boolean));
@@ -53,7 +56,7 @@ export function ByHeroPostClient() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {months.map((m) => (
-                <TargetBlock key={m} name={n} counts={clientMonth(n, m)} month={m} future={isFutureMonth(m)} />
+                <TargetBlock key={m} name={n} counts={clientMonth(n, m)} month={m} future={isFutureMonth(m, anchor)} anchor={anchor} />
               ))}
             </div>
           </div>
@@ -70,8 +73,8 @@ export function ByHeroPostClient() {
   );
 }
 
-function TargetBlock({ name, counts, month, future = false }: { name: string; counts: Funnel; month: string; future?: boolean }) {
-  const t = clientTarget(name, month);
+function TargetBlock({ name, counts, month, future = false, anchor }: { name: string; counts: Funnel; month: string; future?: boolean; anchor?: Date }) {
+  const t = clientTarget(name, month, anchor); // v4.59.0 audit: same anchor as the window
   const idle = !counts.some(Boolean);
   const created = counts[0], published = counts[1], scheduled = counts[2];
   const validated = published + scheduled; // approved = everything past the draft stage

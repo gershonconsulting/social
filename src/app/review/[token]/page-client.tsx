@@ -46,7 +46,8 @@ export function ReviewClient({ token }: { token: string }) {
     try {
       const r = await fetch(`/api/review/${token}`, { cache: "no-store" });
       const j = await r.json();
-      if (j?.success) setData(j.data);
+      // v4.59.0 audit: clear a stale error once a reload succeeds.
+      if (j?.success) { setData(j.data); setErr(null); }
       else setErr(j?.error || "This review link is not valid.");
     } catch { setErr("Could not load."); }
   }, [token]);
@@ -61,7 +62,9 @@ export function ReviewClient({ token }: { token: string }) {
     try { localStorage.setItem(NAME_KEY, v); } catch {}
   }
 
-  if (err) return <Center><p className="text-gray-700">{err}</p></Center>;
+  // v4.59.0 audit: only replace the page when there is nothing to show yet;
+  // a failed reload after approving becomes a small inline warning.
+  if (err && !data) return <Center><p className="text-gray-700">{err}</p></Center>;
   if (!data) return <Center><Loader2 className="animate-spin text-gray-400" /></Center>;
 
   const waiting = data.items.filter((i) => i.status === "IN_REVIEW");
@@ -91,6 +94,11 @@ export function ReviewClient({ token }: { token: string }) {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-10">
+        {err && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            Couldn&apos;t refresh just now: {err} — what you see may be slightly out of date.
+          </div>
+        )}
         {waiting.length > 0 && <ApproveAll n={waiting.length} token={token} name={name} onDone={load} />}
         {ordered.length === 0 && (
           <p className="text-sm text-gray-500 bg-white border border-dashed border-gray-300 rounded-xl p-6 text-center">Nothing to review right now — thank you!</p>

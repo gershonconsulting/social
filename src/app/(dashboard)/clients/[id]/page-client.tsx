@@ -287,7 +287,9 @@ export function ClientDetailPageClient({ clientId }: { clientId: string }) {
   const meta = VERDICT_META[verdict];
   const good = verdict === "ok";
   const next = NEXT_STEP[verdict];
-  const missing = (["LINKEDIN", "TWITTER"] as const).filter((p) => !client.platformConnections.some((c) => c.platform === p));
+  // v4.59.0 audit: compute from the ENABLED conns, so a disabled LinkedIn/X link isn't silently hidden.
+  // A disabled one can't be re-added (unique clientId+platform), so it is listed with a "disabled" note.
+  const missing = (["LINKEDIN", "TWITTER"] as const).filter((p) => !conns.some((c) => c.platform === p));
 
   return (
     <div className="space-y-6">
@@ -421,20 +423,29 @@ export function ClientDetailPageClient({ clientId }: { clientId: string }) {
               </div>
             </div>
           ))}
-          {missing.map((platform) => (
-            <div key={"missing-" + platform} className="px-5 py-3 flex items-center gap-3">
-              <PlatformIcon platform={platform as never} size={28} />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-gray-700">
-                  {PLATFORM_LABELS_MAP[platform]}
-                  <span className="ml-2 text-xs text-gray-500">not linked</span>
-                </div>
-                <div className="mt-1">
-                  <AddConnectionInline clientId={client.id} platform={platform} />
+          {missing.map((platform) => {
+            const disabledConn = client.platformConnections.find((c) => c.platform === platform);
+            return (
+              <div key={"missing-" + platform} className="px-5 py-3 flex items-center gap-3">
+                <PlatformIcon platform={platform as never} size={28} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-700">
+                    {PLATFORM_LABELS_MAP[platform]}
+                    <span className="ml-2 text-xs text-gray-500">{disabledConn ? "disabled" : "not linked"}</span>
+                  </div>
+                  <div className="mt-1">
+                    {disabledConn ? (
+                      <span className="text-xs text-gray-500">
+                        {disabledConn.externalAccountUrl || "No URL set"} · collection is turned off for this link
+                      </span>
+                    ) : (
+                      <AddConnectionInline clientId={client.id} platform={platform} />
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Section>
     </div>

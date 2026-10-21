@@ -6,6 +6,8 @@ import {
   resolveToken,
 } from "@/lib/campaigns/monthly";
 import { renderCompanyBody, renderSummaryBody, wrapPage } from "@/lib/campaigns/render";
+import raw from "@/lib/db-raw";
+import { primaryOrgId } from "@/lib/reports/monthly/data";
 
 /**
  * GET /r/<token>[?month=YYYY-MM]
@@ -46,12 +48,25 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
     const scope = await resolveToken(token);
     if (!scope) return notFound();
 
+    // v4.59.0 audit: tokens carry no organization — they are Gershon's share
+    // links — so pin them to the primary (Gershon) org the same way the
+    // /api/report/* machine routes do, using the raw client so the answer does
+    // not depend on who (or whether anyone) is signed in when the link opens.
+    const orgId = await primaryOrgId();
+    if (scope !== "all") {
+      const owned = await raw.client.findFirst({
+        where: { id: scope, organizationId: orgId },
+        select: { id: true },
+      });
+      if (!owned) return notFound();
+    }
+
     const { searchParams } = new URL(req.url);
     const month = searchParams.get("month") || lastClosedMonth();
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return notFound();
 
     if (scope === "all") {
-      const report = await buildCampaignMonthlyReport(month);
+      const report = await buildCampaignMonthlyReport(month, { orgId });
       return new NextResponse(
         wrapPage(`Campaign performance — ${report.monthLabel}`, renderSummaryBody(report)),
         {
@@ -64,7 +79,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
       );
     }
 
-    const report = await buildCampaignMonthlyReport(month, { clientId: scope });
+    const report = await buildCampaignMonthlyReport(month, { clientId: scope, orgId });
     const company = report.companies[0];
     // The company was archived or moved out of CAMPAIGN since the token was
     // issued — the link is real but there is nothing to show.

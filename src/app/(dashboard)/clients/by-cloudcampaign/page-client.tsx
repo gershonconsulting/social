@@ -8,7 +8,7 @@ import {
 import {
   MONTHLY, LAG, APPROVAL_SRC, SNAPSHOT_AT, PARTIAL_MONTHS, FUNNEL_COLORS,
   overallByMonth, fmtMonth, clientMonth, workingDays, postTarget, cadenceLabel, focusMonths, isFutureMonth,
-  snapshotAgeDays, snapshotMonth, beyondSnapshot, SNAPSHOT_STALE_DAYS, type Funnel,
+  snapshotAgeDays, snapshotMonth, beyondSnapshot, SNAPSHOT_STALE_DAYS, windowAnchor, type Funnel,
 } from "@/lib/cloudcampaign-data";
 import { AlertTriangle, Clock } from "lucide-react";
 
@@ -40,8 +40,8 @@ export function ByCloudCampaignClient() {
       <p className="text-xs text-gray-400 mt-8">
         Source: Cloud Campaign REST API, committed as a periodic snapshot (the CRM origin can&apos;t
         call Cloud Campaign directly — cookie auth + CORS). Months shown are always last / this /
-        next relative to today; any month starting after the snapshot date has no data yet, which is
-        not the same as zero posts. Two workspaces (PhiTech, ACG Cybersecurity) have no recent
+        next relative to today, or to the snapshot date when the snapshot is older than this month;
+        any month starting after the snapshot date has no data yet, which is not the same as zero posts. Two workspaces (PhiTech, ACG Cybersecurity) have no recent
         tracked content.
       </p>
     </div>
@@ -100,9 +100,12 @@ function TabBtn({ on, onClick, children }: { on: boolean; onClick: () => void; c
 
 /* ---------------- Tab: output vs target (1 post / working day) ---------------- */
 function TargetTab() {
-  const { lastM, thisM, nextM } = focusMonths();
+  // v4.59.0 audit: window anchored to the snapshot's month when the snapshot is older
+  // than today (was always today → 0% for every client). The staleness banner stays.
+  const anchor = windowAnchor();
+  const { lastM, thisM, nextM } = focusMonths(anchor);
   const months = [lastM, thisM, nextM];
-  const target = Object.fromEntries(months.map((m) => [m, workingDays(m)])) as Record<string, { target: number; current: boolean }>;
+  const target = Object.fromEntries(months.map((m) => [m, workingDays(m, anchor)])) as Record<string, { target: number; current: boolean }>;
   const names = Object.keys(MONTHLY)
     .filter((n) => months.some((m) => clientMonth(n, m).some(Boolean)))
     .sort((a, b) => clientMonth(b, thisM)[2] + clientMonth(b, lastM)[2] - clientMonth(a, thisM)[2] - clientMonth(a, lastM)[2]);
@@ -123,7 +126,7 @@ function TargetTab() {
               <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">{cadenceLabel(n)}</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {months.map((m) => <TargetBlock key={m} counts={clientMonth(n, m)} month={m} t={postTarget(n, m)} future={isFutureMonth(m)} />)}
+              {months.map((m) => <TargetBlock key={m} counts={clientMonth(n, m)} month={m} t={postTarget(n, m, anchor)} future={isFutureMonth(m, anchor)} />)}
             </div>
           </div>
         ))}
@@ -197,7 +200,7 @@ function TargetBlock({ counts, month, t, future = false }: { counts: Funnel; mon
 
 /* ---------------- Tab 1: by client, last vs this month ---------------- */
 function ClientsTab() {
-  const { thisM, lastM } = focusMonths();
+  const { thisM, lastM } = focusMonths(windowAnchor()); // v4.59.0 audit: snapshot-anchored window
   const [metric, setMetric] = useState<(typeof METRICS)[number]>(METRICS[0]);
 
   const names = useMemo(

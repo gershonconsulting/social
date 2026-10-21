@@ -30,16 +30,25 @@ export async function GET(req: Request) {
       ? (clientTypeRaw as ClientType)
       : null;
 
-    const since = new Date();
-    since.setDate(since.getDate() - days);
-    since.setHours(0, 0, 0, 0);
+    // v4.59.0 audit: "Last N days" = today and the N-1 days before it (was
+    // N+1 days with today missing from the chart). Dates are UTC day strings so
+    // the filter and the buckets both match publishedDateLocal.
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const since = new Date(`${todayStr}T00:00:00.000Z`);
+    since.setUTCDate(since.getUTCDate() - (days - 1));
+    const sinceStr = since.toISOString().slice(0, 10);
 
     // Pull posts in window (optionally scoped to one client or one category).
+    // v4.59.0 audit: filter on publishedDateLocal (same field as the day
+    // buckets) and only count ACTIVE companies.
     const posts = await prisma.socialPost.findMany({
       where: {
-        publishedAtUtc: { gte: since },
+        publishedDateLocal: { gte: sinceStr, lte: todayStr },
         ...(clientId ? { clientId } : {}),
-        ...(!clientId && clientType ? { client: { clientType } } : {}),
+        client: {
+          status: ClientStatus.ACTIVE,
+          ...(!clientId && clientType ? { clientType } : {}),
+        },
       },
       select: {
         id: true,
@@ -58,8 +67,9 @@ export async function GET(req: Request) {
     // Build day-bucket map
     const dayMap = new Map<string, { date: string; total: number; byPlatform: Record<string, number> }>();
     for (let i = 0; i < days; i++) {
+      // v4.59.0 audit: buckets run since..today inclusive (UTC day steps).
       const d = new Date(since);
-      d.setDate(d.getDate() + i);
+      d.setUTCDate(d.getUTCDate() + i);
       const ds = d.toISOString().slice(0, 10);
       dayMap.set(ds, { date: ds, total: 0, byPlatform: {} });
     }

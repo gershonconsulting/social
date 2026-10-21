@@ -131,7 +131,11 @@ export function ComplianceDashboard({ clientId, platforms }: { clientId: string;
             lastErr = `Server returned non-JSON (HTTP ${r.status})`;
           } else {
             const res = await r.json();
-            if (!cancelled) {
+            // v4.59.0 audit: a JSON { success:false } (or non-2xx) is an error, not "no data".
+            if (!r.ok || res?.success === false) {
+              lastErr = res?.error || `Compliance API returned HTTP ${r.status}`;
+              if (r.status < 500) break; // 4xx won't fix itself on retry
+            } else if (!cancelled) {
               setData(res.data ?? null);
               setLoading(false);
               return;
@@ -150,9 +154,61 @@ export function ComplianceDashboard({ clientId, platforms }: { clientId: string;
     return () => { cancelled = true; };
   }, [clientId, selectedMonth]);
 
+  // v4.59.0 audit: month selector rendered in EVERY state (loading/error/empty) so the user is never stuck.
+  const monthHeader = (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => navigateMonth(-1)}
+          className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+        >
+          <ChevronLeft size={16} className="text-gray-600" />
+        </button>
+        <h2 className="text-lg font-semibold text-gray-900 min-w-[180px] text-center">
+          {MONTH_NAMES[selMonth - 1]} {selYear}
+        </h2>
+        <button
+          onClick={() => navigateMonth(1)}
+          disabled={isCurrentMonth}
+          className={`p-1.5 rounded-lg border border-gray-200 transition-colors ${
+            isCurrentMonth ? "opacity-30 cursor-not-allowed" : "hover:bg-gray-50"
+          }`}
+        >
+          <ChevronRight size={16} className="text-gray-600" />
+        </button>
+      </div>
+
+      <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+        <button
+          onClick={() => setView("listing")}
+          className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors ${
+            view === "listing"
+              ? "bg-blue-50 text-blue-700 border-r border-gray-200"
+              : "text-gray-500 hover:bg-gray-50 border-r border-gray-200"
+          }`}
+        >
+          <List size={13} />
+          List
+        </button>
+        <button
+          onClick={() => setView("calendar")}
+          className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors ${
+            view === "calendar"
+              ? "bg-blue-50 text-blue-700"
+              : "text-gray-500 hover:bg-gray-50"
+          }`}
+        >
+          <CalendarDays size={13} />
+          Calendar
+        </button>
+      </div>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="space-y-4">
+        {monthHeader}
         <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-sm text-gray-400 animate-pulse">
           Loading compliance data...
         </div>
@@ -162,70 +218,29 @@ export function ComplianceDashboard({ clientId, platforms }: { clientId: string;
 
   if (error) {
     return (
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center text-xs text-amber-800">
-        Could not load compliance data: {error}
+      <div className="space-y-4">
+        {monthHeader}
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center text-xs text-amber-800">
+          Could not load compliance data: {error}
+        </div>
       </div>
     );
   }
 
   if (!data) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-sm text-gray-400">
-        No compliance data available yet for this month — run a sync from the button above.
+      <div className="space-y-4">
+        {monthHeader}
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-sm text-gray-400">
+          No compliance data available yet for this month — run a sync from the button above.
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Month selector + view toggle */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigateMonth(-1)}
-            className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-          >
-            <ChevronLeft size={16} className="text-gray-600" />
-          </button>
-          <h2 className="text-lg font-semibold text-gray-900 min-w-[180px] text-center">
-            {MONTH_NAMES[selMonth - 1]} {selYear}
-          </h2>
-          <button
-            onClick={() => navigateMonth(1)}
-            disabled={isCurrentMonth}
-            className={`p-1.5 rounded-lg border border-gray-200 transition-colors ${
-              isCurrentMonth ? "opacity-30 cursor-not-allowed" : "hover:bg-gray-50"
-            }`}
-          >
-            <ChevronRight size={16} className="text-gray-600" />
-          </button>
-        </div>
-
-        <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-          <button
-            onClick={() => setView("listing")}
-            className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors ${
-              view === "listing"
-                ? "bg-blue-50 text-blue-700 border-r border-gray-200"
-                : "text-gray-500 hover:bg-gray-50 border-r border-gray-200"
-            }`}
-          >
-            <List size={13} />
-            List
-          </button>
-          <button
-            onClick={() => setView("calendar")}
-            className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors ${
-              view === "calendar"
-                ? "bg-blue-50 text-blue-700"
-                : "text-gray-500 hover:bg-gray-50"
-            }`}
-          >
-            <CalendarDays size={13} />
-            Calendar
-          </button>
-        </div>
-      </div>
+      {monthHeader}
 
       {/* Hero compliance cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

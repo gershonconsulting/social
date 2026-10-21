@@ -51,29 +51,49 @@ export default function FollowersPage() {
     });
   }, []);
 
+  const [error, setError] = useState("");
+
   useEffect(() => {
+    // v4.59.0 audit: reset the previous company's data before fetching, catch
+    // failures into an error state, and ignore out-of-order responses.
+    setSnapshots([]);
+    setSummary({});
+    setError("");
     if (!selectedClientId) return;
+    let cancelled = false;
     setLoading(true);
     const since = new Date();
-    since.setDate(since.getDate() - 30);
+    // v4.59.0 audit: request 35 days so the 30d trend has a baseline (was 30).
+    since.setDate(since.getDate() - 35);
     fetch(
       `/api/followers?clientId=${selectedClientId}&dateFrom=${since.toISOString().slice(0, 10)}`
     )
       .then((r) => r.json())
       .then((d) => {
+        if (cancelled) return;
         if (d.success) {
           setSnapshots(d.data.snapshots);
           setSummary(d.data.summary);
+        } else {
+          setError(d.error || "Could not load follower data");
         }
       })
-      .finally(() => setLoading(false));
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Could not load follower data");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [selectedClientId]);
 
   // Build chart data — group by date
   const chartData: Record<string, Record<string, number>> = {};
   for (const snap of snapshots) {
     if (!chartData[snap.snapshotDateLocal]) chartData[snap.snapshotDateLocal] = {};
-    chartData[snap.snapshotDateLocal][snap.platform] = snap.followerCount;
+    // v4.59.0 audit: sum accounts on the same network instead of overwriting.
+    chartData[snap.snapshotDateLocal][snap.platform] =
+      (chartData[snap.snapshotDateLocal][snap.platform] ?? 0) + snap.followerCount;
   }
   const chartArray = Object.entries(chartData)
     .sort(([a], [b]) => a.localeCompare(b))
@@ -111,7 +131,11 @@ export default function FollowersPage() {
         </div>
       )}
 
-      {selectedClientId && !loading && (
+      {selectedClientId && !loading && error && (
+        <div className="text-center py-12 text-red-600 text-sm">{error}</div>
+      )}
+
+      {selectedClientId && !loading && !error && (
         <>
           {/* Summary cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">

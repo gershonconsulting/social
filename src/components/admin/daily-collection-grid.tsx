@@ -11,6 +11,8 @@ interface Row {
   slug: string;
   clientType: string;
   status: Record<string, PerDay>;
+  // v4.59.0 audit: false = no enabled connection for that platform.
+  configured?: Record<string, boolean>;
 }
 interface Data { days: string[]; platforms: string[]; clients: Row[] }
 
@@ -19,6 +21,11 @@ const PLATFORM_LABEL: Record<string, string> = {
   TWITTER: "X",
   GOOGLE_BUSINESS: "GMB",
 };
+
+// v4.59.0 audit: an older API without `configured` means "assume configured".
+function isConfigured(c: Row, p: string): boolean {
+  return c.configured ? c.configured[p] !== false : true;
+}
 
 function shortDay(iso: string): string {
   const d = new Date(iso + "T00:00:00Z");
@@ -81,13 +88,15 @@ export function DailyCollectionGrid() {
   const todayCounts = { ok: 0, missing: 0, notConfigured: 0 };
   for (const c of data.clients) {
     for (const p of data.platforms) {
-      if (c.status[today][p as keyof PerDay]) todayCounts.ok++;
+      // v4.59.0 audit: a platform with no enabled connection is "not configured", not "missing".
+      if (!isConfigured(c, p)) todayCounts.notConfigured++;
+      else if (c.status[today][p as keyof PerDay]) todayCounts.ok++;
       else todayCounts.missing++;
     }
   }
-  // Identify clients with at least one platform missing TODAY
+  // Identify clients with at least one configured platform missing TODAY
   const missingToday = data.clients.filter((c) => {
-    return data.platforms.some((p) => !c.status[today][p as keyof PerDay]);
+    return data.platforms.some((p) => isConfigured(c, p) && !c.status[today][p as keyof PerDay]);
   });
 
   return (
@@ -96,7 +105,8 @@ export function DailyCollectionGrid() {
         <div>
           <div className="text-sm font-semibold text-gray-900">Daily collection — {shortDay(today)}</div>
           <div className="text-[11px] text-gray-500 mt-0.5">
-            ✓ = we ingested at least one post for that company × platform on that day. Grid shows last 7 days.
+            {/* v4.59.0 audit: this counts posts PUBLISHED that day (New York time), not ingestion time. */}
+            ✓ = posts found published that day (New York time) for that company × platform. — = no connection set up. Grid shows last 7 days.
           </div>
         </div>
         <button
@@ -110,7 +120,7 @@ export function DailyCollectionGrid() {
 
       <div className="grid grid-cols-3 gap-3 px-5 py-3 border-b border-gray-100 text-xs">
         <div className="rounded-lg border border-green-200 bg-green-50 p-2">
-          <div className="font-medium text-green-700 uppercase text-[10px]">Got data today</div>
+          <div className="font-medium text-green-700 uppercase text-[10px]">Posts found today</div>
           <div className="text-lg font-bold text-green-700 mt-0.5">{todayCounts.ok}</div>
         </div>
         <div className="rounded-lg border border-red-200 bg-red-50 p-2">
@@ -118,8 +128,8 @@ export function DailyCollectionGrid() {
           <div className="text-lg font-bold text-red-700 mt-0.5">{todayCounts.missing}</div>
         </div>
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-2">
-          <div className="font-medium text-gray-700 uppercase text-[10px]">Companies × platforms</div>
-          <div className="text-lg font-bold text-gray-900 mt-0.5">{data.clients.length * data.platforms.length}</div>
+          <div className="font-medium text-gray-700 uppercase text-[10px]">Not configured</div>
+          <div className="text-lg font-bold text-gray-900 mt-0.5">{todayCounts.notConfigured}</div>
         </div>
       </div>
 
@@ -151,7 +161,9 @@ export function DailyCollectionGrid() {
                     const ok = c.status[d][p as keyof PerDay];
                     return (
                       <td key={d + p} className="text-center px-2 py-1.5 border-l border-gray-100">
-                        {ok
+                        {!isConfigured(c, p)
+                          ? <span className="text-gray-300" title="No connection set up">—</span>
+                          : ok
                           ? <Check size={14} strokeWidth={3} className="text-green-600 inline-block" />
                           : <XIcon size={14} strokeWidth={2.5} className="text-red-400 inline-block" />
                         }

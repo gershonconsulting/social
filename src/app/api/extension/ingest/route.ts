@@ -261,10 +261,12 @@ export async function POST(req: NextRequest) {
             publishedAtUtc: publishedAt,
             publishedAtLocal: publishedAt,
             publishedDateLocal: dateLocal,
-            likeCount: Number(p.likeCount ?? 0),
-            commentCount: Number(p.commentCount ?? 0),
-            shareCount: Number(p.shareCount ?? 0),
-            viewCount: Number(p.viewCount ?? 0),
+            // v4.59.0 audit: never overwrite real engagement with a zero. The
+            // page reader often cannot see the counts (LinkedIn layout change,
+            // admin view) and sent 0, which wiped every re-collected post's
+            // likes/comments/reposts — October showed 180 posts and 1 like.
+            // A count is only written when the collector actually saw one.
+            ...metricUpdate(p),
           },
         });
       }
@@ -359,4 +361,19 @@ export async function POST(req: NextRequest) {
     const message = err instanceof Error ? err.message : "Server error";
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
+}
+
+
+/** v4.59.0 audit: only the engagement counts the collector actually read (> 0). */
+function metricUpdate(p: { likeCount?: number; commentCount?: number; shareCount?: number; viewCount?: number }) {
+  const out: { likeCount?: number; commentCount?: number; shareCount?: number; viewCount?: number } = {};
+  const keep = (v: unknown) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? Math.round(n) : undefined;
+  };
+  const l = keep(p.likeCount); if (l !== undefined) out.likeCount = l;
+  const c = keep(p.commentCount); if (c !== undefined) out.commentCount = c;
+  const s = keep(p.shareCount); if (s !== undefined) out.shareCount = s;
+  const v = keep(p.viewCount); if (v !== undefined) out.viewCount = v;
+  return out;
 }

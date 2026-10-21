@@ -1,8 +1,22 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { ClientStatus, ClientType } from "@prisma/client";
+import { ClientStatus, ClientType, UserRole } from "@prisma/client";
+import { requireRole } from "@/lib/auth";
 import { z } from "zod";
+
+// v4.59.0 audit: mutating routes need OPERATIONS or above (ADMIN — the owner —
+// keeps access). Middleware already makes /api session-only; this adds the role.
+async function guardRole(): Promise<NextResponse | null> {
+  try {
+    await requireRole(UserRole.OPERATIONS);
+    return null;
+  } catch (e) {
+    const m = e instanceof Error ? e.message : "";
+    if (m === "FORBIDDEN") return NextResponse.json({ success: false, error: "You do not have permission to do this" }, { status: 403 });
+    return NextResponse.json({ success: false, error: "Not signed in" }, { status: 401 });
+  }
+}
 
 const updateClientSchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -70,6 +84,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const denied = await guardRole(); // v4.59.0 audit: role check
+  if (denied) return denied;
   try {
     const { id } = await params;
     const client = await prisma.client.findUnique({ where: { id } });
@@ -127,6 +143,8 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const denied = await guardRole(); // v4.59.0 audit: role check
+  if (denied) return denied;
   try {
   const { id } = await params;
   const { searchParams } = new URL(req.url);
@@ -152,7 +170,14 @@ export async function DELETE(
       prisma.dailyCompliance.deleteMany({ where: { clientId: id } }),
       prisma.followerSnapshot.deleteMany({ where: { clientId: id } }),
       prisma.socialPost.deleteMany({ where: { clientId: id } }),
-      prisma.postingSchedule.deleteMany({ where: { platformConnectionId: { in: connIdList } } }),
+      // v4.59.0 audit: these two have a required clientId FK and were missing,
+      // so a permanent delete failed with a foreign-key error.
+      prisma.postPrompt.deleteMany({ where: { clientId: id } }),
+      prisma.contentAnalysis.deleteMany({ where: { clientId: id } }),
+      // v4.59.0 audit: also catch schedules keyed by clientId.
+      prisma.postingSchedule.deleteMany({
+        where: { OR: [{ clientId: id }, { platformConnectionId: { in: connIdList } }] },
+      }),
       prisma.platformConnection.deleteMany({ where: { clientId: id } }),
       prisma.syncJob.deleteMany({ where: { clientId: id } }),
       prisma.auditLog.create({

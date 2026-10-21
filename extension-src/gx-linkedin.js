@@ -117,6 +117,38 @@ self.linkedinDomScraper = function (scrollPasses) {
       if (passes >= (scrollPasses || 6)) { clearInterval(timer); setTimeout(harvest, 2000); }
     }, 1000);
 
+    function readCounts(card, lines) {
+      var out = { likes: null, comments: null, reposts: null };
+      var labelled = card.querySelectorAll("[aria-label]");
+      for (var a = 0; a < labelled.length; a++) {
+        var lab = (labelled[a].getAttribute("aria-label") || "").trim();
+        // "Jean-Noël de GALZAIN and 23 others" = 24 reactions.
+        var o = lab.match(/\band\s+([\d.,]+\s*[KkMm]?)\s+others?$/i);
+        if (o && out.likes === null) { var on = num(o[1].replace(/\s+/g, "")); if (on !== null) out.likes = on + 1; continue; }
+        var m = lab.match(/^([\d.,]+\s*[KkMm]?)\s+(reactions?|likes?|comments?|reposts?)\b/i);
+        if (!m) continue;
+        var n = num(m[1].replace(/\s+/g, ""));
+        if (n === null) continue;
+        var kind = m[2].toLowerCase();
+        if (/^(reaction|like)/.test(kind) && out.likes === null) out.likes = n;
+        else if (/^comment/.test(kind) && out.comments === null) out.comments = n;
+        else if (/^repost/.test(kind) && out.reposts === null) out.reposts = n;
+      }
+      for (var q = 0; q < lines.length; q++) {
+        // A bare number right above "<name> and N others" is the reaction count.
+        if (out.likes === null && q > 0 && /\band\s+[\d.,]+\s*[KkMm]?\s+others?$/i.test(lines[q]) && num(lines[q - 1]) !== null) out.likes = num(lines[q - 1]);
+        var t = lines[q].match(/^([\d.,]+\s*[KkMm]?)\s+(comments?|reposts?)$/i);
+        if (!t) continue;
+        var v = num(t[1].replace(/\s+/g, ""));
+        if (v === null) continue;
+        if (/^comment/i.test(t[2]) && out.comments === null) out.comments = v;
+        if (/^repost/i.test(t[2]) && out.reposts === null) out.reposts = v;
+        // The bare number just above the first "N comments/reposts" line is the reaction count.
+        if (out.likes === null && q > 0 && num(lines[q - 1]) !== null) out.likes = num(lines[q - 1]);
+      }
+      return out;
+    }
+
     function readNew() {
       var buttons = document.querySelectorAll('button[aria-label^="Open control menu for post"]');
       var posts = [], seen = {}, pageUrl = location.origin + location.pathname;
@@ -158,16 +190,23 @@ self.linkedinDomScraper = function (scrollPasses) {
           var id = act ? act[1] : "lih-" + fingerprint(v + "|" + text.replace(/\s+/g, " ").slice(0, 160));
           if (seen[id]) continue;
           seen[id] = true;
+          // v0.24.0: LinkedIn's post cards now end with "Like / Comment /
+          // Repost / Send", so the trailing-number scan found nothing and every
+          // post was sent with 0 likes. The counts live in aria-labels
+          // ("13 reactions", "1 comment on …", "2 reposts of …") — read those
+          // first, then the visible "N comments" / "N reposts" lines.
+          var counts = readCounts(card, lines);
+          if (counts.likes === null && tailNums.length) counts.likes = tailNums[0];
           posts.push({
             externalPostId: id,
             postUrl: act ? "https://www.linkedin.com/feed/update/urn:li:activity:" + act[1] + "/" : pageUrl,
             postTextSnippet: text.slice(0, 280),
             hasMedia: !!card.querySelector("img[src*='media'], video, [aria-label*='page of document']"),
             publishedAtUtc: (publishedAt || new Date()).toISOString(),
-            likeCount: tailNums[0] || 0,
-            commentCount: tailNums.length >= 2 ? tailNums[1] : 0,
-            shareCount: tailNums.length >= 3 ? tailNums[2] : 0,
-            rawPayload: { source: "extension-v0.13.2-sdui", dateText: lines[di].slice(0, 60), counts: tailNums }
+            likeCount: counts.likes || 0,
+            commentCount: counts.comments || 0,
+            shareCount: counts.reposts || 0,
+            rawPayload: { source: "extension-v0.24.0-sdui", dateText: lines[di].slice(0, 60), counts: counts }
           });
         } catch (_) {}
       }

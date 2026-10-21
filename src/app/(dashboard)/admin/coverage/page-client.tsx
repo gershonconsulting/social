@@ -224,6 +224,39 @@ export function CoveragePageClient() {
     return s;
   })();
 
+  // v4.59.0 audit: "at a glance" tiles follow the selected category. Every server
+  // stat is derivable per cell (latestPostAt ≥ cutoff ⇔ a post in that window),
+  // so compute them from the scoped list instead of the all-categories totals.
+  const scopedStats: CollectionStats | null = (() => {
+    if (!clients) return null;
+    const nowMs = Date.now();
+    const within = (iso: string | null, ms: number) => !!iso && nowMs - new Date(iso).getTime() <= ms;
+    const st: CollectionStats = {
+      activeClients: scoped.length,
+      platforms: COLUMNS.length,
+      totalCells: scoped.length * COLUMNS.length,
+      cellsWithLink: 0, cellsWithData: 0, cellsFresh7d: 0, cellsFresh14d: 0, cellsFresh24h: 0,
+      clientsWithDataEver: 0, clientsWithData7d: 0, clientsWithData24h: 0,
+    };
+    for (const c of scoped) {
+      let ever = false, wk = false, day = false;
+      for (const col of COLUMNS) {
+        const p = c.platforms[col.platform];
+        if (!p) continue;
+        if (p.hasLink) st.cellsWithLink++;
+        if (p.hasData) { st.cellsWithData++; ever = true; }
+        if (p.upToDate) st.cellsFresh14d++;
+        if (within(p.latestPostAt, 7 * 86_400_000)) { st.cellsFresh7d++; wk = true; }
+        if (within(p.latestPostAt, 86_400_000)) { st.cellsFresh24h++; day = true; }
+      }
+      if (ever) st.clientsWithDataEver++;
+      if (wk) st.clientsWithData7d++;
+      if (day) st.clientsWithData24h++;
+    }
+    return st;
+  })();
+  const glance = scopedStats ?? stats;
+
   const visible = !clients
     ? []
     : filter === "all"
@@ -240,7 +273,8 @@ export function CoveragePageClient() {
             // Less than 3 checks on at least one column.
             return COLUMNS.some((col) => {
               const p = c.platforms[col.platform];
-              return !p || !p.upToDate;
+              // v4.59.0 audit: a cell with posts but no link is NOT 3 checks either.
+              return !p || !(p.hasLink && p.hasData && p.upToDate);
             });
           });
 
@@ -260,45 +294,50 @@ export function CoveragePageClient() {
         }
       />
 
-      {stats && (
+      {glance && (
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="flex items-baseline justify-between mb-3">
-            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Daily collection — at a glance</div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Daily collection — at a glance
+              <span className="ml-1.5 normal-case font-normal text-gray-400">
+                · {catFilter === "ALL" ? "all categories" : catFilter.charAt(0) + catFilter.slice(1).toLowerCase()}
+              </span>
+            </div>
             <div className="text-[10px] text-gray-400">{demoMode ? "DEMO numbers" : "live data"}</div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <StatCard
               label="Got data in last 24h"
-              value={stats.clientsWithData24h}
-              total={stats.activeClients}
+              value={glance.clientsWithData24h}
+              total={glance.activeClients}
               tone="primary"
               caption="distinct companies"
             />
             <StatCard
               label="Got data this week"
-              value={stats.clientsWithData7d}
-              total={stats.activeClients}
+              value={glance.clientsWithData7d}
+              total={glance.activeClients}
               tone="ok"
               caption="last 7 days"
             />
             <StatCard
               label="Ever ingested"
-              value={stats.clientsWithDataEver}
-              total={stats.activeClients}
+              value={glance.clientsWithDataEver}
+              total={glance.activeClients}
               tone="ok"
               caption="data on file at least once"
             />
             <StatCard
               label="Cells with link"
-              value={stats.cellsWithLink}
-              total={stats.totalCells}
+              value={glance.cellsWithLink}
+              total={glance.totalCells}
               tone="neutral"
-              caption={`${stats.activeClients} × ${stats.platforms} platforms`}
+              caption={`${glance.activeClients} × ${glance.platforms} platforms`}
             />
             <StatCard
               label="Cells fully fresh"
-              value={stats.cellsFresh14d}
-              total={stats.totalCells}
+              value={glance.cellsFresh14d}
+              total={glance.totalCells}
               tone="ok"
               caption="post in last 14 days"
             />

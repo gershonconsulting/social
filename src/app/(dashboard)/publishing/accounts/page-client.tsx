@@ -49,8 +49,9 @@ export function PublishingAccountsClient() {
         subtitle="Where each client's posts go, who approves them, and the private link they review on — no account needed. Rotating a link switches the old one off."
       />
       {err && <div className="text-sm rounded-lg px-3 py-2 mb-4 bg-red-50 text-red-800">{err}</div>}
+      {/* v4.59.0 audit: stop the spinner once an error is shown. */}
       {!rows ? (
-        <div className="text-sm text-gray-500 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Loading…</div>
+        !err && <div className="text-sm text-gray-500 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Loading…</div>
       ) : rows.length === 0 ? (
         <p className="text-sm text-gray-500">No campaign, internal or client companies yet.</p>
       ) : (

@@ -37,18 +37,32 @@ export async function GET(request: NextRequest) {
 
   const clientIds = clients.map((c) => c.id);
 
-  // Get all posts in the date range for all clients
-  const posts = await prisma.socialPost.findMany({
-    where: {
-      clientId: { in: clientIds },
-      publishedDateLocal: { gte: from, lte: effectiveTo },
-    },
-    select: {
-      clientId: true,
-      platform: true,
-      publishedDateLocal: true,
-    },
-  });
+  // v4.59.0 audit: optional network filter (?networks=LINKEDIN,TWITTER) so the
+  // goal read matches the network picked in the left menu.
+  const netParam = (url.searchParams.get("networks") || "").split(",").map((x) => x.trim().toUpperCase()).filter(Boolean);
+
+  // v4.59.0 audit: distinct (company, network, day) straight from the database
+  // instead of loading every post into the worker — "All time" used to pull the
+  // whole table (the 1102 overload pattern).
+  type Day = { clientId: string; platform: string; d: string };
+  const dayRows = clientIds.length
+    ? await prisma.$queryRaw<Day[]>`
+        SELECT DISTINCT "clientId", platform::text AS platform, "publishedDateLocal" AS d
+        FROM social_posts
+        WHERE "clientId" = ANY(${clientIds}) AND "publishedDateLocal" >= ${from} AND "publishedDateLocal" <= ${effectiveTo}`
+    : [];
+  const posts = dayRows.map((r) => ({ clientId: r.clientId, platform: r.platform, publishedDateLocal: r.d }));
+
+  // First post per company — "All time" counts working days from there, not
+  // from 2000-01-01 (which made every company read ~0%).
+  const isAllTime = from <= "2000-12-31";
+  const firstM = new Map<string, string>();
+  if (isAllTime && clientIds.length) {
+    const firsts = await prisma.$queryRaw<Array<{ clientId: string; d: string }>>`
+      SELECT "clientId", MIN("publishedDateLocal") AS d FROM social_posts
+      WHERE "clientId" = ANY(${clientIds}) GROUP BY 1`;
+    for (const f of firsts) firstM.set(f.clientId, f.d);
+  }
 
   // Build a lookup: clientId -> platform -> Set of dates
   const postLookup: Record<string, Record<string, Set<string>>> = {};
@@ -60,7 +74,7 @@ export async function GET(request: NextRequest) {
 
   // Calculate working days in the range
   const workingDays: string[] = [];
-  const startDate = new Date(from + "T00:00:00Z");
+  const startDate = new Date((isAllTime ? ([...firstM.values()].sort()[0] ?? effectiveTo) : from) + "T00:00:00Z");
   const endDate = new Date(effectiveTo + "T00:00:00Z");
 
   for (let d = new Date(startDate); d <= endDate; d.setUTCDate(d.getUTCDate() + 1)) {
@@ -71,12 +85,19 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const allWorkingDays = workingDays;
   const totalWorkingDays = workingDays.length;
 
   // Compute compliance for each client
   const results = clients.map((client) => {
-    const trackedPlatforms = client.platformConnections.map((c) => c.platform);
+    const trackedPlatforms = client.platformConnections
+      .map((c) => c.platform as string)
+      .filter((p) => netParam.length === 0 || netParam.includes(p));
     const clientPosts = postLookup[client.id] || {};
+    // All time: this company's working days start at its own first post.
+    const first = firstM.get(client.id);
+    const workingDays = isAllTime ? (first ? allWorkingDays.filter((d) => d >= first) : []) : allWorkingDays;
+    const totalWorkingDays = workingDays.length;
 
     // Per-platform compliance
     const platforms = trackedPlatforms.map((platform) => {

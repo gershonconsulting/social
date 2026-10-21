@@ -344,14 +344,24 @@ export async function getTarget(orgId: string, clientId: string): Promise<Target
   }
   return saved;
 }
+// v4.59.0 audit: an invalid reviewer email used to be silently saved as null
+// (so review emails quietly stopped). Now it is rejected; the accounts PUT
+// route turns this error into a 400 "Invalid reviewer email".
+export class InvalidReviewerEmailError extends Error {
+  constructor() { super("Invalid reviewer email"); this.name = "InvalidReviewerEmailError"; }
+}
 export async function saveTarget(orgId: string, clientId: string, t: Partial<Target>): Promise<Target> {
   const cur = await readJson<Target>(orgId, targetKey(clientId), { xHandle: null, linkedinUrl: null, reviewerName: null, reviewerEmail: null });
+  // v4.59.0 audit: empty clears the reviewer; anything else must look like an email.
+  if (t.reviewerEmail !== undefined && (t.reviewerEmail || "").trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((t.reviewerEmail || "").trim())) {
+    throw new InvalidReviewerEmailError();
+  }
   const next: Target = {
     xHandle: t.xHandle !== undefined ? normalizeHandle(t.xHandle) : cur.xHandle,
     linkedinUrl: t.linkedinUrl !== undefined ? normalizeLinkedIn(t.linkedinUrl) : cur.linkedinUrl,
     reviewerName: t.reviewerName !== undefined ? (t.reviewerName || "").trim() || null : cur.reviewerName,
     reviewerEmail:
-      t.reviewerEmail !== undefined ? (t.reviewerEmail && /.+@.+\..+/.test(t.reviewerEmail) ? t.reviewerEmail.trim() : null) : cur.reviewerEmail,
+      t.reviewerEmail !== undefined ? (t.reviewerEmail || "").trim() || null : cur.reviewerEmail,
     xKind: t.xKind !== undefined ? (t.xKind === "personal" ? "personal" : "company") : cur.xKind,
     destinations: t.destinations !== undefined ? cleanDestinations(t.destinations) : cleanDestinations(cur.destinations),
   };

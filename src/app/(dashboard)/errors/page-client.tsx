@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, RefreshCw, Loader2, ChevronRight, ChevronDown, ExternalLink, CheckCircle2 } from "lucide-react";
 import { Header } from "@/components/layout/header";
@@ -93,7 +93,8 @@ export function ErrorsPageClient() {
             const j = await r.json();
             if (!cancelled) {
               if (j.success) setData(j.data);
-              else lastErr = j.error || "Failed";
+              // v4.59.0 audit: success:false used to leave a blank page.
+              else setError(j.error || "Failed");
               setLoading(false);
             }
             return;
@@ -126,7 +127,8 @@ export function ErrorsPageClient() {
   const filteredFailures = (data?.recentFailures ?? []).filter(
     (f) =>
       platformFilter === "ALL" ||
-      f.perPlatform.some((p) => p.platform === platformFilter)
+      // v4.59.0 audit: only runs where THAT platform actually failed.
+      f.perPlatform.some((p) => p.platform === platformFilter && !p.success)
   );
 
   return (
@@ -284,8 +286,9 @@ export function ErrorsPageClient() {
                       : "—";
                     const topError = failedPlats[0]?.error || f.errorLog[0] || "—";
                     return (
-                      <>
-                        <tr key={f.id} className="hover:bg-gray-50 align-top">
+                      // v4.59.0 audit: keyed Fragment (a bare <> cannot carry a key).
+                      <Fragment key={f.id}>
+                        <tr className="hover:bg-gray-50 align-top">
                           <td className="px-3 py-2">
                             <button onClick={() => toggleJob(f.id)} className="text-gray-400 hover:text-gray-700">
                               {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -306,7 +309,7 @@ export function ErrorsPageClient() {
                           <td className="px-3 py-2 text-xs text-red-700 max-w-md truncate" title={topError}>{topError}</td>
                         </tr>
                         {isOpen && (
-                          <tr key={f.id + "-d"} className="bg-gray-50">
+                          <tr className="bg-gray-50">
                             <td colSpan={6} className="px-8 py-3">
                               {f.perPlatform.length > 0 && (
                                 <table className="w-full text-xs border border-gray-200 bg-white rounded mb-2">
@@ -341,7 +344,7 @@ export function ErrorsPageClient() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     );
                   })}
                 </tbody>

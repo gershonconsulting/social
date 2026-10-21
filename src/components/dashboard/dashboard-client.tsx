@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   Users,
@@ -43,6 +43,56 @@ interface Bucket {
 }
 
 type WindowKey = "lastWeek" | "lastMonth" | "thisMonth" | "thisYear" | "allTime";
+/** v4.59.0 audit: what the page selector offers. "month" = the month picked in the left menu. */
+type ViewWindow = "month" | "lastWeek" | "thisYear" | "allTime";
+type Split = Record<string, Record<string, Bucket>>;
+
+const ZERO: Bucket = { posts: 0, likes: 0, comments: 0, shares: 0, views: 0 };
+function addInto(acc: Bucket, b: Bucket) {
+  acc.posts += b.posts; acc.likes += b.likes; acc.comments += b.comments; acc.shares += b.shares; acc.views += b.views;
+}
+/** Sum one period's per-network buckets, keeping only the selected networks (empty = all). */
+function sumNets(byNet: Record<string, Bucket> | undefined, networks: string[]): Bucket {
+  const out = { ...ZERO };
+  if (!byNet) return out;
+  for (const [net, b] of Object.entries(byNet)) {
+    if (networks.length === 0 || networks.includes(net)) addInto(out, b);
+  }
+  return out;
+}
+function localDay(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+/** The month before a "YYYY-MM" key. */
+function prevMonthKey(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+}
+/** A company's numbers for a window, honouring the network filter. */
+function windowBucket(c: { monthly?: Split; daily?: Split }, win: ViewWindow, month: string, networks: string[]): Bucket {
+  const monthly = c.monthly ?? {};
+  if (win === "month" && month !== "ALL") return sumNets(monthly[month], networks);
+  if (win === "lastWeek") {
+    const out = { ...ZERO };
+    const t = new Date();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(t); d.setDate(t.getDate() - i);
+      addInto(out, sumNets(c.daily?.[localDay(d)], networks));
+    }
+    return out;
+  }
+  const out = { ...ZERO };
+  const yearPrefix = `${new Date().getFullYear()}-`;
+  for (const [k, byNet] of Object.entries(monthly)) {
+    if (win === "thisYear" && !k.startsWith(yearPrefix)) continue;
+    addInto(out, sumNets(byNet, networks));
+  }
+  return out;
+}
+function pctDelta(cur: number, prev: number): number | null {
+  if (prev <= 0) return cur > 0 ? null : 0;
+  return Math.round(((cur - prev) / prev) * 100);
+}
 
 interface DashboardClientData {
   id: string;
@@ -67,6 +117,8 @@ interface DashboardClientData {
   totalShares: number;
   totalViews: number;
   buckets: Record<WindowKey, Bucket>;
+  monthly?: Split;
+  daily?: Split;
   lastPostDateLocal: string | null;
   posts30d: number;
 }
@@ -138,13 +190,6 @@ const PLATFORM_LABELS: Record<string, string> = {
   TIKTOK: "TikTok",
 };
 
-const WINDOW_LABEL: Record<WindowKey, string> = {
-  lastWeek: "Last Week",
-  lastMonth: "Last Month",
-  thisMonth: "This Month",
-  thisYear: "This Year",
-  allTime: "All Time",
-};
 
 export function DashboardClient({
   clients,
@@ -167,7 +212,11 @@ export function DashboardClient({
   const [compliance, setCompliance] = useState<Record<string, ComplianceData>>({});
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState("");
-  const [windowKey, setWindowKey] = useState<WindowKey>("thisMonth");
+  // v4.59.0 audit: the page selector used to be a second, independent month
+  // control (This month / Last month) that ignored the month picked in the left
+  // menu — so changing the month there left every number on the page the same.
+  // Now "month" follows the left menu, and everything (KPIs, cards, goal) moves with it.
+  const [windowKey, setWindowKey] = useState<ViewWindow>("month");
   // Category / month / network now live in the left menu (see FilterPanel) —
   // one shared state instead of a tab strip on every page. Default view is
   // CAMPAIGN companies, current month, all networks.
@@ -177,14 +226,21 @@ export function DashboardClient({
     : categories.length === 1 ? categories[0].charAt(0) + categories[0].slice(1).toLowerCase()
     : `${categories.length} categories`;
 
+  const reqSeq = useRef(0);
   const fetchCompliance = useCallback(async () => {
+    // v4.59.0 audit: clear the previous month's goal numbers first and ignore
+    // late answers, so a failed or slow request can't leave last month's
+    // figures on screen under this month's label.
+    const seq = ++reqSeq.current;
     setLoading(true);
+    setCompliance({});
     try {
-      // The goal read follows the month picked in the left menu, so the cards
-      // answer "how did they do in <month>", not only "this month".
       const { from, to } = monthRange(month);
-      const res = await fetch(`/api/compliance/batch?from=${from}&to=${to}`);
+      const nets = networks.length ? `&networks=${networks.join(",")}` : "";
+      const res = await fetch(`/api/compliance/batch?from=${from}&to=${to}${nets}`, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
+      if (seq !== reqSeq.current) return;
       if (json.success) {
         const map: Record<string, ComplianceData> = {};
         for (const c of json.data.clients) {
@@ -196,9 +252,9 @@ export function DashboardClient({
     } catch (e) {
       console.error("Failed to fetch compliance", e);
     } finally {
-      setLoading(false);
+      if (seq === reqSeq.current) setLoading(false);
     }
-  }, [month]);
+  }, [month, networks]);
 
   useEffect(() => {
     if (!filtersReady) return;
@@ -213,18 +269,19 @@ export function DashboardClient({
   );
 
   // Aggregate KPIs across the *visible* clients for the *selected window*
-  const windowedTotals = filtered.reduce(
-    (acc, c) => {
-      const b = c.buckets?.[windowKey] || { posts: 0, likes: 0, comments: 0, shares: 0, views: 0 };
-      acc.posts += b.posts;
-      acc.likes += b.likes;
-      acc.comments += b.comments;
-      acc.shares += b.shares;
-      acc.views += b.views;
-      return acc;
-    },
-    { posts: 0, likes: 0, comments: 0, shares: 0, views: 0 }
-  );
+  const effWindow: ViewWindow = windowKey === "month" && month === "ALL" ? "allTime" : windowKey;
+  const windowedTotals = { ...ZERO };
+  for (const c of filtered) addInto(windowedTotals, windowBucket(c, effWindow, month, networks));
+  // The month before the selected one — shown next to every month figure.
+  const showCompare = effWindow === "month";
+  const prevKey = showCompare ? prevMonthKey(month) : "";
+  const prevTotals = { ...ZERO };
+  if (showCompare) for (const c of filtered) addInto(prevTotals, sumNets(c.monthly?.[prevKey], networks));
+  const windowLabel =
+    effWindow === "month" ? monthLabelOf(month)
+    : effWindow === "lastWeek" ? "Last 7 days"
+    : effWindow === "thisYear" ? `${new Date().getFullYear()}`
+    : "All time";
   // Demo-mode inflation: multiply windowed KPIs and connection counts to
   // make the dashboard look impressive in live demos. Stable per-render
   // (no random — multipliers are constants) so screenshots match.
@@ -270,13 +327,12 @@ export function DashboardClient({
         <div className="flex items-center gap-2">
           <select
             value={windowKey}
-            onChange={(e) => setWindowKey(e.target.value as WindowKey)}
+            onChange={(e) => setWindowKey(e.target.value as ViewWindow)}
             className="text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white"
-            title="Time window"
+            title="Time window for the numbers. Pick the month in the left menu."
           >
-            <option value="lastWeek">Last week</option>
-            <option value="lastMonth">Last month</option>
-            <option value="thisMonth">This month</option>
+            <option value="month">{month === "ALL" ? "All time (left menu)" : `${monthLabelOf(month)} (left menu)`}</option>
+            <option value="lastWeek">Last 7 days</option>
             <option value="thisYear">This year</option>
             <option value="allTime">All time</option>
           </select>
@@ -318,9 +374,11 @@ export function DashboardClient({
             .pop() ?? null;
           const syncAge = daysSince(lastSync);
           const syncTone = freshnessTone(syncAge);
-          const postGrowth = client.postsLastMonth > 0
-            ? Math.round(((client.postsThisMonth - client.postsLastMonth) / client.postsLastMonth) * 100)
-            : client.postsThisMonth > 0 ? 100 : 0;
+          // v4.59.0 audit: the card used to show ALL-TIME likes/comments/shares/views,
+          // so every month looked identical. It now shows the selected window
+          // (and network), with the month before alongside.
+          const wb = windowBucket(client, effWindow, month, networks);
+          const pb = showCompare ? sumNets(client.monthly?.[prevKey], networks) : null;
 
           return (
             <div
@@ -364,8 +422,10 @@ export function DashboardClient({
                 <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
                   <span className="flex items-center gap-1">
                     <Activity size={12} className="text-indigo-500" />
-                    {client.totalPosts} total all time
+                    <span className="font-medium text-gray-700">{wb.posts} posts · {windowLabel}</span>
+                    {pb && <span className="text-gray-400">· {pb.posts} in {monthLabelOf(prevKey)}</span>}
                   </span>
+                  <span className="text-gray-400">{client.totalPosts} all time</span>
                 </div>
                 <div
                   className={`flex items-center gap-1.5 mt-2 text-xs font-medium ${
@@ -378,21 +438,21 @@ export function DashboardClient({
                   {syncAge !== null && syncAge > 0 && <span className="font-normal text-gray-400">· {syncAge}d old</span>}
                 </div>
                 <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                  <span className="flex items-center gap-1" title="Likes">
+                  <span className="flex items-center gap-1" title={`Likes · ${windowLabel}`}>
                     <Heart size={12} className="text-red-400" />
-                    {formatNumber(client.totalLikes)}
+                    {formatNumber(wb.likes)}
                   </span>
                   <span className="flex items-center gap-1" title="Comments">
                     <MessageCircle size={12} className="text-blue-400" />
-                    {formatNumber(client.totalComments)}
+                    {formatNumber(wb.comments)}
                   </span>
                   <span className="flex items-center gap-1" title="Shares">
                     <Share2 size={12} className="text-green-400" />
-                    {formatNumber(client.totalShares)}
+                    {formatNumber(wb.shares)}
                   </span>
                   <span className="flex items-center gap-1" title="Views">
                     <Eye size={12} className="text-purple-400" />
-                    {formatNumber(client.totalViews)}
+                    {formatNumber(wb.views)}
                   </span>
                 </div>
               </div>
@@ -456,14 +516,14 @@ export function DashboardClient({
           aggregating followers across companies is meaningless). */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">{WINDOW_LABEL[windowKey]} Posts</div>
+          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">{windowLabel} Posts</div>
           <div className="text-3xl font-bold text-gray-900 mt-1">{windowedTotals.posts.toLocaleString()}</div>
-          <div className="text-xs text-gray-400 mt-1">in {categoryLabel}</div>
+          {showCompare ? <CompareLine cur={windowedTotals.posts} prev={prevTotals.posts} prevLabel={monthLabelOf(prevKey)} /> : <div className="text-xs text-gray-400 mt-1">in {categoryLabel}</div>}
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">{WINDOW_LABEL[windowKey]} Likes</div>
+          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">{windowLabel} Likes</div>
           <div className="text-3xl font-bold text-gray-900 mt-1">{formatNumber(windowedTotals.likes)}</div>
-          <div className="text-xs text-gray-400 mt-1">across visible companies</div>
+          {showCompare ? <CompareLine cur={windowedTotals.likes} prev={prevTotals.likes} prevLabel={monthLabelOf(prevKey)} /> : <div className="text-xs text-gray-400 mt-1">across visible companies</div>}
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Companies</div>
@@ -478,9 +538,9 @@ export function DashboardClient({
           </div>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">{WINDOW_LABEL[windowKey]} Engagement</div>
+          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">{windowLabel} Engagement</div>
           <div className="text-3xl font-bold text-gray-900 mt-1">{formatNumber(totalEngagement)}</div>
-          <div className="text-xs text-gray-400 mt-1">likes + comments + shares</div>
+          {showCompare ? <CompareLine cur={totalEngagement} prev={prevTotals.likes + prevTotals.comments + prevTotals.shares} prevLabel={monthLabelOf(prevKey)} /> : <div className="text-xs text-gray-400 mt-1">likes + comments + shares</div>}
         </div>
       </div>
 
@@ -656,6 +716,18 @@ function ActiveFilterSummary({
       <span className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded-full px-2.5 py-1 font-medium text-gray-700">{monthLabelOf(month)}</span>
       <span className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded-full px-2.5 py-1 font-medium text-gray-700">{netLabel}</span>
       <span className="text-gray-400">— change these in the left menu under <b className="font-semibold text-gray-500">Filter view</b>.</span>
+    </div>
+  );
+}
+
+/** v4.59.0 audit: "vs Sep 2026: 152 (+18%)" under a month figure. */
+function CompareLine({ cur, prev, prevLabel }: { cur: number; prev: number; prevLabel: string }) {
+  const d = pctDelta(cur, prev);
+  const tone = d === null || d > 0 ? "text-green-600" : d < 0 ? "text-red-600" : "text-gray-400";
+  return (
+    <div className="text-xs text-gray-400 mt-1">
+      vs {prevLabel}: {prev.toLocaleString()}{" "}
+      <span className={`font-medium ${tone}`}>{d === null ? "(new)" : `(${d > 0 ? "+" : ""}${d}%)`}</span>
     </div>
   );
 }

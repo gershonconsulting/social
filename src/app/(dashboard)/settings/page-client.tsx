@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { CheckCircle2, AlertCircle, XCircle, Download, RefreshCw, Loader2, Sparkles } from "lucide-react";
 import { CollectingSessionCard } from "@/components/settings/collecting-session-card";
@@ -156,15 +157,10 @@ export function SettingsPageClient() {
           </div>
         </div>
         <div className="text-xs text-gray-600 leading-relaxed space-y-2">
+          {/* v4.59.0 audit: was a hard-coded local Windows folder path. */}
           <p>
-            Folder:{" "}
-            <code className="bg-gray-100 px-1.5 py-0.5 rounded">
-              C:\Users\oatti\Documents\Claude\Projects\Social Gershon Consulting\watchman-chrome-extension
-            </code>
-          </p>
-          <p>
-            <code className="bg-gray-100 px-1 rounded">chrome://extensions/</code> → Developer mode →
-            <strong> Load unpacked</strong> (first time) or click <strong>reload</strong> on the GershonAI card (subsequent updates).
+            Download, install and check the extension on the{" "}
+            <Link href="/extension" className="text-red-600 underline hover:text-red-700">Extension page</Link>.
           </p>
         </div>
       </div>
@@ -178,6 +174,10 @@ function ChangePasswordCard() {
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  // v4.59.0 audit: nothing exposes "has a password" to the signed-in user, so a
+  // LinkedIn-only account learns it from the API's specific error and the form
+  // is replaced by a friendly note.
+  const [noPassword, setNoPassword] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -201,6 +201,8 @@ function ChangePasswordCard() {
       if (r.ok && j?.success) {
         setMsg({ kind: "ok", text: "Password updated. You will stay signed in for the rest of this session." });
         setCur(""); setNext(""); setConfirm("");
+      } else if (typeof j?.error === "string" && j.error.includes("has no password")) {
+        setNoPassword(true);
       } else {
         setMsg({ kind: "err", text: j?.error || ("Server returned " + r.status) });
       }
@@ -209,6 +211,17 @@ function ChangePasswordCard() {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (noPassword) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+        <div className="text-sm font-semibold text-gray-900">Password</div>
+        <div className="text-xs text-gray-500 mt-0.5">
+          You sign in with LinkedIn, so there is no password to change here.
+        </div>
+      </div>
+    );
   }
 
   return (

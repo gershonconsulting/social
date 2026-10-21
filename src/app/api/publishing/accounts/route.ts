@@ -15,6 +15,7 @@ import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
 import {
   connectUrl, getPublisherState, getRoute, getTarget, liveStatus, publishKey, reviewToken, reviewUrl, saveTarget, setRoute, PUBLISHING_CLIENT_WHERE,
+  InvalidReviewerEmailError,
 } from "@/lib/publishing";
 
 async function row(orgId: string, cl: { id: string; name: string; clientType: string }) {
@@ -62,12 +63,19 @@ export async function PUT(req: NextRequest) {
   const b = ((await req.json().catch(() => null)) || {}) as Record<string, string | null | undefined> & { destinations?: unknown; xKind?: string };
   const cl = await clientOf(c.orgId, b.clientId);
   if (!cl) return NextResponse.json({ success: false, error: "Unknown client." }, { status: 400 });
+  // v4.59.0 audit: save the target first (it validates the reviewer email) so a
+  // rejected request changes nothing; an invalid email is a 400, not a silent null.
+  try {
+    await saveTarget(c.orgId, cl.id, {
+      xHandle: b.xHandle, linkedinUrl: b.linkedinUrl, reviewerName: b.reviewerName, reviewerEmail: b.reviewerEmail,
+      xKind: b.xKind === undefined ? undefined : b.xKind === "personal" ? "personal" : "company",
+      destinations: b.destinations === undefined ? undefined : (b.destinations as never),
+    });
+  } catch (e) {
+    if (e instanceof InvalidReviewerEmailError) return NextResponse.json({ success: false, error: "Invalid reviewer email" }, { status: 400 });
+    throw e;
+  }
   if (b.route === "client" || b.route === "workspace") await setRoute(c.orgId, cl.id, b.route);
-  await saveTarget(c.orgId, cl.id, {
-    xHandle: b.xHandle, linkedinUrl: b.linkedinUrl, reviewerName: b.reviewerName, reviewerEmail: b.reviewerEmail,
-    xKind: b.xKind === undefined ? undefined : b.xKind === "personal" ? "personal" : "company",
-    destinations: b.destinations === undefined ? undefined : (b.destinations as never),
-  });
   return NextResponse.json({ success: true, data: await row(c.orgId, cl) });
 }
 

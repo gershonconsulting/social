@@ -8,7 +8,7 @@
  * every load (lib/publishing.ts → sweep).
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { ChevronLeft, ChevronRight, ExternalLink, Loader2, PenSquare } from "lucide-react";
@@ -30,17 +30,38 @@ export function PublishingCalendarClient() {
   const [selected, setSelected] = useState(dayKey(new Date()));
   const [clientFilter, setClientFilter] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const monthRef = useRef(month.getTime());
+  monthRef.current = month.getTime();
+
+  const cells = useMemo(() => {
+    const offset = (month.getDay() + 6) % 7;
+    const out: Date[] = [];
+    for (let i = 0; i < 42; i++) out.push(new Date(month.getFullYear(), month.getMonth(), 1 - offset + i));
+    return out[35].getMonth() === month.getMonth() ? out : out.slice(0, 35);
+  }, [month]);
 
   const load = useCallback(async () => {
-    const from = new Date(month.getFullYear(), month.getMonth(), 1);
-    const to = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+    // v4.59.0 audit: fetch the whole visible grid (first cell → last cell + 1 day),
+    // not just the month, so the leading/trailing days show their posts too.
+    const asked = month.getTime();
+    const from = cells[0];
+    const last = cells[cells.length - 1];
+    const to = new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1);
     try {
       const r = await fetch(`/api/publishing/content?from=${from.toISOString()}&to=${to.toISOString()}`, { cache: "no-store" });
-      const j = await r.json();
-      if (j?.success) setFeed(j.data);
-    } catch {}
+      const j = await r.json().catch(() => null);
+      // v4.59.0 audit: ignore a stale response for a month the user already left.
+      if (monthRef.current !== asked) return;
+      if (r.ok && j?.success) { setFeed(j.data); setErr(null); }
+      else { setFeed(null); setErr(j?.error || `Could not load the calendar (HTTP ${r.status}).`); }
+    } catch {
+      if (monthRef.current !== asked) return;
+      // v4.59.0 audit: show the failure and clear the old month's posts.
+      setFeed(null); setErr("Could not load the calendar.");
+    }
     setLoading(false);
-  }, [month]);
+  }, [month, cells]);
 
   useEffect(() => {
     setLoading(true);
@@ -65,21 +86,16 @@ export function PublishingCalendarClient() {
 
   const totals = useMemo(() => {
     const t = { planned: 0, posted: 0, confirmed: 0, upcoming: 0, problems: 0 };
-    for (const i of items) for (const d of i.deliveries) {
+    // v4.59.0 audit: the feed now covers the whole grid — total only this month's posts.
+    const inMonth = items.filter((i) => { const d = new Date(i.scheduledAt!); return d.getFullYear() === month.getFullYear() && d.getMonth() === month.getMonth(); });
+    for (const i of inMonth) for (const d of i.deliveries) {
       t.planned++;
       if (d.status === "POSTED") { t.posted++; if (d.verifiedAt) t.confirmed++; }
       else if (d.status === "SCHEDULED" || d.status === "POSTING") t.upcoming++;
       else t.problems++;
     }
     return t;
-  }, [items]);
-
-  const cells = useMemo(() => {
-    const offset = (month.getDay() + 6) % 7;
-    const out: Date[] = [];
-    for (let i = 0; i < 42; i++) out.push(new Date(month.getFullYear(), month.getMonth(), 1 - offset + i));
-    return out[35].getMonth() === month.getMonth() ? out : out.slice(0, 35);
-  }, [month]);
+  }, [items, month]);
 
   const today = dayKey(new Date());
   const dayItems = byDay.get(selected) || [];
@@ -109,6 +125,7 @@ export function PublishingCalendarClient() {
         }
       />
       <LiveStrip live={feed?.live ?? null} />
+      {err && <div className="text-sm rounded-lg px-3 py-2 mb-4 bg-red-50 text-red-800">{err}</div>}
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
         {stat("Planned (per network)", totals.planned)}

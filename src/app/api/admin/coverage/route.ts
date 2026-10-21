@@ -14,7 +14,7 @@ import { ClientStatus, Platform } from "@prisma/client";
  * Used by /admin/coverage to render the
  *   0/1/2 green-check grid (no link → no data → stale → fresh).
  *
- * Caching: short-TTL public cache so flipping back to the page is instant.
+ * Caching: private, no-store — the data is per-workspace (v4.59.0 audit).
  */
 const PLATFORMS: Platform[] = [Platform.LINKEDIN, Platform.TWITTER];
 
@@ -163,7 +163,8 @@ export async function GET() {
 
     return NextResponse.json(
       { success: true, data: { clients: rows, freshWindowDays: 14, stats } },
-      { headers: { "Cache-Control": "public, max-age=15, s-maxage=60" } }
+      // v4.59.0 audit: per-workspace data must never sit in a shared/edge cache.
+      { headers: { "Cache-Control": "private, no-store" } }
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : "coverage query failed";

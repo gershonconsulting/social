@@ -31,7 +31,8 @@ export function ConnectClient({ keyId }: { keyId: string }) {
     try {
       const r = await fetch(`/api/connect/${keyId}`, { cache: "no-store" });
       const j = await r.json();
-      if (j?.success) setData(j.data); else setErr(j?.error || "This link is not valid.");
+      // v4.59.0 audit: clear a stale error once a poll succeeds again.
+      if (j?.success) { setData(j.data); setErr(null); } else setErr(j?.error || "This link is not valid.");
     } catch { setErr("Could not load."); }
   }, [keyId]);
 
@@ -49,7 +50,9 @@ export function ConnectClient({ keyId }: { keyId: string }) {
     return () => { clearInterval(t); clearTimeout(miss); window.removeEventListener("message", onMsg); };
   }, [load]);
 
-  if (err) return <Center><p className="text-gray-700">{err}</p></Center>;
+  // v4.59.0 audit: only replace the page when there is nothing to show yet;
+  // a failed 20s poll after a good load becomes a small inline warning.
+  if (err && !data) return <Center><p className="text-gray-700">{err}</p></Center>;
   if (!data) return <Center><Loader2 className="animate-spin text-gray-400" /></Center>;
 
   const tooOld = ext.state === "found" && ext.version && older(ext.version, "0.17.0");
@@ -67,6 +70,11 @@ export function ConnectClient({ keyId }: { keyId: string }) {
         </div>
       </header>
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+        {err && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            Couldn&apos;t refresh just now: {err} — showing the last known status.
+          </div>
+        )}
         <div className={`rounded-xl p-4 text-white font-semibold ${live ? "bg-emerald-600" : bound || ext.state === "found" ? "bg-orange-500" : "bg-red-600"}`}>
           {live
             ? `✓ Connected — ${data.client}'s approved posts will be published from this Chrome.`

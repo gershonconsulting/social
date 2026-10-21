@@ -1,8 +1,22 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
-import { ConnectionStatus } from "@prisma/client";
+import { ConnectionStatus, UserRole } from "@prisma/client";
+import { requireRole } from "@/lib/auth";
 import { z } from "zod";
+
+// v4.59.0 audit: mutating routes need OPERATIONS or above (ADMIN — the owner —
+// keeps access). Middleware already makes /api session-only; this adds the role.
+async function guardRole(): Promise<NextResponse | null> {
+  try {
+    await requireRole(UserRole.OPERATIONS);
+    return null;
+  } catch (e) {
+    const m = e instanceof Error ? e.message : "";
+    if (m === "FORBIDDEN") return NextResponse.json({ success: false, error: "You do not have permission to do this" }, { status: 403 });
+    return NextResponse.json({ success: false, error: "Not signed in" }, { status: 401 });
+  }
+}
 
 const updatePlatformSchema = z.object({
   externalAccountId: z.string().optional().nullable(),
@@ -22,6 +36,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const denied = await guardRole(); // v4.59.0 audit: role check
+  if (denied) return denied;
   try {
     const { id } = await params;
     const connection = await prisma.platformConnection.findUnique({ where: { id } });
@@ -89,6 +105,8 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const denied = await guardRole(); // v4.59.0 audit: role check
+  if (denied) return denied;
 
   const { id } = await params;
   const connection = await prisma.platformConnection.findUnique({ where: { id } });

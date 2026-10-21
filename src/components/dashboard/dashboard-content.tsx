@@ -147,6 +147,42 @@ export async function getDashboardData() {
       prisma.followerSnapshot.findMany({ where: { clientId: { in: ids }, snapshotDateLocal: { gte: followerSince } }, orderBy: { snapshotDateLocal: "desc" }, select: { clientId: true, platform: true, followerCount: true } }),
     ]);
 
+  // v4.59.0 audit: per (company, network, month) and per (company, network,
+  // day for the last 10 days) so the Summary page can show ANY month picked in
+  // the left menu — and split by network — instead of the fixed this/last
+  // month buckets, which made the month filter change nothing on the page.
+  type Row = { clientId: string; platform: string; k: string; n: number; l: number; c: number; s: number; v: number };
+  const d10 = new Date(today); d10.setDate(today.getDate() - 10);
+  const day10Start = d10.toISOString().slice(0, 10);
+  const [monthRows, dayRows] = await Promise.all([
+    prisma.$queryRaw<Row[]>`
+      SELECT "clientId", platform::text AS platform, substr("publishedDateLocal",1,7) AS k,
+             COUNT(*)::int AS n,
+             COALESCE(SUM("likeCount"),0)::int AS l, COALESCE(SUM("commentCount"),0)::int AS c,
+             COALESCE(SUM("shareCount"),0)::int AS s, COALESCE(SUM("viewCount"),0)::int AS v
+      FROM social_posts WHERE "clientId" = ANY(${ids})
+      GROUP BY 1,2,3`,
+    prisma.$queryRaw<Row[]>`
+      SELECT "clientId", platform::text AS platform, "publishedDateLocal" AS k,
+             COUNT(*)::int AS n,
+             COALESCE(SUM("likeCount"),0)::int AS l, COALESCE(SUM("commentCount"),0)::int AS c,
+             COALESCE(SUM("shareCount"),0)::int AS s, COALESCE(SUM("viewCount"),0)::int AS v
+      FROM social_posts WHERE "clientId" = ANY(${ids}) AND "publishedDateLocal" >= ${day10Start}
+      GROUP BY 1,2,3`,
+  ]);
+  type Split = Record<string, Record<string, { posts: number; likes: number; comments: number; shares: number; views: number }>>;
+  const splitOf = (rows: Row[]) => {
+    const m = new Map<string, Split>();
+    for (const r of rows) {
+      const per = m.get(r.clientId) ?? {}; m.set(r.clientId, per);
+      const byNet = per[r.k] ?? {}; per[r.k] = byNet;
+      byNet[r.platform] = { posts: Number(r.n), likes: Number(r.l), comments: Number(r.c), shares: Number(r.s), views: Number(r.v) };
+    }
+    return m;
+  };
+  const monthlyM = splitOf(monthRows);
+  const dailyM = splitOf(dayRows);
+
   type Bucket = { posts: number; likes: number; comments: number; shares: number; views: number };
   const emptyBucket = (): Bucket => ({ posts: 0, likes: 0, comments: 0, shares: 0, views: 0 });
   const bucketMap = (rows: typeof allTimeA) => {
@@ -238,6 +274,8 @@ export async function getDashboardData() {
       totalShares: buckets.allTime.shares,
       totalViews: buckets.allTime.views,
       buckets,
+      monthly: monthlyM.get(client.id) ?? {},
+      daily: dailyM.get(client.id) ?? {},
       lastPostDateLocal: lastPostM.get(client.id) ?? null,
       posts30d: posts30M.get(client.id) ?? 0,
     };

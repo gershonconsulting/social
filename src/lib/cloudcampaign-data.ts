@@ -178,5 +178,16 @@ export function beyondSnapshot(ym: string): boolean {
   return (y * 12 + (m - 1)) > snap;
 }
 
+/** v4.59.0 audit: reference date for the last/this/next window. When the snapshot
+ *  is older than the current month, anchor to the snapshot's date so the blocks show
+ *  real data instead of 0% everywhere; the staleness banner (snapshotAgeDays) still
+ *  uses real now. */
+export function windowAnchor(now: Date = new Date()): Date {
+  const snap = new Date(SNAPSHOT_AT);
+  const snapIdx = snap.getUTCFullYear() * 12 + snap.getUTCMonth();
+  const nowIdx = now.getUTCFullYear() * 12 + now.getUTCMonth();
+  return snapIdx < nowIdx ? snap : now;
+}
+
 /** Anything older than this and the page shouts. */
 export const SNAPSHOT_STALE_DAYS = 10;

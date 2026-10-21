@@ -27,9 +27,21 @@ export const NEVER = 999999;
 
 export function daysSinceDate(dateLocal: string | null | undefined): number {
   if (!dateLocal) return NEVER;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.max(0, Math.floor((today.getTime() - new Date(dateLocal + "T00:00:00Z").getTime()) / 86400000));
+  // v4.59.0 audit: compare pure calendar days on both sides (Date.UTC of the date
+  // parts) so "Today" / "Yesterday" is right in every timezone. A bare YYYY-MM-DD
+  // is taken as-is; a full timestamp uses its local calendar date.
+  const now = new Date();
+  const todayDay = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86400000;
+  let postDay: number;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateLocal);
+  if (m) {
+    postDay = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 86400000;
+  } else {
+    const d = new Date(dateLocal);
+    if (isNaN(d.getTime())) return NEVER;
+    postDay = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000;
+  }
+  return Math.max(0, Math.round(todayDay - postDay));
 }
 
 export function lastPostLabel(d: number): string {

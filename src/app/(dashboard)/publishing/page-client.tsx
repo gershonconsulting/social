@@ -50,7 +50,8 @@ export function PublishingContentClient() {
     try {
       const r = await fetch("/api/publishing/content", { cache: "no-store" });
       const j = await r.json();
-      if (j?.success) setFeed(j.data);
+      // v4.59.0 audit: a successful load clears a stale error banner.
+      if (j?.success) { setFeed(j.data); setErr(null); }
       else setErr(j?.error || "Could not load.");
     } catch {
       setErr("Could not load.");
@@ -117,7 +118,12 @@ export function PublishingContentClient() {
           clients={feed.clients}
           limits={feed.limits}
           defaultClient={clientFilter}
-          onDone={(id) => { setComposing(false); void load(); if (id) setOpenId(id); }}
+          onDone={(id, warning) => {
+            setComposing(false);
+            // v4.59.0 audit: the post exists even if a later step failed — reload, open it, then show why.
+            void load().then(() => { if (warning) setErr(warning); });
+            if (id) setOpenId(id);
+          }}
           onCancel={() => setComposing(false)}
         />
       )}
@@ -196,7 +202,7 @@ function Composer({
   clients: ClientLite[];
   limits: Limits;
   defaultClient: string;
-  onDone: (id: string | null) => void;
+  onDone: (id: string | null, warning?: string) => void;
   onCancel: () => void;
 }) {
   const [clientId, setClientId] = useState(defaultClient);
@@ -227,6 +233,10 @@ function Composer({
   async function save(mode: "draft" | "submit" | "approve") {
     setBusy(true);
     setErr(null);
+    // v4.59.0 audit: once the item exists, a failure in a later step (picture,
+    // submit/approve) must not leave the composer open — a retry would create a
+    // duplicate. Hand the created id back instead so the board reloads and opens it.
+    let id: string | null = null;
     try {
       // Saved as a draft first, pictures attached, then sent / approved — so
       // the server checks the post with its pictures.
@@ -237,7 +247,7 @@ function Composer({
       });
       const j = await r.json();
       if (!j?.success) throw new Error(j?.error || "Could not save.");
-      const id: string = j.data.id;
+      id = j.data.id as string;
       for (const p of pics) {
         const e = await uploadImage(id, p);
         if (e) throw new Error(`Saved as a draft, but a picture failed: ${e}`);
@@ -248,7 +258,9 @@ function Composer({
       }
       onDone(id);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Could not save.");
+      const m = e instanceof Error ? e.message : "Could not save.";
+      if (id) { onDone(id, m); return; }
+      setErr(m);
     }
     setBusy(false);
   }
@@ -302,13 +314,14 @@ function Composer({
       </div>
       {err && <div className="text-sm rounded-lg px-3 py-2 my-2 bg-red-50 text-red-800">{err}</div>}
       <div className="flex flex-wrap items-center gap-2 mt-3">
-        <button disabled={busy || preparing || !text.trim() || !platforms.length} onClick={() => save("draft")} className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg disabled:opacity-50">
+        {/* v4.59.0 audit: the API needs a company for every post — disable until one is picked. */}
+        <button disabled={busy || preparing || !text.trim() || !clientId || !platforms.length} onClick={() => save("draft")} className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg disabled:opacity-50" title={!clientId ? "Pick the company first" : ""}>
           Save draft
         </button>
         <button disabled={busy || preparing || !text.trim() || !clientId || tooLong || needPic || !platforms.length} onClick={() => save("submit")} className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-violet-600 rounded-lg disabled:opacity-50" title={!clientId ? "Pick the client first" : needPic ? "Add a picture first" : ""}>
           <Send size={14} /> Send to client for review
         </button>
-        <button disabled={busy || preparing || !text.trim() || tooLong || needPic || !platforms.length} onClick={() => save("approve")} className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-sky-800 bg-sky-50 border border-sky-200 rounded-lg disabled:opacity-50">
+        <button disabled={busy || preparing || !text.trim() || !clientId || tooLong || needPic || !platforms.length} onClick={() => save("approve")} className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-sky-800 bg-sky-50 border border-sky-200 rounded-lg disabled:opacity-50" title={!clientId ? "Pick the company first" : needPic ? "Add a picture first" : ""}>
           <Check size={14} /> Approve internally
         </button>
         <button onClick={onCancel} className="text-sm text-gray-500 underline ml-auto">Cancel</button>

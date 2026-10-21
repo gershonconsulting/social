@@ -10,8 +10,13 @@ import prisma from "@/lib/db";
 export async function GET() {
   try {
     const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const monthStart = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+    // v4.59.0 audit: "this month" starts on the 1st in America/New_York, not server UTC
+    // (late-evening ET on the last day of a month used to count as next month).
+    const etParts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit" })
+      .formatToParts(now);
+    const etYear = etParts.find((p) => p.type === "year")?.value ?? String(now.getUTCFullYear());
+    const etMonth = etParts.find((p) => p.type === "month")?.value ?? String(now.getUTCMonth() + 1).padStart(2, "0");
+    const monthStart = `${etYear}-${etMonth}-01`;
     const d30 = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
 
     const [last, month, last30] = await Promise.all([

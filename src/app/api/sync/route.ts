@@ -2,8 +2,28 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import { syncPlatformConnection, runBackfill, syncFollowerSnapshots } from "@/lib/jobs/sync";
 import { recomputeClientCompliance } from "@/lib/compliance/engine";
+import { UserRole } from "@prisma/client";
+import { requireRole } from "@/lib/auth";
+
+// v4.59.0 audit: session callers need OPERATIONS or above (ADMIN keeps access).
+// A machine caller holding the cron secret (Bearer) is still let through.
+async function guardRole(req: NextRequest): Promise<NextResponse | null> {
+  const secret = process.env.CRON_SECRET;
+  const auth = req.headers.get("authorization") ?? "";
+  if (secret && auth === `Bearer ${secret}`) return null;
+  try {
+    await requireRole(UserRole.OPERATIONS);
+    return null;
+  } catch (e) {
+    const m = e instanceof Error ? e.message : "";
+    if (m === "FORBIDDEN") return NextResponse.json({ success: false, error: "You do not have permission to do this" }, { status: 403 });
+    return NextResponse.json({ success: false, error: "Not signed in" }, { status: 401 });
+  }
+}
 
 export async function POST(req: NextRequest) {
+  const denied = await guardRole(req); // v4.59.0 audit: role check
+  if (denied) return denied;
   try {
     const body = await req.json().catch(() => ({}));
     const { type, clientId, platformConnectionId, since, until } = body;

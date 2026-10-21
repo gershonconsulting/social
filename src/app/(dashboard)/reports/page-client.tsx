@@ -29,6 +29,9 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // v4.59.0 audit: true once the selected company's month list has arrived,
+  // so "No data for this company yet" never flashes during the fetch.
+  const [monthsLoaded, setMonthsLoaded] = useState(false);
 
   useEffect(() => {
     fetch("/api/clients?clientType=CAMPAIGN")
@@ -44,45 +47,80 @@ export default function ReportsPage() {
   }, []);
 
   useEffect(() => {
+    // v4.59.0 audit: on company change, drop the previous company's month and
+    // report so we never fetch the new company with the old month.
+    setSelectedMonth("");
+    setReport(null);
+    setAvailableMonths([]);
+    setError(null);
+    setMonthsLoaded(false);
     if (!selectedClientId) return;
+    let cancelled = false;
     fetch(`/api/reports/monthly?clientId=${selectedClientId}`)
       .then((r) => r.json())
       .then((d) => {
+        if (cancelled) return;
         if (d.success) {
           setAvailableMonths(d.data);
           if (d.data.length > 0) setSelectedMonth(d.data[0]);
+        } else {
+          setError(d.error || "Failed to load months");
         }
-      });
+      })
+      .catch(() => { if (!cancelled) setError("Failed to load months"); })
+      .finally(() => { if (!cancelled) setMonthsLoaded(true); });
+    return () => { cancelled = true; };
   }, [selectedClientId]);
 
   useEffect(() => {
     if (!selectedClientId || !selectedMonth) return;
+    // v4.59.0 audit: ignore a response that arrives after the company/month changed.
+    let cancelled = false;
     setLoading(true);
     setError(null);
+    setReport(null);
     fetch(`/api/reports/monthly?clientId=${selectedClientId}&month=${selectedMonth}`)
       .then((r) => r.json())
       .then((d) => {
+        if (cancelled) return;
         if (d.success) setReport(d.data);
         else setError(d.error);
       })
-      .catch(() => setError("Failed to load report"))
-      .finally(() => setLoading(false));
+      .catch(() => { if (!cancelled) setError("Failed to load report"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [selectedClientId, selectedMonth]);
 
   async function handleExportCSV() {
     if (!selectedClientId || !selectedMonth) return;
     setExporting(true);
-    const res = await fetch(
-      `/api/reports/export?clientId=${selectedClientId}&month=${selectedMonth}&format=csv`
-    );
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `compliance-${selectedMonth}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setExporting(false);
+    // v4.59.0 audit: try/finally so `exporting` always resets, and an error
+    // response is shown instead of being downloaded as the CSV.
+    try {
+      const res = await fetch(
+        `/api/reports/export?clientId=${selectedClientId}&month=${selectedMonth}&format=csv`
+      );
+      if (!res.ok) {
+        let msg = `Export failed (HTTP ${res.status})`;
+        try {
+          const j = await res.json();
+          if (j?.error) msg = j.error;
+        } catch {}
+        setError(msg);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `compliance-${selectedMonth}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
   }
 
   return (
@@ -165,10 +203,11 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {!loading && !error && selectedClientId && availableMonths.length === 0 && (
+      {/* v4.59.0 audit: only once the month list has loaded for this company */}
+      {!loading && !error && selectedClientId && monthsLoaded && availableMonths.length === 0 && (
         <div className="mx-auto max-w-md mt-8 p-6 text-center bg-amber-50 border border-amber-200 rounded-xl">
           <div className="text-sm font-semibold text-amber-900 mb-1">
-            No report data yet for this client
+            No data for this company yet
           </div>
           <div className="text-xs text-amber-800">
             We have neither compliance records nor posts in any month for this client.

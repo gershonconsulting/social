@@ -180,13 +180,21 @@ export function WelcomePageClient() {
   const rename = async () => {
     if (!wsName.trim()) return;
     setBusy(true);
+    setErr(null);
     try {
-      await fetch("/api/onboarding", {
+      const r = await fetch("/api/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "rename", name: wsName.trim() }),
       });
+      // v4.59.0 audit: a failed rename used to look like it worked.
+      const j = await r.json().catch(() => null);
+      if (!r.ok || j?.success === false) {
+        throw new Error(j?.error || `Couldn't rename the workspace (HTTP ${r.status})`);
+      }
       await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Couldn't rename the workspace");
     } finally {
       setBusy(false);
     }
@@ -253,6 +261,24 @@ export function WelcomePageClient() {
       setBusy(false);
     }
   };
+
+  // v4.59.0 audit: a failed first load used to spin forever.
+  if (!st && err) {
+    return (
+      <div className="max-w-md text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+        <div>{err}</div>
+        <button
+          onClick={() => {
+            setErr(null);
+            void load();
+          }}
+          className="mt-2 px-3 py-1.5 text-xs font-medium text-red-800 bg-white border border-red-300 rounded-lg hover:bg-red-100"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   if (!st) {
     return (

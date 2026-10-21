@@ -20,30 +20,32 @@ export async function GET(
     const { id } = await params;
     const url = request.nextUrl;
     const monthsRaw = parseInt(url.searchParams.get("months") || "2", 10);
-    const months = Number.isFinite(monthsRaw) && monthsRaw > 0 && monthsRaw <= 12 ? monthsRaw : 2;
+    // v4.59.0 audit: months=0 means "all time" (no lower bound); otherwise 1..12 as before.
+    const months = Number.isFinite(monthsRaw) && monthsRaw >= 0 && monthsRaw <= 12 ? monthsRaw : 2;
+    const allTime = months === 0;
     const platform = url.searchParams.get("platform") || undefined;
     // Skip calendar generation when the caller only needs the listing.
     // PostsCalendar will request its own. Saves edge CPU.
     const includeCalendar = url.searchParams.get("calendar") !== "0";
 
-    const since = new Date();
+    let since = new Date();
     since.setMonth(since.getMonth() - months);
     since.setHours(0, 0, 0, 0);
 
-    const where: Record<string, unknown> = {
-      clientId: id,
-      publishedAtUtc: { gte: since },
-    };
+    const where: Record<string, unknown> = { clientId: id };
+    if (!allTime) where.publishedAtUtc = { gte: since };
     if (platform) {
       where.platform = platform;
     }
 
-    // Hard take limit so a client with hundreds of posts can't 1102 the worker.
-    // 200 is generous — the UI windows narrow further client-side.
-    const posts = await prisma.socialPost.findMany({
+    // Hard take limit so a client with thousands of posts can't 1102 the worker.
+    // v4.59.0 audit: raised 200 -> 1000 and fetch one extra row so we can report
+    // `truncated` instead of silently cutting the list.
+    const POST_LIMIT = 1000;
+    const rows = await prisma.socialPost.findMany({
       where,
       orderBy: { publishedAtUtc: "desc" },
-      take: 200,
+      take: POST_LIMIT + 1,
       select: {
         id: true,
         platform: true,
@@ -58,6 +60,15 @@ export async function GET(
         publishedDateLocal: true,
       },
     });
+
+    const truncated = rows.length > POST_LIMIT;
+    const posts = truncated ? rows.slice(0, POST_LIMIT) : rows;
+    // v4.59.0 audit: all-time calendar starts at the oldest returned post, not the epoch.
+    if (allTime) {
+      const oldest = posts.length ? new Date(posts[posts.length - 1].publishedAtUtc) : new Date();
+      since = new Date(oldest);
+      since.setHours(0, 0, 0, 0);
+    }
 
     let calendar: Array<{ date: string; hasPost: boolean; postCount: number }> = [];
     if (includeCalendar) {
@@ -84,7 +95,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: { posts, calendar, totalPosts: posts.length },
+      data: { posts, calendar, totalPosts: posts.length, truncated },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error fetching posts";

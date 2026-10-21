@@ -31,6 +31,7 @@
  */
 
 import prisma from "@/lib/db";
+import raw from "@/lib/db-raw";
 import { ClientStatus, ClientType, ComplianceStatus, PostingMode } from "@prisma/client";
 import { siteUrl } from "@/lib/site";
 
@@ -356,13 +357,19 @@ function computeMonth(
 
 export async function buildCampaignMonthlyReport(
   month: string,
-  opts: { clientId?: string; now?: Date } = {},
+  opts: { clientId?: string; now?: Date; orgId?: string } = {},
 ): Promise<CampaignMonthlyReport> {
   const now = opts.now ?? new Date();
   const prev = previousMonthOf(month);
+  // v4.59.0 audit: a public share link (/r/<token>) passes the owning org so
+  // the report is read with the unscoped client pinned to that org — the same
+  // answer whoever (or no one) is signed in.
+  const db = (opts.orgId ? raw : prisma) as typeof prisma;
+  const orgWhere = opts.orgId ? { organizationId: opts.orgId } : {};
 
-  const clients = await prisma.client.findMany({
+  const clients = await db.client.findMany({
     where: {
+      ...orgWhere,
       clientType: ClientType.CAMPAIGN,
       status: { not: ClientStatus.ARCHIVED },
       ...(opts.clientId ? { id: opts.clientId } : {}),
@@ -402,14 +409,14 @@ export async function buildCampaignMonthlyReport(
   // One query per table across both months, then bucket in memory —
   // cheaper on the Worker CPU budget than 4 round trips per company.
   const [compliance, posts, schedules] = await Promise.all([
-    prisma.dailyCompliance.findMany({
+    db.dailyCompliance.findMany({
       where: {
         clientId: { in: ids },
         OR: [{ dateLocal: { startsWith: `${month}-` } }, { dateLocal: { startsWith: `${prev}-` } }],
       },
       select: { clientId: true, dateLocal: true, expectedFlag: true, status: true },
     }),
-    prisma.socialPost.findMany({
+    db.socialPost.findMany({
       where: {
         clientId: { in: ids },
         OR: [
@@ -428,7 +435,7 @@ export async function buildCampaignMonthlyReport(
         shareCount: true,
       },
     }),
-    prisma.postingSchedule.findMany({
+    db.postingSchedule.findMany({
       where: { clientId: { in: ids } },
       select: { clientId: true, mode: true, weekdaysJson: true, customTargetCount: true },
     }),

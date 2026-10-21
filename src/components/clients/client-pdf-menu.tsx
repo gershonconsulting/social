@@ -4,14 +4,14 @@
  * "Download PDF" on every company page — v4.47.0.
  *
  * The one-page monthly report for this company (any category), for the month
- * in progress or any of the last 11 closed months. Plain links to
- * /api/clients/<id>/report-pdf — the browser downloads with the signed-in
- * session. Like the Export menu, it needs only the company id, so it works
+ * in progress or any of the last 11 closed months. Fetches
+ * /api/clients/<id>/report-pdf with the signed-in session and saves it
+ * only when a real PDF comes back (v4.59.0). Like the Export menu, it needs only the company id, so it works
  * even when the rest of the page fails to load.
  */
 
 import { useEffect, useRef, useState } from "react";
-import { FileText, ChevronDown } from "lucide-react";
+import { FileText, ChevronDown, Loader2 } from "lucide-react";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -31,6 +31,8 @@ function monthOptions(now = new Date()) {
 
 export function ClientPdfMenu({ clientId }: { clientId: string }) {
   const [open, setOpen] = useState(false);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [error, setError] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -49,6 +51,44 @@ export function ClientPdfMenu({ clientId }: { clientId: string }) {
 
   const base = `/api/clients/${encodeURIComponent(clientId)}/report-pdf`;
 
+  // v4.59.0 audit: fetch the PDF and verify it before saving, so an API error
+  // (JSON/HTML) is shown instead of being saved as a broken .pdf file.
+  async function download(monthKey: string) {
+    setBusyKey(monthKey);
+    setError("");
+    try {
+      const r = await fetch(`${base}?month=${monthKey}`, { cache: "no-store" });
+      const ct = r.headers.get("content-type") || "";
+      if (!r.ok || !ct.includes("application/pdf")) {
+        let msg = `PDF download failed (HTTP ${r.status})`;
+        try {
+          if (ct.includes("application/json")) {
+            const body = await r.json();
+            if (body?.error) msg = String(body.error);
+          }
+        } catch { /* keep generic message */ }
+        setError(msg);
+        return;
+      }
+      const blob = await r.blob();
+      const objUrl = URL.createObjectURL(blob);
+      const cd = r.headers.get("content-disposition") || "";
+      const nameMatch = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+      const a = document.createElement("a");
+      a.href = objUrl;
+      a.download = nameMatch ? decodeURIComponent(nameMatch[1]) : `report-${monthKey}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objUrl), 10_000);
+      setOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -65,18 +105,22 @@ export function ClientPdfMenu({ clientId }: { clientId: string }) {
       {open && (
         <div role="menu" className="absolute right-0 z-30 mt-1.5 w-72 max-h-96 overflow-auto rounded-xl border border-gray-200 bg-white p-1.5 shadow-lg">
           {monthOptions().map((o) => (
-            <a
+            <button
               key={o.key}
+              type="button"
               role="menuitem"
-              href={`${base}?month=${o.key}`}
-              download
-              onClick={() => setOpen(false)}
-              className="flex items-baseline justify-between gap-3 rounded-lg px-3 py-2 hover:bg-gray-50"
+              disabled={busyKey !== null}
+              onClick={() => download(o.key)}
+              className="w-full text-left flex items-baseline justify-between gap-3 rounded-lg px-3 py-2 hover:bg-gray-50 disabled:opacity-60"
             >
-              <span className="text-sm font-medium text-gray-900">{o.label}</span>
+              <span className="text-sm font-medium text-gray-900 inline-flex items-center gap-1.5">
+                {busyKey === o.key && <Loader2 size={12} className="animate-spin" />}
+                {o.label}
+              </span>
               {o.hint && <span className="text-xs text-gray-500">{o.hint}</span>}
-            </a>
+            </button>
           ))}
+          {error && <div role="alert" className="mx-1.5 my-1 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>}
           <div className="px-3 pt-1.5 pb-1 text-[11px] text-gray-400">One-page report · PDF</div>
         </div>
       )}

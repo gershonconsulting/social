@@ -47,6 +47,8 @@ export function ExtensionPageClient({ latest }: { latest: string }) {
   const [tokenNote, setTokenNote] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [companies, setCompanies] = useState<Company[] | null>(null);
+  // v4.59.0 audit: a failed /api/clients call is shown, not read as "no companies".
+  const [companiesErr, setCompaniesErr] = useState<string | null>(null);
   const [rows, setRows] = useState<Record<string, { state: RowState; note?: string }>>({});
   const [running, setRunning] = useState(false);
   const stopRef = useRef(false);
@@ -89,8 +91,13 @@ export function ExtensionPageClient({ latest }: { latest: string }) {
       .catch(() => setTokenNote("Could not load the key."));
 
     fetch("/api/clients?status=ACTIVE&light=1")
-      .then((r) => r.json())
+      .then(async (r) => {
+        const j = await r.json().catch(() => null);
+        if (!r.ok || !j?.success) throw new Error(j?.error || `Could not load companies (HTTP ${r.status})`);
+        return j;
+      })
       .then((j) => {
+        setCompaniesErr(null);
         const list = (j?.data ?? []) as Array<{
           id: string; name: string; clientType: string;
           platformConnections?: Array<{ platform: string; externalAccountUrl: string | null }>;
@@ -109,7 +116,10 @@ export function ExtensionPageClient({ latest }: { latest: string }) {
             .sort((a, b) => a.name.localeCompare(b.name)),
         );
       })
-      .catch(() => setCompanies([]));
+      .catch((e) => {
+        setCompaniesErr(e instanceof Error ? e.message : "Could not load companies.");
+        setCompanies([]);
+      });
   }, []);
 
   // ── Collect every company, one at a time ─────────────────────────────────
@@ -224,7 +234,9 @@ export function ExtensionPageClient({ latest }: { latest: string }) {
       <BackgroundCollectorCard latest={latest} />
 
       <Card title="Collect now, from this browser">
-        {companies === null ? (
+        {companiesErr ? (
+          <p className="text-sm text-red-700">Couldn&apos;t load your companies: {companiesErr}. Reload the page to try again.</p>
+        ) : companies === null ? (
           <div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 size={16} className="animate-spin" /> Loading companies…</div>
         ) : companies.length === 0 ? (
           <p className="text-sm text-gray-500">No active company has a LinkedIn or X link yet.</p>

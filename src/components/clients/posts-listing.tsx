@@ -36,11 +36,12 @@ const WINDOW_MONTHS: Record<WindowKey, string> = {
   LAST_MONTH: "2",
   THIS_MONTH: "2",
   YEAR: "12",
-  ALL_TIME: "12",
+  ALL_TIME: "0", // v4.59.0 audit: 0 = no lower bound (was 12, which capped "All time" at a year)
 };
 
 export function PostsListing({ clientId, platform }: { clientId: string; platform?: string }) {
   const [posts, setPosts] = useState<Post[]>([]);
+  const [truncated, setTruncated] = useState(false); // v4.59.0 audit: API hit its row cap
   const [state, setState] = useState<LoadState>("loading");
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [attempt, setAttempt] = useState(0);
@@ -76,6 +77,7 @@ export function PostsListing({ clientId, platform }: { clientId: string; platfor
         } else {
           const data = await r.json();
           setPosts(data?.data?.posts ?? []);
+          setTruncated(Boolean(data?.data?.truncated));
           setState("ok");
           return;
         }
@@ -148,6 +150,10 @@ export function PostsListing({ clientId, platform }: { clientId: string; platfor
     return true;
   });
 
+  // v4.59.0 audit: the window is incomplete only if it reaches back past the oldest returned post.
+  const oldestLoaded = posts.length ? new Date(posts[posts.length - 1].publishedAtUtc).getTime() : 0;
+  const windowTruncated = truncated && (!windowStart || windowStart.getTime() < oldestLoaded);
+
   const Selector = () => (
     <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex flex-wrap items-center gap-1.5">
       {(Object.keys(WINDOW_LABELS) as WindowKey[]).map((k) => (
@@ -165,7 +171,10 @@ export function PostsListing({ clientId, platform }: { clientId: string; platfor
         </button>
       ))}
       <span className="ml-auto text-xs text-gray-500">
-        {visiblePosts.length} post{visiblePosts.length === 1 ? "" : "s"}
+        {/* v4.59.0 audit: show "1000+" when the API truncated the list */}
+        {windowTruncated
+          ? `${visiblePosts.length}+ posts`
+          : `${visiblePosts.length} post${visiblePosts.length === 1 ? "" : "s"}`}
       </span>
     </div>
   );

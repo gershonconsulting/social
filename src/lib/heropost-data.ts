@@ -35,6 +35,17 @@ export function today(): Date {
   return new Date();
 }
 
+// v4.59.0 audit: anchor the last/this/next window to the snapshot's month when the
+// snapshot is older than the current month — otherwise a stale snapshot renders
+// 0% for every client. isStale() still compares against real today, so the
+// staleness banner keeps showing.
+export function windowAnchor(now: Date = today()): Date {
+  const snap = new Date(SNAPSHOT_AT);
+  const snapIdx = snap.getUTCFullYear() * 12 + snap.getUTCMonth();
+  const nowIdx = now.getUTCFullYear() * 12 + now.getUTCMonth();
+  return snapIdx < nowIdx ? snap : now;
+}
+
 export function ymKey(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
@@ -53,8 +64,7 @@ function isCurrent(ym: string, ref: Date): boolean {
   return y === ref.getUTCFullYear() && m - 1 === ref.getUTCMonth();
 }
 
-export function workingDays(ym: string): { target: number; current: boolean } {
-  const ref = today();
+export function workingDays(ym: string, ref: Date = today()): { target: number; current: boolean } {
   const [y, m] = ym.split("-").map(Number);
   const current = isCurrent(ym, ref);
   let n = 0;
@@ -70,8 +80,7 @@ export function workingDays(ym: string): { target: number; current: boolean } {
   return { target: Math.max(n, current ? 1 : n), current };
 }
 
-export function focusMonths(): { lastM: string; thisM: string; nextM: string } {
-  const d = today();
+export function focusMonths(d: Date = today()): { lastM: string; thisM: string; nextM: string } {
   const key = (yy: number, mm: number) => ymKey(new Date(Date.UTC(yy, mm, 1)));
   return {
     lastM: key(d.getUTCFullYear(), d.getUTCMonth() - 1),
@@ -80,8 +89,7 @@ export function focusMonths(): { lastM: string; thisM: string; nextM: string } {
   };
 }
 
-export function isFutureMonth(ym: string): boolean {
-  const d = today();
+export function isFutureMonth(ym: string, d: Date = today()): boolean {
   const cur = d.getUTCFullYear() * 12 + d.getUTCMonth();
   const [y, m] = ym.split("-").map(Number);
   return (y * 12 + (m - 1)) > cur;
@@ -108,8 +116,7 @@ export const WEEKLY_CADENCE: Record<string, number> = {
 
 // Target for a weekly-cadence client: perWeek x weeks in the period. The current
 // month counts only elapsed days, for a fair pace-to-date read.
-export function weeklyTarget(ym: string, perWeek: number): { target: number; current: boolean } {
-  const ref = today();
+export function weeklyTarget(ym: string, perWeek: number, ref: Date = today()): { target: number; current: boolean } {
   const [y, m] = ym.split("-").map(Number);
   const current = isCurrent(ym, ref);
   const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
@@ -119,8 +126,8 @@ export function weeklyTarget(ym: string, perWeek: number): { target: number; cur
 
 // Resolve the right target for a client in a month: weekly cadence if set,
 // otherwise the default 1-per-working-day target.
-export function clientTarget(name: string, ym: string): { target: number; current: boolean; perWeek?: number } {
+export function clientTarget(name: string, ym: string, ref: Date = today()): { target: number; current: boolean; perWeek?: number } {
   const pw = WEEKLY_CADENCE[name];
-  if (pw) return { ...weeklyTarget(ym, pw), perWeek: pw };
-  return workingDays(ym);
+  if (pw) return { ...weeklyTarget(ym, pw, ref), perWeek: pw };
+  return workingDays(ym, ref);
 }

@@ -20,7 +20,10 @@ import {
 } from "@/lib/view-filters";
 
 /** Pages whose content the shared filters actually drive. */
-const FILTERED_PATHS = ["/dashboard", "/summary"];
+// v4.59.0 audit: /dashboard (v4.58 Campaign command center) is campaign-only
+// with its own period picker and never read these filters — showing them there
+// suggested they did something.
+const FILTERED_PATHS = ["/summary"];
 
 function Check({ on, label, count, onClick }: { on: boolean; label: string; count?: number; onClick: () => void }) {
   return (

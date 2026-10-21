@@ -2,9 +2,23 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import rawPrisma from "@/lib/db-raw";
-import { ClientStatus, ClientType, ConnectionStatus, Platform } from "@prisma/client";
+import { ClientStatus, ClientType, ConnectionStatus, Platform, UserRole } from "@prisma/client";
+import { requireRole } from "@/lib/auth";
 import { propagateTokensForAllPlatforms } from "@/lib/jobs/token-propagate";
 import { z } from "zod";
+
+// v4.59.0 audit: mutating routes need OPERATIONS or above (ADMIN — the owner —
+// keeps access). Middleware already makes /api session-only; this adds the role.
+async function guardRole(): Promise<NextResponse | null> {
+  try {
+    await requireRole(UserRole.OPERATIONS);
+    return null;
+  } catch (e) {
+    const m = e instanceof Error ? e.message : "";
+    if (m === "FORBIDDEN") return NextResponse.json({ success: false, error: "You do not have permission to do this" }, { status: 403 });
+    return NextResponse.json({ success: false, error: "Not signed in" }, { status: 401 });
+  }
+}
 
 // v4.56.1 — forgiving input. A slug typed by hand ("PhiTech New Social"), a
 // website or profile link without https://, or an empty slug used to fail with
@@ -287,7 +301,8 @@ export async function GET(req: NextRequest) {
     }));
 
     return NextResponse.json({ success: true, data: enriched }, {
-      headers: light ? { "Cache-Control": "public, max-age=15, s-maxage=60" } : {},
+      // v4.59.0 audit: per-workspace session data must never sit in a shared cache.
+      headers: light ? { "Cache-Control": "private, no-store" } : {},
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Database query failed";
@@ -312,6 +327,9 @@ export async function POST(req: NextRequest) {
   // `warnings` collects non-fatal post-insert failures so the UI can show
   // "created, but X didn't run" instead of a bare error.
   const warnings: string[] = [];
+
+  const denied = await guardRole(); // v4.59.0 audit: role check
+  if (denied) return denied;
 
   try {
     const body = normaliseBody(await req.json().catch(() => null));
