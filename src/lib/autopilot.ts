@@ -2,6 +2,10 @@
  * Publishing Autopilot (v4.51.0) — Gershon's own (INTERNAL) companies post
  * every day without anyone writing a word.
  *
+ * v4.56.0 (Olivier, 2026-10-21): CAMPAIGN companies can be added in the
+ *   Autopilot section too. Their month goes to the client's validator and is
+ *   never auto-approved — nothing is published before the client approves.
+ *
  * RULES (Olivier, 2026-10-18):
  *   - Autopilot runs for the INTERNAL companies (Gershon Consulting,
  *     AmericanAbroad, Linalysis, …), not for CAMPAIGN clients.
@@ -91,15 +95,21 @@ export async function saveAutopilotSettings(orgId: string, patch: Partial<Autopi
   return next;
 }
 
-/** The INTERNAL companies Autopilot writes for. */
+/** Company types Autopilot can write for (v4.56.0: CAMPAIGN companies can be added too). */
+export const AUTOPILOT_TYPES: ("INTERNAL" | "CAMPAIGN")[] = ["INTERNAL", "CAMPAIGN"];
+
+/**
+ * The companies Autopilot writes for. Not chosen yet (clientIds null) = every
+ * INTERNAL company; CAMPAIGN companies are only included when picked.
+ */
 export async function autopilotClients(orgId: string, s?: AutopilotSettings) {
   const st = s || (await getAutopilotSettings(orgId));
   const all = await prisma.client.findMany({
-    where: { organizationId: orgId, clientType: "INTERNAL", archivedAt: null, status: { not: "ARCHIVED" } },
-    select: { id: true, name: true, industry: true, website: true, notes: true },
+    where: { organizationId: orgId, clientType: { in: AUTOPILOT_TYPES }, archivedAt: null, status: { not: "ARCHIVED" } },
+    select: { id: true, name: true, industry: true, website: true, notes: true, clientType: true },
     orderBy: { name: "asc" },
   });
-  return st.clientIds ? all.filter((c) => st.clientIds!.includes(c.id)) : all;
+  return st.clientIds ? all.filter((c) => st.clientIds!.includes(c.id)) : all.filter((c) => c.clientType === "INTERNAL");
 }
 
 export async function isEnabled(orgId: string, s?: AutopilotSettings): Promise<boolean> {
@@ -483,7 +493,7 @@ async function submitMonth(orgId: string, s: AutopilotSettings, w: PlanWindow): 
       `<p>${hi}</p>
        <p>The <b>${esc(w.label)}</b> content of <b>${esc(c.name)}</b> is ready for your validation — ${n} posts, one per day (text, X version and picture):</p>
        <ul>${list}</ul>
-       <p>Read the month, comment, ask for changes or press <b>Approve all</b>. Anything not answered is <b>approved automatically on ${esc(deadlineTxt)}</b> (New York).
+       <p>Read the month, comment, ask for changes or press <b>Approve all</b>. ${c.clientType === "CAMPAIGN" ? "Nothing is published before you approve it." : `Anything not answered is <b>approved automatically on ${esc(deadlineTxt)}</b> (New York).`}
        When it is validated, social@gershonconsulting.com is told it is ready for publishing.</p>
        ${skipped.length ? `<p style="color:#b45309;font-size:13px">Not sent: ${esc(skipped.slice(0, 5).join(" · "))}</p>` : ""}`,
       { href: link, label: "Validate the content" },
@@ -496,8 +506,10 @@ async function submitMonth(orgId: string, s: AutopilotSettings, w: PlanWindow): 
 /** Unanswered Autopilot posts are approved after `autoApproveHours`. */
 async function autoApprove(orgId: string, s: AutopilotSettings): Promise<number> {
   const cutoff = new Date(Date.now() - s.autoApproveHours * 3600000);
+  const internalIds = (await prisma.client.findMany({ where: { organizationId: orgId, clientType: "INTERNAL" }, select: { id: true } })).map((c) => c.id);
   const due = await prisma.contentItem.findMany({
-    where: { organizationId: orgId, createdBy: AUTOPILOT, status: "IN_REVIEW", submittedAt: { lt: cutoff } },
+    // Only Gershon's own (INTERNAL) companies auto-approve; a CAMPAIGN client always approves itself.
+    where: { organizationId: orgId, createdBy: AUTOPILOT, status: "IN_REVIEW", submittedAt: { lt: cutoff }, clientId: { in: internalIds } },
     select: { id: true, version: true },
   });
   const now = new Date();
@@ -665,8 +677,8 @@ export async function status(orgId: string, now = new Date()) {
   const enabled = await isEnabled(orgId, s);
   const clients = await autopilotClients(orgId, s);
   const all = await prisma.client.findMany({
-    where: { organizationId: orgId, clientType: "INTERNAL", archivedAt: null, status: { not: "ARCHIVED" } },
-    select: { id: true, name: true },
+    where: { organizationId: orgId, clientType: { in: AUTOPILOT_TYPES }, archivedAt: null, status: { not: "ARCHIVED" } },
+    select: { id: true, name: true, clientType: true },
     orderBy: { name: "asc" },
   });
   const items = await prisma.contentItem.findMany({
@@ -680,6 +692,7 @@ export async function status(orgId: string, now = new Date()) {
       return {
         clientId: c.id,
         name: c.name,
+        clientType: c.clientType,
         planned: (await coveredDays(orgId, c.id, w)).size,
         days: w.days.length,
         inReview: mine.filter((i) => i.status === "IN_REVIEW").length,

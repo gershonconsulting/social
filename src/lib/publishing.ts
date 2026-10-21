@@ -467,10 +467,20 @@ export async function scheduleItem(orgId: string, itemId: string, when: Date): P
   const mediaJson = media.length
     ? JSON.stringify(media.map((m) => ({ url: mediaUrl(m), mime: m.mime, name: m.name || `picture-${m.position + 1}.jpg` })))
     : null;
-  const nets = parsePlatforms(item.platforms);
+  let nets = parsePlatforms(item.platforms);
   const dests = item.clientId ? destinationsOf(await getTarget(orgId, item.clientId)).filter((d) => nets.includes(d.network)) : [];
-  if (nets.includes("TWITTER") && !dests.some((d) => d.network === "TWITTER")) problems.push("No X account set for this client (Publishing → Accounts).");
-  if (nets.includes("LINKEDIN") && !dests.some((d) => d.network === "LINKEDIN")) problems.push("No LinkedIn page, profile or group set for this client (Publishing → Accounts).");
+  // v4.55.1: a network with no account for this company is skipped (e.g. PuenteLatin
+  // has an X account but no LinkedIn page) — the post still goes out on the others.
+  const missing = nets.filter((n) => !dests.some((d) => d.network === n));
+  if (missing.length && missing.length < nets.length) {
+    nets = nets.filter((n) => !missing.includes(n));
+    await prisma.contentItem.update({ where: { id: item.id }, data: { platforms: nets.join(",") } });
+    await addEvent(orgId, item.id, item.version, "comment", "team", "Publishing",
+      `Not posted on ${missing.map((n) => (n === "TWITTER" ? "X" : "LinkedIn")).join(" and ")}: no account set for this company in Publishing → Accounts. Posting on ${nets.map((n) => (n === "TWITTER" ? "X" : "LinkedIn")).join(" and ")} only.`);
+  } else {
+    if (nets.includes("TWITTER") && !dests.some((d) => d.network === "TWITTER")) problems.push("No X account set for this client (Publishing → Accounts).");
+    if (nets.includes("LINKEDIN") && !dests.some((d) => d.network === "LINKEDIN")) problems.push("No LinkedIn page, profile or group set for this client (Publishing → Accounts).");
+  }
   if (problems.length) return problems;
 
   // Replace whatever has not gone out yet; keep what already went out.

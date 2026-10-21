@@ -7,7 +7,7 @@ export const runtime = "edge";
 export default function Page() {
   return (
     <div>
-      <Header title="Autopilot" eyebrow="Publishing" subtitle="One post a day for Gershon's own companies — written, illustrated and scheduled by AI, approved by you in one batch a month." />
+      <Header title="Autopilot" eyebrow="Publishing" subtitle="One post a day for the companies you put on Autopilot — internal or campaign — written, illustrated and scheduled by AI, approved in one batch a month." />
       <AutopilotPage />
     </div>
   );

@@ -11,13 +11,13 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, BookOpen, Bot, CheckCircle2, ExternalLink, Loader2, Play } from "lucide-react";
 
-type Row = { clientId: string; name: string; planned: number; days: number; inReview: number; approved: number; changes: number; accountsOk: boolean; networks: string[]; reviewUrl: string };
+type Row = { clientId: string; name: string; clientType?: string; planned: number; days: number; inReview: number; approved: number; changes: number; accountsOk: boolean; networks: string[]; reviewUrl: string };
 type Status = {
   settings: { enabled: boolean | null; clientIds: string[] | null; postTime: string; autoApproveHours: number; monthDay: number };
   enabled: boolean;
   window: { label: string; first: string | null; last: string | null };
   clients: Row[];
-  internal: { id: string; name: string }[];
+  internal: { id: string; name: string; clientType?: string }[];
 };
 
 function useStatus() {
@@ -85,7 +85,7 @@ export function AutopilotPage() {
 
   if (hidden) return <p className="text-sm text-gray-500">Autopilot is not available for this account.</p>;
   if (!s) return <Loader2 className="animate-spin text-gray-400" />;
-  const chosen = new Set(s.settings.clientIds ?? s.internal.map((c) => c.id));
+  const chosen = new Set(s.settings.clientIds ?? s.internal.filter((c) => (c.clientType || "INTERNAL") === "INTERNAL").map((c) => c.id));
 
   return (
     <div className="space-y-6">
@@ -95,7 +95,7 @@ export function AutopilotPage() {
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Autopilot is {s.enabled ? "ON" : "OFF"}</h2>
             <p className="text-sm text-gray-600">
-              One post per day for each internal company. On the {s.settings.monthDay}th, the whole next month is written (LinkedIn + X + picture) from each
+              One post per day for each company you put on Autopilot (internal or campaign). On the {s.settings.monthDay}th, the whole next month is written (LinkedIn + X + picture) from each
               company&apos;s <Link href="/knowledge-base" className="underline">Knowledge Base</Link> and sent to you in one email. Unanswered posts are approved after {s.settings.autoApproveHours}h and published at {s.settings.postTime} (New York).
             </p>
           </div>
@@ -121,7 +121,7 @@ export function AutopilotPage() {
           <tbody>
             {s.clients.map((c) => (
               <tr key={c.clientId} className="border-t border-gray-100">
-                <td className="py-2 font-medium">{c.name}</td>
+                <td className="py-2 font-medium">{c.name}{c.clientType === "CAMPAIGN" && <span className="ml-2 text-[10px] font-semibold uppercase text-violet-700 bg-violet-50 border border-violet-100 rounded px-1">Campaign</span>}</td>
                 <td>
                   {c.planned >= c.days ? <span className="inline-flex items-center gap-1 text-emerald-700"><CheckCircle2 size={14} /> {c.planned}/{c.days}</span> : <span className="text-amber-700">{c.planned}/{c.days}</span>}
                 </td>
@@ -139,7 +139,7 @@ export function AutopilotPage() {
                 </td>
               </tr>
             ))}
-            {!s.clients.length && <tr><td colSpan={7} className="py-3 text-gray-500">No internal companies selected.</td></tr>}
+            {!s.clients.length && <tr><td colSpan={7} className="py-3 text-gray-500">No company on Autopilot yet — tick one under Settings.</td></tr>}
           </tbody>
         </table>
       </section>
@@ -147,24 +147,39 @@ export function AutopilotPage() {
       <section className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
         <h3 className="font-semibold text-gray-900">Settings</h3>
         <div>
-          <div className="text-sm text-gray-700 mb-1">Companies</div>
-          <div className="flex flex-wrap gap-2">
-            {s.internal.map((c) => (
-              <label key={c.id} className="inline-flex items-center gap-1.5 text-sm border border-gray-200 rounded-lg px-2 py-1">
-                <input
-                  type="checkbox"
-                  checked={chosen.has(c.id)}
-                  disabled={busy}
-                  onChange={(e) => {
-                    const next = new Set(chosen);
-                    if (e.target.checked) next.add(c.id); else next.delete(c.id);
-                    void save({ clientIds: next.size === s.internal.length ? null : Array.from(next) });
-                  }}
-                />
-                {c.name}
-              </label>
-            ))}
-          </div>
+          <div className="text-sm text-gray-700 mb-1">Companies on Autopilot</div>
+          {(["INTERNAL", "CAMPAIGN"] as const).map((type) => {
+            const list = s.internal.filter((c) => (c.clientType || "INTERNAL") === type);
+            return (
+              <div key={type} className="mb-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
+                  {type === "INTERNAL" ? "Internal" : "Campaign"}
+                  <span className="ml-2 normal-case font-normal tracking-normal text-gray-400">
+                    {type === "INTERNAL" ? `auto-approved after ${s.settings.autoApproveHours}h` : "the client always approves — never auto-approved"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {list.map((c) => (
+                    <label key={c.id} className={`inline-flex items-center gap-1.5 text-sm border rounded-lg px-2 py-1 ${chosen.has(c.id) ? "border-emerald-300 bg-emerald-50" : "border-gray-200"}`}>
+                      <input
+                        type="checkbox"
+                        checked={chosen.has(c.id)}
+                        disabled={busy}
+                        onChange={(e) => {
+                          const next = new Set(chosen);
+                          if (e.target.checked) next.add(c.id); else next.delete(c.id);
+                          void save({ clientIds: Array.from(next) });
+                        }}
+                      />
+                      {c.name}
+                    </label>
+                  ))}
+                  {!list.length && <span className="text-sm text-gray-400">No {type === "INTERNAL" ? "internal" : "campaign"} companies.</span>}
+                </div>
+              </div>
+            );
+          })}
+          <p className="text-[11px] text-gray-500">Tick a company to add it: its next month is written on the {s.settings.monthDay}th (or press Run now). Its LinkedIn/X go in <Link href="/publishing/accounts" className="underline">Publishing → Accounts</Link>.</p>
         </div>
         <div className="flex flex-wrap gap-6 text-sm">
           <label>Post time (New York){" "}
