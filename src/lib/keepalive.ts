@@ -15,7 +15,12 @@
 export function keepAlive(work: () => Promise<Response>, everyMs = 5000): Response {
   const enc = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
+    start(controller) {
+      // Not awaited: start() must return at once so the 200 + first byte leave now.
+      void run(controller);
+    },
+  });
+  async function run(controller: ReadableStreamDefaultController<Uint8Array>) {
       controller.enqueue(enc.encode(" "));
       const tick = setInterval(() => {
         try { controller.enqueue(enc.encode(" ")); } catch { /* closed */ }
@@ -39,8 +44,7 @@ export function keepAlive(work: () => Promise<Response>, everyMs = 5000): Respon
       clearInterval(tick);
       controller.enqueue(enc.encode(body));
       controller.close();
-    },
-  });
+  }
   return new Response(stream, {
     status: 200,
     headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" },
