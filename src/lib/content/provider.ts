@@ -186,3 +186,29 @@ export async function pingAI(): Promise<{ ok: boolean; model: string; error?: st
     return { ok: false, model: settings.model, error: e instanceof Error ? e.message : String(e) };
   }
 }
+
+/**
+ * v4.56.0 — the long JSON reports (Analyze content, Generate prompt): try the
+ * fast 70B first (seconds instead of minutes on Workers AI), then the
+ * large-context model; each answer must parse, else the next model is tried.
+ */
+export const FAST_CF_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+export async function runChatJson<T>(
+  settings: AISettings,
+  system: string,
+  user: string,
+  maxTokens: number,
+  parse: (text: string) => T,
+): Promise<{ value: T; chat: ChatOutcome }> {
+  const models = [FAST_CF_MODEL, settings.model || DEFAULT_CF_MODEL].filter((m, i, a) => a.indexOf(m) === i);
+  let lastErr: unknown = null;
+  for (const model of models) {
+    try {
+      const chat = await runChat({ ...settings, model }, system, user, maxTokens);
+      return { value: parse(chat.text), chat };
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("The AI did not answer.");
+}

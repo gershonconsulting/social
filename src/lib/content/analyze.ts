@@ -10,6 +10,7 @@ import type { Corpus, CorpusPost, ContentStats } from "./corpus";
 import {
   getAISettings,
   runChat,
+  runChatJson,
   listModels,
   defaultModelFor,
   DEFAULT_ANTHROPIC_MODEL,
@@ -238,10 +239,11 @@ export async function runAnalysis(
   const started = Date.now();
   const prompt = buildPrompt(client, corpus);
 
-  const chat = await runChat(settings, SYSTEM_PROMPT, prompt, 3500); // v4.56.0: was 6000 (output length = most of the wait)
+  // v4.56.0: fast model first, answer must parse (else the next model); 3,500 tokens (was 6,000).
+  const { value: result, chat } = await runChatJson(settings, SYSTEM_PROMPT, prompt, 3500, (t) => coerce(extractJson(t)));
 
   return {
-    result: coerce(extractJson(chat.text)),
+    result,
     model: chat.model,
     inputTokens: chat.inputTokens,
     outputTokens: chat.outputTokens,

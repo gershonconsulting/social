@@ -21,7 +21,7 @@
 import { parseModelJson } from "./json-repair";
 import type { Corpus, CorpusPost, ContentStats, HashtagStat } from "./corpus";
 import type { AnalysisResult } from "./analyze";
-import { getAISettings, runChat, type AISettings } from "./provider";
+import { getAISettings, runChat, runChatJson, type AISettings } from "./provider";
 
 export { getAISettings };
 export type { AISettings };
@@ -318,12 +318,12 @@ export async function runPostPrompt(
   const started = Date.now();
   const input = buildInput(client, corpus, priorAnalysis);
 
-  const chat = await runChat(settings, SYSTEM_PROMPT, input, 3500); // v4.56.0: was 6000
-
-  const result = coerce(extractJson(chat.text), corpus.stats);
-  if (!result.promptText) {
-    throw new Error("The model returned no prompt text. Try regenerating.");
-  }
+  // v4.56.0: fast model first; an answer that doesn't parse or has no prompt text tries the next model.
+  const { value: result, chat } = await runChatJson(settings, SYSTEM_PROMPT, input, 3500, (t) => {
+    const r = coerce(extractJson(t), corpus.stats);
+    if (!r.promptText) throw new Error("The model returned no prompt text. Try regenerating.");
+    return r;
+  });
 
   return {
     result,
