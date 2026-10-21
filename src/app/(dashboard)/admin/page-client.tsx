@@ -543,7 +543,7 @@ export default function AdminPage() {
                     <input
                       type="text"
                       value={editSlug}
-                      onChange={(e) => setEditSlug(e.target.value)}
+                      onChange={(e) => setEditSlug(slugify(e.target.value) + (/[^a-zA-Z0-9]$/.test(e.target.value) && e.target.value.length > 1 ? "-" : ""))}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 font-mono"
                     />
                   </div>

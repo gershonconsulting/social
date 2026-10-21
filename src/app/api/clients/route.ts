@@ -1,9 +1,71 @@
 export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import rawPrisma from "@/lib/db-raw";
 import { ClientStatus, ClientType, ConnectionStatus, Platform } from "@prisma/client";
 import { propagateTokensForAllPlatforms } from "@/lib/jobs/token-propagate";
 import { z } from "zod";
+
+// v4.56.1 — forgiving input. A slug typed by hand ("PhiTech New Social"), a
+// website or profile link without https://, or an empty slug used to fail with
+// a bare "Validation failed". We now repair them before validating.
+function toSlug(s: unknown): string {
+  return String(s ?? "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 90);
+}
+function toUrl(u: unknown): unknown {
+  if (typeof u !== "string") return u;
+  const t = u.trim();
+  if (!t) return null;
+  return /^https?:\/\//i.test(t) ? t : `https://${t.replace(/^\/+/, "")}`;
+}
+function normaliseBody(body: unknown): unknown {
+  if (!body || typeof body !== "object") return body;
+  const b = { ...(body as Record<string, unknown>) };
+  b.slug = toSlug(b.slug) || toSlug(b.name);
+  if ("website" in b) b.website = toUrl(b.website);
+  for (const k of ["campaignStartDate", "reportingStartDate"]) {
+    if (b[k] === "") b[k] = null;
+  }
+  if (Array.isArray(b.platformConnections)) {
+    b.platformConnections = (b.platformConnections as Array<Record<string, unknown>>)
+      .filter((c) => c && c.platform)
+      .map((c) => {
+        const url = toUrl(c.externalAccountUrl);
+        return url ? { ...c, externalAccountUrl: url } : { platform: c.platform };
+      });
+  }
+  return b;
+}
+const FIELD_LABELS: Record<string, string> = {
+  name: "Company name", slug: "Slug", website: "Website", clientType: "Category",
+  status: "Status", campaignStartDate: "Campaign start date",
+  reportingStartDate: "Reporting start date", platformConnections: "Profile link",
+};
+function explain(err: z.ZodError): string {
+  const parts = err.issues.map((i) => {
+    const field = FIELD_LABELS[String(i.path[0])] ?? String(i.path[0] ?? "Form");
+    return `${field}: ${i.message}`;
+  });
+  return `Validation failed — ${Array.from(new Set(parts)).join("; ")}`;
+}
+// Slugs are unique across ALL workspaces (one table). A company that already
+// exists in another workspace (e.g. PhiTech in Gershon's) must not block the
+// same company in its own workspace — pick the next free slug instead.
+async function freeSlug(base: string): Promise<string> {
+  let candidate = base;
+  for (let n = 2; n < 50; n++) {
+    const hit = await rawPrisma.client.findUnique({ where: { slug: candidate }, select: { id: true } });
+    if (!hit) return candidate;
+    candidate = `${base}-${n}`;
+  }
+  return `${base}-${Date.now().toString(36)}`;
+}
 
 const platformConnectionSchema = z.object({
   platform: z.string(),
@@ -252,21 +314,26 @@ export async function POST(req: NextRequest) {
   const warnings: string[] = [];
 
   try {
-    const body = await req.json().catch(() => null);
+    const body = normaliseBody(await req.json().catch(() => null));
     const parsed = createClientSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(
-        { success: false, error: "Validation failed", details: parsed.error.flatten() },
+        { success: false, error: explain(parsed.error), details: parsed.error.flatten() },
         { status: 400 }
       );
     }
 
-    // Check slug uniqueness
+    // Same company already in THIS workspace? That is a real duplicate.
     const existing = await prisma.client.findUnique({ where: { slug: parsed.data.slug } });
     if (existing) {
-      return NextResponse.json({ success: false, error: "Slug already taken" }, { status: 409 });
+      return NextResponse.json(
+        { success: false, error: `A company with slug "${parsed.data.slug}" already exists in this workspace.` },
+        { status: 409 }
+      );
     }
+    // Taken only in ANOTHER workspace → use the next free slug silently.
+    parsed.data.slug = await freeSlug(parsed.data.slug);
 
     const { platformConnections: connections, ...clientData } = parsed.data;
 
@@ -285,7 +352,7 @@ export async function POST(req: NextRequest) {
       // Lost the race against a concurrent create with the same slug.
       if (m.includes("P2002") || m.toLowerCase().includes("unique constraint")) {
         return NextResponse.json(
-          { success: false, error: "Slug already taken" },
+          { success: false, error: "That slug was just taken — please press Create again." },
           { status: 409 }
         );
       }
