@@ -74,7 +74,7 @@ function buildPrompt(
 ): string {
   const s = corpus.stats;
 
-  const sample = corpus.posts.slice(0, 120);
+  const sample = corpus.posts.slice(0, 60); // v4.56.0: was 120 — halves the input, same signal
 
   const lines: string[] = [];
   lines.push(`# Company`);
@@ -249,7 +249,7 @@ export async function runAnalysis(
   const started = Date.now();
   const prompt = buildPrompt(client, corpus);
 
-  const chat = await runChat(settings, SYSTEM_PROMPT, prompt, 6000);
+  const chat = await runChat(settings, SYSTEM_PROMPT, prompt, 3500); // v4.56.0: was 6000 (output length = most of the wait)
 
   return {
     result: coerce(extractJson(chat.text)),

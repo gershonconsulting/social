@@ -119,7 +119,7 @@ function buildInput(
   priorAnalysis: AnalysisResult | null
 ): string {
   const s = corpus.stats;
-  const sample = corpus.posts.slice(0, 80);
+  const sample = corpus.posts.slice(0, 50); // v4.56.0: was 80
   const L: string[] = [];
 
   L.push(`# Company`);
@@ -327,7 +327,7 @@ export async function runPostPrompt(
   const started = Date.now();
   const input = buildInput(client, corpus, priorAnalysis);
 
-  const chat = await runChat(settings, SYSTEM_PROMPT, input, 6000);
+  const chat = await runChat(settings, SYSTEM_PROMPT, input, 3500); // v4.56.0: was 6000
 
   const result = coerce(extractJson(chat.text), corpus.stats);
   if (!result.promptText) {

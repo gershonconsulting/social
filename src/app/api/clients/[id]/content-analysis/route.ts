@@ -13,6 +13,7 @@
 export const runtime = "edge";
 
 import { NextRequest, NextResponse } from "next/server";
+import { keepAlive } from "@/lib/keepalive";
 import prisma from "@/lib/db";
 import { buildCorpus } from "@/lib/content/corpus";
 import { getAnthropicSettings, runAnalysis } from "@/lib/content/analyze";
@@ -73,10 +74,10 @@ export async function GET(
   }
 }
 
-export async function POST(
+async function handlePost(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+): Promise<Response> {
   try {
     const { id } = await params;
     const windowDays = parseWindow(req);
@@ -158,4 +159,9 @@ export async function POST(
     const message = err instanceof Error ? err.message : "Analysis failed";
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
+}
+
+/** v4.56.0: streamed so Cloudflare never cuts a long AI call with a 524 (see lib/keepalive). */
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  return keepAlive(() => handlePost(req, ctx));
 }
