@@ -6,6 +6,8 @@ export const runtime = "edge";
  *
  * GET  → { client, items: posts waiting for review + recent history, with threads }
  * POST { contentId, action: "comment" | "request_changes" | "approve", name?, body? }
+ *      → comment / request_changes also write a new version of the post from
+ *        the text (v4.55.0); the answer carries { revised }.
  */
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db-raw";
@@ -32,7 +34,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: str
         id: true, title: true, text: true, textX: true, platforms: true, status: true, scheduledAt: true, version: true,
         approvedAt: true, approvedBy: true, updatedAt: true,
         comments: {
-          where: { kind: { in: ["comment", "submitted", "changes_requested", "approved", "edited", "published"] } },
+          where: { kind: { in: ["comment", "submitted", "changes_requested", "approved", "edited", "revised", "published"] } },
           select: { id: true, authorName: true, authorRole: true, kind: true, body: true, version: true, createdAt: true },
           orderBy: { createdAt: "asc" },
         },
@@ -55,7 +57,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
   if (!["comment", "request_changes", "approve", "approve_all"].includes(action) || (action !== "approve_all" && !b?.contentId)) {
     return NextResponse.json({ success: false, error: "Bad request" }, { status: 400 });
   }
-  const err = await clientAction(r.orgId, r.clientId, b?.contentId || "", action, b?.name ?? null, b?.body ?? null);
+  const out: { revised?: import("@/lib/publishing-revise").ReviseResult } = {};
+  const err = await clientAction(r.orgId, r.clientId, b?.contentId || "", action, b?.name ?? null, b?.body ?? null, out);
   if (err) return NextResponse.json({ success: false, error: err }, { status: 400 });
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, revised: out.revised ?? null });
 }
