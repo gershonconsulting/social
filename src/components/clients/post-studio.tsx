@@ -324,7 +324,7 @@ export function PostStudio({ clientId, clientName }: { clientId: string; clientN
             ) : (
               <Sparkles size={13} />
             )}
-            {running ? "Writing the brief…" : brief ? "Regenerate" : "Generate prompt"}
+            {running ? "Writing the brief… (up to 2 min)" : brief ? "Regenerate" : "Generate prompt"}
           </button>
         </div>
       </div>

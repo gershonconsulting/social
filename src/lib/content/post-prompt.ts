@@ -18,6 +18,7 @@
  * settings table.
  */
 
+import { parseModelJson } from "./json-repair";
 import type { Corpus, CorpusPost, ContentStats, HashtagStat } from "./corpus";
 import type { AnalysisResult } from "./analyze";
 import { getAISettings, runChat, type AISettings } from "./provider";
@@ -235,17 +236,7 @@ Provide exactly 3 starters. Tags must be written without the leading #.`;
 // ─── Response handling ───────────────────────────────────────────────────────
 
 function extractJson(text: string): unknown {
-  const trimmed = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const first = trimmed.indexOf("{");
-    const last = trimmed.lastIndexOf("}");
-    if (first !== -1 && last > first) {
-      return JSON.parse(trimmed.slice(first, last + 1));
-    }
-    throw new Error("Model did not return parseable JSON.");
-  }
+  return parseModelJson(text); // v4.56.0: tolerant of raw line breaks / trailing commas
 }
 
 function asStringArray(v: unknown, max = 8): string[] {

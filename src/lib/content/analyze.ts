@@ -5,6 +5,7 @@
  * split is why adding OpenAI (v3.6.0) touched no prompt text.
  */
 
+import { parseModelJson } from "./json-repair";
 import type { Corpus, CorpusPost, ContentStats } from "./corpus";
 import {
   getAISettings,
@@ -178,19 +179,7 @@ export type AnalyzeOutcome = {
 };
 
 function extractJson(text: string): unknown {
-  const trimmed = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    // The model occasionally wraps the object in a sentence. Grab the outermost
-    // balanced braces and try again.
-    const first = trimmed.indexOf("{");
-    const last = trimmed.lastIndexOf("}");
-    if (first !== -1 && last > first) {
-      return JSON.parse(trimmed.slice(first, last + 1));
-    }
-    throw new Error("Model did not return parseable JSON.");
-  }
+  return parseModelJson(text); // v4.56.0: tolerant of raw line breaks / trailing commas
 }
 
 function asStringArray(v: unknown, max = 8): string[] {

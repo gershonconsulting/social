@@ -311,7 +311,7 @@ export function ContentIntelligence({ clientId, clientName }: { clientId: string
             title={!stats?.postCount ? "No collected posts in this window" : undefined}
           >
             {running ? <Loader2 size={13} className="animate-spin" /> : analysis ? <RefreshCw size={13} /> : <Sparkles size={13} />}
-            {running ? "Analyzing…" : analysis ? "Re-analyze" : "Analyze content"}
+            {running ? "Analyzing… (up to 2 min)" : analysis ? "Re-analyze" : "Analyze content"}
           </button>
         </div>
       </div>
