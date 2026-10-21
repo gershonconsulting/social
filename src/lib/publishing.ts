@@ -566,6 +566,11 @@ function norm(s: string | null | undefined): string {
 }
 
 export async function sweep(orgId: string): Promise<{ missed: number; failed: number; verified: number }> {
+  // v4.60.0: due posts of companies with a connected account go out through the API first.
+  try {
+    const { apiPublishDue } = await import("@/lib/linked-publish");
+    await apiPublishDue(orgId);
+  } catch { /* the extension and the checks below still run */ }
   const settings = await getSettings(orgId);
   const now = Date.now();
   const touched = new Set<string>();

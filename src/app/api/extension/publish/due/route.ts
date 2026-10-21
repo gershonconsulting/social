@@ -53,7 +53,11 @@ export async function GET(req: NextRequest) {
       orderBy: [{ scheduledAt: "asc" }, { platform: "asc" }],
       take: 5,
     });
+    // v4.60.0: posts of a company with a connected account go through the API, not this browser.
+    const { apiRouted } = await import("@/lib/linked-publish");
+    const linkedCache = new Map();
     for (const d of candidates) {
+      if (await apiRouted(orgId, d, linkedCache)) continue;
       const claimed = await prisma.scheduledPost.updateMany({
         where: { id: d.id, status: "SCHEDULED" },
         data: { status: "POSTING", claimedAt: new Date(), attempts: { increment: 1 } },

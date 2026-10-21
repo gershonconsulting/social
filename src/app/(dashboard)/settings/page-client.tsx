@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { CheckCircle2, AlertCircle, XCircle, Download, RefreshCw, Loader2, Sparkles } from "lucide-react";
 import { CollectingSessionCard } from "@/components/settings/collecting-session-card";
+import { LinkedAccountsCard } from "@/components/settings/linked-accounts-card";
 import { useCollectingMode } from "@/lib/collecting-mode";
 
 interface Probe {
@@ -122,6 +123,8 @@ export function SettingsPageClient() {
           </button>
         }
       />
+
+      <LinkedAccountsCard />
 
       <CollectingSessionCard />
 

@@ -124,6 +124,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         const problems = await scheduleItem(c.orgId, item.id, when);
         if (problems.length) return bad(problems.join(" "));
         await addEvent(c.orgId, item.id, item.version, "scheduled", "team", c.name, when.toISOString());
+        // v4.60.0: "Post now" with a connected account goes out right away through the API.
+        if (action === "post_now") {
+          try { const { apiPublishDue } = await import("@/lib/linked-publish"); await apiPublishDue(c.orgId); } catch { /* the extension / sweep takes it */ }
+        }
         break;
       }
       case "unschedule":
@@ -137,6 +141,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         });
         if (!r.count) return bad("Nothing to retry.");
         await prisma.contentItem.update({ where: { id: item.id }, data: { status: "SCHEDULED" } });
+        try { const { apiPublishDue } = await import("@/lib/linked-publish"); await apiPublishDue(c.orgId); } catch { /* extension / sweep */ }
         break;
       }
       case "mark_posted": {
