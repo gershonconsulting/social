@@ -587,8 +587,22 @@
     // Groups (0.21.0): the group page has its own "Start a public post" box.
     var home = t.kind === "in" ? "https://www.linkedin.com/feed/"
       : t.kind === "groups" ? "https://www.linkedin.com/groups/" + t.slug + "/"
-      : "https://www.linkedin.com/" + t.kind + "/" + t.slug + "/admin/page-posts/published/";
+      : "https://www.linkedin.com/" + t.kind + "/" + t.slug + "/";
     await navigate(w.tabId, home);
+    // 0.23.0: LinkedIn now sends /company/<slug>/admin/… to "This page isn't
+    // available". The public page redirects an admin to /company/<id>/admin/…,
+    // so read the numeric id from there and open the admin posts page by id.
+    if (t.kind === "company" || t.kind === "showcase") {
+      var adminUrl = null;
+      for (var r0 = 0; r0 < 6 && !adminUrl; r0++) {
+        var cur = "";
+        try { cur = (await chrome.tabs.get(w.tabId)).url || ""; } catch (e) {}
+        var mId = cur.match(/linkedin\.com\/(company|showcase)\/(\d+)\/admin\//i);
+        if (mId) adminUrl = "https://www.linkedin.com/" + mId[1].toLowerCase() + "/" + mId[2] + "/admin/page-posts/published/";
+        else await sleep(1000);
+      }
+      if (adminUrl) await navigate(w.tabId, adminUrl);
+    }
 
     var opened = false;
     for (var i = 0; i < 20 && !opened; i++) {
