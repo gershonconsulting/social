@@ -16,9 +16,14 @@
  *
  * The objective basis mirrors lib/campaigns/monthly.ts: DailyCompliance
  * collapsed to company-day where rows exist, otherwise derived from the
- * company's PostingSchedule against distinct SocialPost.publishedDateLocal.
- * Each company states which basis was used so a verified miss can be told
- * apart from an inferred one.
+ * company's PostingSchedule against the New York calendar days of
+ * SocialPost.publishedAtUtc (2026-10-22 fix — publishedDateLocal holds the
+ * UTC date). Each company states which basis was used so a verified miss can
+ * be told apart from an inferred one.
+ *
+ * 2026-10-22 audit fixes (see ./days.ts): New York day bucketing, days the
+ * collector has not re-read since are "not collected yet" instead of missed,
+ * and the Settings posts-per-week objective (WALLIX 3) is honoured.
  *
  * Idempotency: every send records its period key in the `settings` row
  * `posting_alert_sent`, so a retry, a manual dispatch, and the daily-digest
@@ -28,6 +33,9 @@
 import prisma from "@/lib/db";
 import { ClientStatus, ClientType, ComplianceStatus, PostingMode } from "@prisma/client";
 import { siteUrl } from "@/lib/site";
+import { readObjectives } from "@/lib/campaigns/objectives";
+import { primaryOrgId } from "@/lib/reports/monthly/data";
+import { etDateKey, etEndOfDay, etStartOfDay, judgeDays } from "./days";
 
 export const SENT_KEY = "posting_alert_sent";
 export const DEFAULT_TO = "social@gershonconsulting.com";
@@ -45,6 +53,12 @@ export interface AlertCompany {
   daysMissed: number;
   attainmentPct: number | null;
   missedDates: string[];
+  /** Planned days with no post that the collector has not re-read since they ended — not judged. */
+  pendingDates: string[];
+  /** Objective is "N of the days" (Settings posts-per-week below the planned days). */
+  flexible: boolean;
+  perWeek: number | null;
+  lastReadAt: string | null;
   postsPublished: number;
   basis: Basis;
 }
@@ -63,6 +77,8 @@ export interface PostingAlert {
     objectiveDays: number;
     daysMet: number;
     daysMissed: number;
+    /** Planned days not judged yet because the company was not collected after them. */
+    daysPending: number;
     attainmentPct: number | null;
   };
   offTarget: AlertCompany[];
@@ -144,7 +160,7 @@ function pct(met: number, expected: number): number | null {
   return Math.round((met / expected) * 1000) / 10;
 }
 
-// ─── the read ────────────────────────────────────────────────────────────────
+// ─── the read ───────────────────────────────────────────────────────────────────────────
 
 export async function buildPostingAlert(
   kind: PeriodKind,
@@ -172,34 +188,68 @@ export async function buildPostingAlert(
     from,
     to: effectiveTo,
     generatedAt: now.toISOString(),
-    totals: { companies: 0, companiesOffTarget: 0, objectiveDays: 0, daysMet: 0, daysMissed: 0, attainmentPct: null },
+    totals: { companies: 0, companiesOffTarget: 0, objectiveDays: 0, daysMet: 0, daysMissed: 0, daysPending: 0, attainmentPct: null },
     offTarget: [],
     onTarget: [],
     healthy: true,
   };
   if (ids.length === 0) return empty;
 
-  const [compliance, posts, schedules] = await Promise.all([
+  // Settings → Campaign posting objectives (posts per week). Read-only here.
+  let objectives: Awaited<ReturnType<typeof readObjectives>> = null;
+  try {
+    objectives = await readObjectives(await primaryOrgId());
+  } catch { /* no primary org / setting — one post per planned day */ }
+  const perWeekFor = (id: string): number | null =>
+    objectives ? (objectives.companies[id] ?? objectives.default) : null;
+
+  const [compliance, posts, schedules, reads, conns] = await Promise.all([
     prisma.dailyCompliance.findMany({
       where: { clientId: { in: ids }, dateLocal: { gte: from, lte: effectiveTo } },
       select: { clientId: true, dateLocal: true, expectedFlag: true, status: true },
     }),
+    // New York days: the window is [00:00 ET on `from`, 00:00 ET after `to`).
     prisma.socialPost.findMany({
-      where: { clientId: { in: ids }, publishedDateLocal: { gte: from, lte: effectiveTo } },
-      select: { clientId: true, publishedDateLocal: true },
+      where: { clientId: { in: ids }, publishedAtUtc: { gte: etStartOfDay(from), lt: etEndOfDay(effectiveTo) } },
+      select: { clientId: true, publishedAtUtc: true },
     }),
     prisma.postingSchedule.findMany({
       where: { clientId: { in: ids } },
       select: { clientId: true, mode: true, weekdaysJson: true, customTargetCount: true },
     }),
+    // When was each company last READ by the collector? A re-collected post is
+    // upserted (updatedAt moves); a clean read of an enabled link clears
+    // lastSyncError and stamps lastSyncAt.
+    prisma.socialPost.groupBy({
+      by: ["clientId"],
+      where: { clientId: { in: ids } },
+      _max: { updatedAt: true },
+    }),
+    prisma.platformConnection.findMany({
+      where: { clientId: { in: ids }, isEnabled: true, lastSyncError: null, lastSyncAt: { not: null } },
+      select: { clientId: true, lastSyncAt: true },
+    }),
   ]);
+
+  const lastRead = new Map<string, Date>();
+  const bump = (id: string, d: Date | null | undefined) => {
+    if (!d) return;
+    const cur = lastRead.get(id);
+    if (!cur || d.getTime() > cur.getTime()) lastRead.set(id, d);
+  };
+  for (const r of reads) bump(r.clientId, r._max.updatedAt);
+  for (const c of conns) bump(c.clientId, c.lastSyncAt);
 
   const window = datesBetween(from, effectiveTo);
 
   const rows: AlertCompany[] = clients.map((c) => {
     const cComp = compliance.filter((r) => r.clientId === c.id);
     const cPosts = posts.filter((r) => r.clientId === c.id);
-    const postDates = new Set(cPosts.map((p) => p.publishedDateLocal));
+    const postDates = new Set(cPosts.map((p) => etDateKey(p.publishedAtUtc)));
+    const readAt = lastRead.get(c.id) ?? null;
+    const perWeek = perWeekFor(c.id);
+    let pendingDates: string[] = [];
+    let flexible = false;
 
     // Preferred basis: DailyCompliance collapsed to company-day.
     const expectedDates = new Set<string>();
@@ -214,11 +264,13 @@ export async function buildPostingAlert(
     let daysMet: number;
     let missedDates: string[];
     let basis: Basis;
+    let daysMissed: number;
 
     if (expectedDates.size > 0) {
       objectiveDays = expectedDates.size;
       daysMet = metDates.size;
       missedDates = [...expectedDates].filter((d) => !metDates.has(d)).sort();
+      daysMissed = Math.max(0, objectiveDays - daysMet);
       basis = "compliance";
     } else {
       const cSchedules = schedules.filter((s) => s.clientId === c.id);
@@ -241,9 +293,15 @@ export async function buildPostingAlert(
         // WORKING_DAYS — the schema default and the house default.
         expected = window.filter((d) => { const w = weekdayOf(d); return w >= 1 && w <= 5; });
       }
-      objectiveDays = expected.length;
-      daysMet = expected.filter((d) => postDates.has(d)).length;
-      missedDates = expected.filter((d) => !postDates.has(d));
+      // Only working-day schedules have a meaningful "N per week" reading.
+      const flexibleOk = !modes.includes(PostingMode.EVERY_DAY) && !modes.includes(PostingMode.CUSTOM_TARGET);
+      const j = judgeDays({ expected, postedDays: postDates, lastReadAt: readAt, perWeek: flexibleOk ? perWeek : null });
+      objectiveDays = j.objectiveDays;
+      daysMet = j.daysMet;
+      missedDates = j.missedDates;
+      pendingDates = j.pendingDates;
+      flexible = j.flexible;
+      daysMissed = j.daysMissed;
       basis = "derived";
     }
 
@@ -253,9 +311,13 @@ export async function buildPostingAlert(
       slug: c.slug,
       objectiveDays,
       daysMet,
-      daysMissed: Math.max(0, objectiveDays - daysMet),
+      daysMissed,
       attainmentPct: pct(daysMet, objectiveDays),
       missedDates,
+      pendingDates,
+      flexible,
+      perWeek,
+      lastReadAt: readAt ? readAt.toISOString() : null,
       postsPublished: cPosts.length,
       basis,
     };
@@ -268,6 +330,8 @@ export async function buildPostingAlert(
 
   const objectiveDays = rows.reduce((s, r) => s + r.objectiveDays, 0);
   const daysMet = rows.reduce((s, r) => s + r.daysMet, 0);
+  const daysMissed = rows.reduce((s, r) => s + r.daysMissed, 0);
+  const daysPending = rows.reduce((s, r) => s + r.pendingDates.length, 0);
 
   return {
     kind,
@@ -281,7 +345,8 @@ export async function buildPostingAlert(
       companiesOffTarget: offTarget.length,
       objectiveDays,
       daysMet,
-      daysMissed: Math.max(0, objectiveDays - daysMet),
+      daysMissed,
+      daysPending,
       attainmentPct: pct(daysMet, objectiveDays),
     },
     offTarget,
