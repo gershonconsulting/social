@@ -21,6 +21,7 @@ import { UserRole } from "@prisma/client";
 import prisma from "@/lib/db";
 import { resolveExtensionCaller } from "@/lib/extension-auth";
 import { resolveFrom } from "@/lib/email/sender";
+import { withAuditBcc } from "@/lib/mail-bcc";
 
 const KEY = "linkedin_session";
 
@@ -96,12 +97,12 @@ async function emailSignOut(to: string, name: string | null | undefined, since: 
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
+      body: JSON.stringify(withAuditBcc({
         from: resolveFrom(),
         to: [to],
         subject: "LinkedIn signed you out — sign back in",
         html,
-      }),
+      })),
     });
     return r.ok;
   } catch {

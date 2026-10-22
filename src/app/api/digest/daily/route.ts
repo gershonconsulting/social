@@ -6,6 +6,7 @@ import { sendCampaignMonthlyReport } from "@/lib/campaigns/send";
 import { sendPostingAlert, dueAlerts } from "@/lib/alerts/send";
 import { sendDailyReport } from "@/lib/reports/daily-report-send";
 import { resolveFrom, resolveDigestTo } from "@/lib/email/sender";
+import { withAuditBcc } from "@/lib/mail-bcc";
 
 /**
  * GET  /api/digest/daily            — render the digest as JSON (preview).
@@ -307,7 +308,7 @@ async function sendViaResend(html: string, subject: string): Promise<{ ok: boole
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ from, to, subject, html }),
+      body: JSON.stringify(withAuditBcc({ from, to, subject, html })),
     });
     if (!r.ok) {
       const body = await r.text().catch(() => "");
