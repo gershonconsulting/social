@@ -23,7 +23,7 @@ type BrowserRow = {
   x: string[]; xSignedIn: boolean; linkedinSignedIn: boolean; linkedinName: string | null; linkedinPages: string[];
   lastPostAt: string | null; lastError: string | null;
 };
-const LATEST_EXT = "0.25.0";
+const LATEST_EXT = "0.25.1";
 function older(a: string | null, b: string): boolean {
   if (!a) return true;
   const pa = a.split(".").map(Number), pb = b.split(".").map(Number);
