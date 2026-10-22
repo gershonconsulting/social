@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Sign in — v4.9.0 "Charcoal & Signal Red".
+ * Sign in — v4.62.0 unified Gershon design: light brand panel, red buttons.
  * LinkedIn is the front door; the email/password form stays available,
  * folded away, for accounts that still have a password.
  */
@@ -55,40 +55,40 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2">
+    <div className="gx-auth min-h-screen grid lg:grid-cols-2 bg-[#FAFAFA]">
       {/* Brand panel */}
-      <section className="hidden lg:flex flex-col justify-between bg-[#111317] text-white px-16 py-14">
+      <section className="hidden lg:flex flex-col justify-between bg-gradient-to-b from-white via-[#FAFAFA] to-red-50 text-gray-900 border-r border-gray-200 px-16 py-14">
         <div className="flex items-center gap-3">
           <SocialMark size={36} />
-          <SocialWordmark dark />
+          <SocialWordmark />
         </div>
         <div className="max-w-[520px] space-y-5">
-          <h1 className="text-[44px] leading-[1.1] font-semibold tracking-tight">
-            See what every company you follow is publishing.
+          <h1 className="text-[44px] leading-[1.1] font-bold tracking-tight text-gray-900">
+            See what every company you follow is <span className="text-red-600">publishing.</span>
           </h1>
-          <p className="text-[17px] leading-relaxed text-[#B4B9C2]">
+          <p className="text-[17px] leading-relaxed text-gray-500">
             LinkedIn and X activity for your clients, partners and competitors, collected daily and in one place.
           </p>
           <ul className="space-y-3 pt-2">
             {POINTS.map((p) => (
-              <li key={p} className="flex items-center gap-3 text-[15px] text-[#DDE0E5]">
-                <Check size={18} className="text-[#FF6B5E]" strokeWidth={2.2} />
+              <li key={p} className="flex items-center gap-3 text-[15px] text-gray-900">
+                <Check size={18} className="text-red-600" strokeWidth={2.2} />
                 {p}
               </li>
             ))}
           </ul>
         </div>
-        <div className="text-[13px] text-[#8E949F]">© {new Date().getFullYear()} Gershon Consulting LLC</div>
+        <div className="text-[13px] text-gray-500">© {new Date().getFullYear()} Gershon Consulting LLC</div>
       </section>
 
       {/* Sign-in panel */}
-      <section className="bg-[#F5F4F0] flex flex-col items-center justify-center px-4 py-12">
+      <section className="bg-[#FAFAFA] flex flex-col items-center justify-center px-4 py-12">
         <div className="lg:hidden flex items-center gap-2.5 mb-8">
           <SocialMark size={32} />
           <SocialWordmark />
         </div>
 
-        <div className="w-full max-w-[400px] bg-white border border-gray-200 rounded-2xl p-9 space-y-6">
+        <div className="w-full max-w-[400px] bg-white border border-gray-200 rounded-xl p-6 sm:p-9 space-y-6">
           <div className="space-y-1.5">
             <h2 className="text-2xl font-semibold tracking-tight text-gray-900">Sign in</h2>
             <p className="text-sm text-gray-600">New here? Signing in creates your own workspace.</p>
@@ -102,7 +102,7 @@ export default function LoginPage() {
 
           <a
             href="/api/auth/linkedin/login"
-            className="w-full flex items-center justify-center gap-2.5 h-12 px-4 bg-[#0A66C2] hover:bg-[#004182] text-white text-[15px] font-semibold rounded-lg transition-colors"
+            className="w-full flex items-center justify-center gap-2.5 h-12 px-4 bg-red-600 hover:bg-red-700 text-white text-[15px] font-semibold rounded-lg transition-colors"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.850-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.42v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13zM7.12 20.45H3.55V9h3.57v11.45zM22.22 0H1.77C.8 0 0 .77 0 1.73v20.54C0 23.23.8 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z"/></svg>
             Continue with LinkedIn
@@ -116,7 +116,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => setShowEmail(true)}
-              className="text-sm font-medium text-gray-600 hover:text-gray-900 underline underline-offset-4 decoration-gray-300"
+              className="text-sm font-medium text-gray-600 hover:text-red-600 underline underline-offset-4 decoration-gray-300"
             >
               Sign in with email instead
             </button>
@@ -153,7 +153,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex items-center justify-center gap-2 h-10 px-4 bg-gray-900 hover:bg-black text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2 h-10 px-4 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                 {loading ? "Signing in…" : "Sign in"}
@@ -165,7 +165,7 @@ export default function LoginPage() {
         <a
           href={EXTENSION_ZIP_URL}
           download={EXTENSION_ZIP_NAME}
-          className="mt-6 inline-flex items-center gap-1.5 text-[13px] font-medium text-gray-600 hover:text-gray-900"
+          className="mt-6 inline-flex items-center gap-1.5 text-[13px] font-medium text-gray-600 hover:text-red-600"
         >
           <Download size={14} />
           Download the Social Chrome extension
