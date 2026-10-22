@@ -95,8 +95,18 @@ export async function sendPostingAlert(opts: {
 
   // Silent when healthy — the whole point of the watchdog.
   if (alert.healthy) {
-    if (!opts.dry) await markSent(alert.periodKey, "healthy — nothing sent");
-    return { ...base, sent: 0, skipped: `all ${alert.totals.companies} campaign companies hit every planned day` };
+    // 2026-10-22: days the collector has not re-read yet are not judged. Only
+    // close the period once every day could be judged, so a later run (the
+    // weekend digest fallback) still catches a miss on those days.
+    const pending = alert.totals.daysPending;
+    if (!opts.dry && pending === 0) await markSent(alert.periodKey, "healthy — nothing sent");
+    return {
+      ...base,
+      sent: 0,
+      skipped: pending > 0
+        ? `no missed day so far; ${pending} planned day(s) not collected yet — will re-check`
+        : `all ${alert.totals.companies} campaign companies hit every planned day`,
+    };
   }
 
   if (opts.dry) return { ...base, sent: 0, skipped: "dry run" };
