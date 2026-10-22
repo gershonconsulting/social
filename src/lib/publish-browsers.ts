@@ -119,7 +119,8 @@ export function targetStatus(all: PublishBrowser[], platform: "LINKEDIN" | "TWIT
   if (yes.length) return { platform, target, level: "ok", browsers: yes.map((b) => b.label), message: `Ready — posts go out from ${yes.map((b) => b.label).join(" or ")}.` };
   if (unknown.length && platform === "LINKEDIN") return { platform, target, level: "checking", browsers: [], message: "Checking — a Chrome with the extension is opening the page to see if it can post there (a few minutes)." };
   if (yesOffline.length) return { platform, target, level: "offline", browsers: yesOffline.map((b) => b.label), message: `${yesOffline.map((b) => b.label).join(" or ")} can post here but is offline — open Chrome on that computer.` };
-  if (!online.length) return { platform, target, level: "offline", browsers: [], message: "No Chrome with the extension is online." };
+  if (!all.length) return { platform, target, level: "offline", browsers: [], message: "Waiting for the publishing Chromes to update to extension 0.25.0 — they update themselves and appear here within about 20 minutes." };
+  if (!online.length) return { platform, target, level: "offline", browsers: [], message: "No publishing Chrome is online — open Chrome on the publishing computer." };
   if (platform === "TWITTER") {
     const signedOut = online.every((b) => !b.x.signedIn);
     return {

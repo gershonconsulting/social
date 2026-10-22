@@ -523,7 +523,7 @@ function Row({ i, requireImage, onOpen }: { i: Item; requireImage: boolean; onOp
       ) : (
         <div className={`w-12 h-12 rounded-md shrink-0 flex items-center justify-center text-[10px] text-center leading-tight ${requireImage ? "bg-orange-50 text-orange-700" : "bg-gray-100 text-gray-400"}`}>no picture</div>
       )}
-      <div className="w-[92px] shrink-0 text-[11.5px] text-gray-600">{i.scheduledAt ? fmt(i.scheduledAt) : <span className="text-gray-400">no date</span>}</div>
+      <div className="w-[128px] shrink-0 text-[11.5px] text-gray-600 whitespace-nowrap">{i.scheduledAt ? shortWhen(i.scheduledAt) : <span className="text-gray-400">no date</span>}</div>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-gray-900 truncate">{firstLine}</div>
         <div className="text-xs text-gray-500 truncate">{i.title ? i.text.replace(/\s+/g, " ").slice(0, 160) : ""}</div>
@@ -536,4 +536,9 @@ function Row({ i, requireImage, onOpen }: { i: Item; requireImage: boolean; onOp
       </div>
     </button>
   );
+}
+
+function shortWhen(iso: string): string {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} · ${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
 }
