@@ -465,6 +465,23 @@ async function navigateAndScrape(tabId, targetUrl, scrapeFunc, runLog, label, pa
   }
   await waitForTabComplete(tabId, NAV_TIMEOUT_MS);
   await new Promise(function (r) { setTimeout(r, POST_NAV_SETTLE_MS); });
+  // 0.25.0: when this browser's LinkedIn account is an ADMIN of the page,
+  // LinkedIn sends /company/<slug>/posts/ to the admin dashboard, which shows
+  // only the latest few posts (Meteor Biotech: 5 collected out of 120+). The
+  // admin "Page posts" list has them all — read that one instead.
+  if (label.indexOf("LINKEDIN") === 0) {
+    try {
+      const t = await chrome.tabs.get(tabId);
+      const m = (t && t.url || "").match(/linkedin\.com\/(company|showcase)\/(\d+)\/admin\//i);
+      if (m && !/\/admin\/page-posts\//i.test(t.url)) {
+        const adminPosts = "https://www.linkedin.com/" + m[1].toLowerCase() + "/" + m[2] + "/admin/page-posts/published/";
+        runLog.push({ at: Date.now(), step: label + ":admin-redirect", detail: { url: adminPosts } });
+        await chrome.tabs.update(tabId, { url: adminPosts });
+        await waitForTabComplete(tabId, NAV_TIMEOUT_MS);
+        await new Promise(function (r) { setTimeout(r, POST_NAV_SETTLE_MS); });
+      }
+    } catch (e) {}
+  }
   try {
     const exec = await chrome.scripting.executeScript({
       target: { tabId: tabId },
