@@ -456,7 +456,7 @@ function twitterDomScraper(scrollPasses) {
   });
 }
 
-async function navigateAndScrape(tabId, targetUrl, scrapeFunc, runLog, label) {
+async function navigateAndScrape(tabId, targetUrl, scrapeFunc, runLog, label, passes) {
   runLog.push({ at: Date.now(), step: label + ":navigate", detail: { url: targetUrl } });
   try {
     await chrome.tabs.update(tabId, { url: targetUrl });
@@ -469,7 +469,7 @@ async function navigateAndScrape(tabId, targetUrl, scrapeFunc, runLog, label) {
     const exec = await chrome.scripting.executeScript({
       target: { tabId: tabId },
       func: scrapeFunc,
-      args: [SCROLL_PASSES]
+      args: [passes || SCROLL_PASSES]
     });
     const result = (exec && exec[0] && exec[0].result) || { posts: [], error: "no scrape result" };
     runLog.push({
@@ -505,6 +505,8 @@ async function runFullSync(opts) {
   const runLog = [];
   const runStarted = Date.now();
   const cidFilter = (opts && opts.clientIdFilter) || null;
+  // 0.25.0: "full history" for one company scrolls ~8x further back.
+  const passes = (opts && opts.deep && cidFilter) ? 48 : SCROLL_PASSES;
   runLog.push({ at: runStarted, step: "run:start", detail: { origin: origin, version: chrome.runtime.getManifest().version, clientIdFilter: cidFilter } });
 
   onProgress("Fetching client list…", "info");
@@ -564,7 +566,7 @@ async function runFullSync(opts) {
       const c = liClients[i];
       onProgress("LinkedIn: " + (c.name || c.linkedin.vanity) + " (" + (i + 1) + "/" + liClients.length + ")…", "info");
       const url = "https://www.linkedin.com/company/" + encodeURIComponent(c.linkedin.vanity) + "/posts/?feedView=all";
-      const r = await navigateAndScrape(captureResults.LINKEDIN.tabId, url, linkedinDomScraper, runLog, "LINKEDIN:" + c.linkedin.vanity);
+      const r = await navigateAndScrape(captureResults.LINKEDIN.tabId, url, linkedinDomScraper, runLog, "LINKEDIN:" + c.linkedin.vanity, passes);
       liResults.push({
         clientId: c.id,
         connectionId: c.linkedin.connectionId,
@@ -581,7 +583,7 @@ async function runFullSync(opts) {
       const c = twClients[i];
       onProgress("X: @" + c.twitter.handle + " (" + (i + 1) + "/" + twClients.length + ")…", "info");
       const url = "https://x.com/" + encodeURIComponent(c.twitter.handle);
-      const r = await navigateAndScrape(captureResults.TWITTER.tabId, url, twitterDomScraper, runLog, "TWITTER:@" + c.twitter.handle);
+      const r = await navigateAndScrape(captureResults.TWITTER.tabId, url, twitterDomScraper, runLog, "TWITTER:@" + c.twitter.handle, passes);
       twResults.push({
         clientId: c.id,
         connectionId: c.twitter.connectionId,

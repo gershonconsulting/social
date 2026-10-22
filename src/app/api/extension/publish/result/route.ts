@@ -15,6 +15,7 @@ import prisma from "@/lib/db-raw";
 import {
   MAX_ATTEMPTS, NET_LABEL, addEvent, alertTeam, esc, getPublisherState, quote, rollUp, savePublisherState, SITE, type Net,
 } from "@/lib/publishing";
+import { learnFromResult, validBrowserId } from "@/lib/publish-browsers";
 
 function postIdFrom(url: string | null | undefined): string | null {
   const m = (url || "").match(/\/status(?:es)?\/(\d+)|urn:li:(?:activity|share|ugcPost):(\d+)|activity-(\d+)/);
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
     if (!caller.ok) {
       return NextResponse.json({ success: false, code: caller.reason, error: "Extension not bound to a workspace" }, { status: 401 });
     }
-    const b = (await req.json().catch(() => null)) as { id?: string; outcome?: string; postUrl?: string | null; error?: string | null } | null;
+    const b = (await req.json().catch(() => null)) as { id?: string; outcome?: string; postUrl?: string | null; error?: string | null; browser?: string } | null;
     if (!b?.id) return NextResponse.json({ success: false, error: "id required" }, { status: 400 });
     const d = await prisma.scheduledPost.findFirst({ where: { id: b.id, ...(await deliveryScope(caller.orgId, caller.clientId)) } });
     if (!d) return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
@@ -69,6 +70,7 @@ export async function POST(req: NextRequest) {
       }
     }
     await savePublisherState(caller.orgId, st, caller.clientId);
+    await learnFromResult(caller.orgId, validBrowserId(b.browser), d.platform, d.target, b.outcome || "", error).catch(() => null);
     if (d.contentId) {
       await rollUp(d.contentId);
       if (status === "FAILED") {

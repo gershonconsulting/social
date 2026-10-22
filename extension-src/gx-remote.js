@@ -86,6 +86,7 @@
         res = await self.runFullSync({
           origin: "https://social.gershon.ai",
           clientIdFilter: job.clientId || undefined,
+          deep: !!job.deep,
           trigger: "remote",
           onProgress: function () {},
         });

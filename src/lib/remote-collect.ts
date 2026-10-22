@@ -37,6 +37,8 @@ export type CollectJob = {
   id: string;
   clientId: string | null; // null = every company
   clientName: string | null;
+  /** v4.63.0: scroll much further back — the company's full recent history, not just the latest posts. */
+  deep?: boolean;
   requestedAt: string;
   status: JobStatus;
   claimedAt?: string;
@@ -93,9 +95,9 @@ export function expire(s: QueueState, now: number): boolean {
  * Add a request. An identical one already waiting or running is reused; a
  * request for every company also covers single-company ones still waiting.
  */
-export function enqueue(s: QueueState, clientId: string | null, clientName: string | null, now: number): CollectJob {
+export function enqueue(s: QueueState, clientId: string | null, clientName: string | null, now: number, deep = false): CollectJob {
   const open = s.jobs.filter((j) => j.status === "queued" || j.status === "running");
-  const same = open.find((j) => j.clientId === clientId) || (clientId ? open.find((j) => j.clientId === null && j.status === "queued") : undefined);
+  const same = open.find((j) => j.clientId === clientId && !!j.deep === deep) || (clientId ? open.find((j) => j.clientId === null && j.status === "queued") : undefined);
   if (same) return same;
   if (clientId === null) {
     for (const j of s.jobs) {
@@ -106,7 +108,7 @@ export function enqueue(s: QueueState, clientId: string | null, clientName: stri
       }
     }
   }
-  const job: CollectJob = { id: newId(), clientId, clientName, requestedAt: new Date(now).toISOString(), status: "queued" };
+  const job: CollectJob = { id: newId(), clientId, clientName, requestedAt: new Date(now).toISOString(), status: "queued", ...(deep ? { deep: true } : {}) };
   s.jobs.push(job);
   if (s.jobs.length > MAX_JOBS) s.jobs.splice(0, s.jobs.length - MAX_JOBS);
   return job;
@@ -191,7 +193,7 @@ async function update<T>(db: Db, orgId: string, mutate: (s: QueueState) => [T, b
   throw new Error("The collection queue is busy — try again in a moment.");
 }
 
-export async function requestCollection(orgId: string, clientId: string | null, db: Db = rawPrisma): Promise<CollectJob> {
+export async function requestCollection(orgId: string, clientId: string | null, db: Db = rawPrisma, deep = false): Promise<CollectJob> {
   let clientName: string | null = null;
   if (clientId) {
     const c = await db.client.findFirst({ where: { id: clientId, organizationId: orgId }, select: { name: true } });
@@ -200,7 +202,7 @@ export async function requestCollection(orgId: string, clientId: string | null, 
   }
   return update(db, orgId, (s) => {
     const before = JSON.stringify(s);
-    const job = enqueue(s, clientId, clientName, Date.now());
+    const job = enqueue(s, clientId, clientName, Date.now(), deep);
     return [structuredClone(job), JSON.stringify(s) !== before];
   });
 }

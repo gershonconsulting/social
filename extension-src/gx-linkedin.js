@@ -111,9 +111,22 @@ self.linkedinDomScraper = function (scrollPasses) {
     }
 
     var passes = 0;
+    // 0.25.0: keep what was read while scrolling — on a long scroll LinkedIn
+    // drops the oldest cards from the page — and press "Show more results".
+    var kept = {};
+    function keep() {
+      try { readNew().forEach(function (p) { if (p && p.externalPostId && !kept[p.externalPostId]) kept[p.externalPostId] = p; }); } catch (_) {}
+    }
     var timer = setInterval(function () {
       try { window.scrollBy(0, 1800); } catch (_) {}
       passes++;
+      if ((scrollPasses || 6) > 6) {
+        try {
+          var more = Array.from(document.querySelectorAll("button")).find(function (b) { return /^\s*show more (results|posts)\s*$/i.test(b.innerText || ""); });
+          if (more) more.click();
+        } catch (_) {}
+        if (passes % 3 === 0) keep();
+      }
       if (passes >= (scrollPasses || 6)) { clearInterval(timer); setTimeout(harvest, 2000); }
     }, 1000);
 
@@ -246,6 +259,11 @@ self.linkedinDomScraper = function (scrollPasses) {
     function harvest() {
       try {
         var posts = readNew();
+        if (Object.keys(kept).length) {
+          var have = {};
+          posts.forEach(function (p) { have[p.externalPostId] = true; });
+          Object.keys(kept).forEach(function (k) { if (!have[k]) posts.push(kept[k]); });
+        }
         if (!posts.length) posts = readOld();
         if (posts.length) {
           var name = pageName();
