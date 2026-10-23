@@ -627,7 +627,43 @@ export type StepResult = {
 };
 
 /** One bounded unit of Autopilot work for a workspace. Safe to call again and again. */
+/**
+ * v4.63.0: one Autopilot step at a time per workspace. Two steps running at
+ * once (the daily cron and the page, or two tabs) each saw the same empty days
+ * and both wrote a post for them — Meteor Biotech got 8 duplicates on
+ * 2026-10-22. A step now takes a 3-minute lock; a second one waits its turn.
+ */
+const RUN_LOCK = "autopilot_run_lock";
+async function takeRunLock(orgId: string): Promise<boolean> {
+  const now = Date.now();
+  try {
+    await prisma.orgSetting.create({ data: { organizationId: orgId, key: RUN_LOCK, value: String(now) } });
+    return true;
+  } catch {}
+  const r = await prisma.orgSetting.updateMany({
+    where: { organizationId: orgId, key: RUN_LOCK, value: { lt: String(now - 180000) } },
+    data: { value: String(now) },
+  });
+  return r.count === 1;
+}
+async function releaseRunLock(orgId: string): Promise<void> {
+  await prisma.orgSetting.deleteMany({ where: { organizationId: orgId, key: RUN_LOCK } }).catch(() => null);
+}
+
 export async function runStep(orgId: string, budget = 3, now = new Date()): Promise<StepResult> {
+  if (!(await takeRunLock(orgId))) {
+    const s0 = await getAutopilotSettings(orgId);
+    const w0 = planWindow(s0, now);
+    return { enabled: true, window: { label: w0.label, days: w0.days.length }, written: 0, remaining: 1, picturesFixed: 0, revised: 0, autoApproved: 0, scheduled: 0, submitted: 0, emailed: false, problems: [], errors: ["Another Autopilot step is running — trying again."] };
+  }
+  try {
+    return await runStepLocked(orgId, budget, now);
+  } finally {
+    await releaseRunLock(orgId);
+  }
+}
+
+async function runStepLocked(orgId: string, budget: number, now: Date): Promise<StepResult> {
   const s = await getAutopilotSettings(orgId);
   const w = planWindow(s, now);
   const base: StepResult = { enabled: false, window: { label: w.label, days: w.days.length }, written: 0, remaining: 0, picturesFixed: 0, revised: 0, autoApproved: 0, scheduled: 0, submitted: 0, emailed: false, problems: [], errors: [] };

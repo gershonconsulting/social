@@ -80,7 +80,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
         children: [
           { href: "/publishing", label: "Content & review" },
           { href: "/publishing/calendar", label: "Calendar" },
-          { href: "/publishing/accounts", label: "Accounts & review links" },
+          { href: "/publishing/accounts", label: "Connections" },
           { href: "/publishing/autopilot", label: "Autopilot" },
         ],
       },

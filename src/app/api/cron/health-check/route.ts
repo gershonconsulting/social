@@ -4,6 +4,7 @@ import prisma from "@/lib/db";
 import { ClientStatus } from "@prisma/client";
 import { resolveFrom } from "@/lib/email/sender";
 import { siteUrl } from "@/lib/site";
+import { withAuditBcc } from "@/lib/mail-bcc";
 
 /**
  * Collection health-check — a server-side "dead man's switch" for social.gershon.ai.
@@ -215,7 +216,7 @@ async function sendAlert(html: string, subject: string): Promise<{ ok: boolean; 
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ from, to, reply_to: REPLY_TO, subject, html }),
+      body: JSON.stringify(withAuditBcc({ from, to, reply_to: REPLY_TO, subject, html })),
     });
     if (!r.ok) {
       const body = await r.text().catch(() => "");

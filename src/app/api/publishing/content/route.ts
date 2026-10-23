@@ -10,6 +10,7 @@ export const runtime = "edge";
  *        approve=true approves it internally (no client review).
  */
 import { NextRequest, NextResponse } from "next/server";
+import { isOnline, listBrowsers, targetStatus } from "@/lib/publish-browsers";
 import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
 import {
@@ -83,6 +84,7 @@ export async function GET(req: NextRequest) {
         settings,
         publisher,
         live: liveStatus(publisher),
+        chromes: await chromeSummary(c.orgId).catch(() => null),
         limits: { x: xMax(settings), linkedin: LINKEDIN_MAX, images: MAX_IMAGES, requireImage: settings.requireImage },
         canWrite: c.canWrite,
       },
@@ -138,4 +140,24 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     return NextResponse.json({ success: false, error: e instanceof Error ? e.message : "failed" }, { status: 500 });
   }
+}
+
+/** v4.63.0: how many publishing Chromes are online, and how many accounts no Chrome can post to. */
+async function chromeSummary(orgId: string): Promise<{ online: number; total: number; problems: number }> {
+  const { destinationsOf, getTarget, clientRoutedIds } = await import("@/lib/publishing");
+  const browsers = await listBrowsers(orgId);
+  if (!browsers.length) return { online: 0, total: 0, problems: 0 };
+  const routed = await clientRoutedIds(orgId);
+  const clients = await prisma.client.findMany({
+    where: { organizationId: orgId, archivedAt: null, status: { not: "ARCHIVED" }, ...PUBLISHING_CLIENT_WHERE },
+    select: { id: true },
+  });
+  let problems = 0;
+  for (const cl of clients) {
+    if (routed.includes(cl.id)) continue;
+    for (const d of destinationsOf(await getTarget(orgId, cl.id))) {
+      if (targetStatus(browsers, d.network, d.target).level !== "ok") problems++;
+    }
+  }
+  return { online: browsers.filter((b) => isOnline(b)).length, total: browsers.length, problems };
 }

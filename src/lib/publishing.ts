@@ -31,6 +31,7 @@ import type { ClientType } from "@prisma/client";
 import prisma from "@/lib/db-raw";
 import { resolveFrom } from "@/lib/email/sender";
 import { siteUrl } from "@/lib/site";
+import { withAuditBcc } from "@/lib/mail-bcc";
 
 export const SITE = siteUrl();
 
@@ -422,12 +423,11 @@ export function nyTime(d: Date | null): string {
 export async function teamRecipient(orgId: string): Promise<string | null> {
   const s = await getSettings(orgId);
   if (s.alertEmail) return s.alertEmail;
-  const u = await prisma.user.findFirst({
-    where: { organizationId: orgId, isActive: true, role: "ADMIN" },
-    orderBy: { createdAt: "asc" },
-    select: { email: true },
-  });
-  return u?.email ?? null;
+  // v4.61.1: no alert address set → the publishing inbox (social@ by default).
+  // It used to fall back to the first ADMIN user, admin@gershonconsulting.com,
+  // which bounced on 2026-10-12 and is suppressed in Resend — so every "asked
+  // for changes", "post failed to publish" and inventory alert was dropped.
+  return s.readyEmail || READY_EMAIL_DEFAULT;
 }
 
 export async function sendMail(to: string | null, subject: string, html: string, cta?: { href: string; label: string }): Promise<boolean> {
@@ -440,12 +440,12 @@ export async function sendMail(to: string | null, subject: string, html: string,
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
+      body: JSON.stringify(withAuditBcc({
         from: resolveFrom(),
         to: [to],
         subject,
         html: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#111">${html}${button}</div>`,
-      }),
+      })),
     });
     return r.ok;
   } catch {

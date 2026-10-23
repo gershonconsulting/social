@@ -19,6 +19,7 @@ import prisma from "@/lib/db";
 import { siteUrl } from "@/lib/site";
 import { APP_VERSION } from "@/lib/extension-version";
 import { BUSINESS_TZ } from "../et-days";
+import { withAuditBcc } from "@/lib/mail-bcc";
 
 export const RED = "#FE1B04";
 export const GREEN = "#047857";
@@ -198,7 +199,7 @@ export async function deliver(
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ from: process.env.OPS_REPORT_FROM || OPS_FROM, to: [to], subject, html }),
+      body: JSON.stringify(withAuditBcc({ from: process.env.OPS_REPORT_FROM || OPS_FROM, to: [to], subject, html })),
     });
     if (!r.ok) {
       const body = await r.text().catch(() => "");

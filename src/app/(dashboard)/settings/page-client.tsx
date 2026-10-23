@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { CheckCircle2, AlertCircle, XCircle, Download, RefreshCw, Loader2, Sparkles } from "lucide-react";
 import { CollectingSessionCard } from "@/components/settings/collecting-session-card";
-import { LinkedAccountsCard } from "@/components/settings/linked-accounts-card";
 import { useCollectingMode } from "@/lib/collecting-mode";
 
 interface Probe {
@@ -125,7 +124,11 @@ export function SettingsPageClient() {
         }
       />
 
-      <LinkedAccountsCard />
+      {/* v4.63.0: publishing connections live in one place — Publishing → Connections. */}
+      <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 mb-6 text-sm text-gray-700">
+        Where posts are published (LinkedIn pages, X accounts, which Chrome posts them) is now in one place:{" "}
+        <a href="/publishing/accounts" className="text-red-700 font-medium underline">Publishing → Connections</a>.
+      </div>
 
       <CollectingSessionCard />
 

@@ -17,6 +17,7 @@ import { categoryHtml, categorySubject, companyHtml, companySubject } from "./re
 import { loadCategories, loadCompanyExtras, monthWindow, primaryOrgId } from "./data";
 import { APP_VERSION } from "@/lib/extension-version";
 import { competitionHtml, competitionModel, competitionPdf, competitionSubject, type CompetitionModel } from "./competition";
+import { withAuditBcc } from "@/lib/mail-bcc";
 
 export const MONTHLY_SENT_KEY = "monthly_report_sent";
 const REPORT_INBOX = "report@gershonconsulting.com";
@@ -53,10 +54,10 @@ async function resend(msg: { from: string; to: string[]; bcc?: string[]; subject
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
+      body: JSON.stringify(withAuditBcc({
         from: msg.from, to: msg.to, bcc: msg.bcc?.length ? msg.bcc : undefined, subject: msg.subject, html: msg.html,
         attachments: [{ filename: msg.filename, content: msg.pdf }],
-      }),
+      })),
     });
     const body = await r.text().catch(() => "");
     return r.ok ? { ok: true, id: (body.match(/"id"\s*:\s*"([^"]+)"/) || [])[1] } : { ok: false, status: r.status, error: body.slice(0, 300) };

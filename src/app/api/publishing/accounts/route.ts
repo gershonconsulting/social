@@ -15,10 +15,11 @@ import prisma from "@/lib/db-raw";
 import { publishingCaller } from "@/lib/publishing-auth";
 import {
   connectUrl, getPublisherState, getRoute, getTarget, liveStatus, publishKey, reviewToken, reviewUrl, saveTarget, setRoute, PUBLISHING_CLIENT_WHERE,
-  InvalidReviewerEmailError,
+  InvalidReviewerEmailError, destinationsOf,
 } from "@/lib/publishing";
+import { isOnline, listBrowsers, targetStatus, type PublishBrowser } from "@/lib/publish-browsers";
 
-async function row(orgId: string, cl: { id: string; name: string; clientType: string }) {
+async function row(orgId: string, cl: { id: string; name: string; clientType: string }, browsers?: PublishBrowser[]) {
   const [t, token, pending] = await Promise.all([
     getTarget(orgId, cl.id),
     reviewToken(orgId, cl.id),
@@ -32,7 +33,19 @@ async function row(orgId: string, cl: { id: string; name: string; clientType: st
           return { connectUrl: connectUrl(await publishKey(orgId, cl.id)), live: liveStatus(st), lastSeenAt: st.lastSeenAt, version: st.version };
         })()
       : null;
-  return { ...cl, ...t, reviewUrl: reviewUrl(token), pending, route, client };
+  // v4.63.0: for each place this company posts to, can a Chrome publish there right now?
+  const all = browsers ?? (await listBrowsers(orgId));
+  const connections = route === "client" ? [] : destinationsOf(t).map((d) => targetStatus(all, d.network, d.target));
+  return { ...cl, ...t, reviewUrl: reviewUrl(token), pending, route, client, connections };
+}
+
+function browserView(b: PublishBrowser) {
+  return {
+    id: b.id, label: b.label, version: b.version, lastSeenAt: b.lastSeenAt, online: isOnline(b),
+    x: b.x.signedIn ? b.x.accounts : [], xSignedIn: b.x.signedIn, linkedinSignedIn: b.linkedin.signedIn, linkedinName: b.linkedin.name,
+    linkedinPages: Object.entries(b.li).filter(([, v]) => v.ok).map(([k]) => k),
+    lastPostAt: b.lastPostAt || null, lastError: b.lastError || null,
+  };
 }
 
 export async function GET() {
@@ -44,9 +57,10 @@ export async function GET() {
       select: { id: true, name: true, clientType: true },
       orderBy: [{ clientType: "asc" }, { name: "asc" }],
     });
+    const browsers = await listBrowsers(c.orgId);
     const rows = [];
-    for (const cl of clients) rows.push(await row(c.orgId, cl));
-    return NextResponse.json({ success: true, data: { accounts: rows, canWrite: c.canWrite } });
+    for (const cl of clients) rows.push(await row(c.orgId, cl, browsers));
+    return NextResponse.json({ success: true, data: { accounts: rows, canWrite: c.canWrite, browsers: browsers.map(browserView) } });
   } catch (e) {
     return NextResponse.json({ success: false, error: e instanceof Error ? e.message : "failed" }, { status: 500 });
   }

@@ -1,15 +1,46 @@
 "use client";
 
 /**
- * /publishing/accounts — per client: which LinkedIn page and X account the
- * posts go to, who reviews them, and the client's private review link
- * (v4.37.0). Defaults come from the accounts already tracked for the company.
+ * /publishing/accounts — "Connections" (v4.63.0; was "Accounts & review links").
+ *
+ * One answer per company and network: can a post go out right now, and from
+ * which Chrome — or exactly what is missing. The Chromes with the extension
+ * say which X accounts and LinkedIn pages they can publish to; nothing else
+ * has to be set up. Where posts go, the reviewer and the review link are
+ * under "Edit" on each company. The optional official-API connection lives
+ * at the bottom, folded away.
  */
 
 import { useCallback, useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
-import { Check, Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { NetChip } from "@/components/publishing/shared";
+import { LinkedAccountsCard } from "@/components/settings/linked-accounts-card";
+
+type Conn = { platform: "LINKEDIN" | "TWITTER"; target: string; level: "ok" | "checking" | "missing" | "offline"; browsers: string[]; message: string };
+type BrowserRow = {
+  id: string; label: string; version: string | null; lastSeenAt: string; online: boolean;
+  x: string[]; xSignedIn: boolean; linkedinSignedIn: boolean; linkedinName: string | null; linkedinPages: string[];
+  lastPostAt: string | null; lastError: string | null;
+};
+const LATEST_EXT = "0.25.1";
+function older(a: string | null, b: string): boolean {
+  if (!a) return true;
+  const pa = a.split(".").map(Number), pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) < (pb[i] || 0); }
+  return false;
+}
+function ago(iso: string | null): string {
+  if (!iso) return "never";
+  const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
+}
+const TONE: Record<Conn["level"], { dot: string; text: string; word: string }> = {
+  ok: { dot: "bg-emerald-500", text: "text-emerald-800", word: "Ready" },
+  checking: { dot: "bg-amber-400", text: "text-amber-800", word: "Checking" },
+  offline: { dot: "bg-orange-500", text: "text-orange-800", word: "Offline" },
+  missing: { dot: "bg-red-600", text: "text-red-800", word: "Not connected" },
+};
 
 type Dest = { id: string; network: "LINKEDIN" | "TWITTER"; kind: "page" | "profile" | "group" | "company" | "personal"; target: string; enabled: boolean };
 const KIND_LABEL: Record<Dest["kind"], string> = {
@@ -24,42 +55,101 @@ type Row = {
   reviewUrl: string; pending: number;
   route: "workspace" | "client";
   client: { connectUrl: string; live: { overall: { level: string; label: string } }; lastSeenAt: string | null; version: string | null } | null;
+  connections?: Conn[];
 };
 
 export function PublishingAccountsClient() {
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [browsers, setBrowsers] = useState<BrowserRow[]>([]);
   const [canWrite, setCanWrite] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [showApi, setShowApi] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const r = await fetch("/api/publishing/accounts", { cache: "no-store" });
       const j = await r.json();
-      if (j?.success) { setRows(j.data.accounts); setCanWrite(j.data.canWrite); }
+      if (j?.success) { setRows(j.data.accounts); setCanWrite(j.data.canWrite); setBrowsers(j.data.browsers || []); setErr(null); }
       else setErr(j?.error || "Could not load.");
     } catch { setErr("Could not load."); }
   }, []);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); const t = setInterval(load, 60000); return () => clearInterval(t); }, [load]);
+
+  const conns = (rows || []).flatMap((r) => r.connections || []);
+  const ready = conns.filter((c) => c.level === "ok").length;
+  const missing = conns.filter((c) => c.level !== "ok").length;
 
   return (
     <div>
       <Header
-        title="Accounts & review links"
+        title="Connections"
         eyebrow="Publishing"
-        subtitle="Where each client's posts go, who approves them, and the private link they review on — no account needed. Rotating a link switches the old one off."
+        subtitle="Can each company's posts go out on LinkedIn and X right now — and if not, exactly what to fix. Posts are published by the Chrome that is signed in to that account, through the Social extension."
+        actions={
+          <button onClick={() => void load()} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+            <RefreshCw size={14} /> Refresh
+          </button>
+        }
       />
       {err && <div className="text-sm rounded-lg px-3 py-2 mb-4 bg-red-50 text-red-800">{err}</div>}
-      {/* v4.59.0 audit: stop the spinner once an error is shown. */}
+
+      <PublishingChromes browsers={browsers} />
+
+      {rows && conns.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 mb-3 text-sm">
+          <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500" /> {ready} ready</span>
+          {missing > 0 && <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-600" /> {missing} need attention</span>}
+        </div>
+      )}
+
       {!rows ? (
         !err && <div className="text-sm text-gray-500 flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Loading…</div>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-gray-500">No campaign, internal or client companies yet.</p>
+        <p className="text-sm text-gray-500">No campaign or internal companies yet.</p>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {rows.map((r) => <AccountRow key={r.id} r={r} canWrite={canWrite} onSaved={(n) => setRows((all) => (all || []).map((x) => (x.id === n.id ? n : x)))} />)}
         </div>
       )}
+
+      <div className="mt-8 border-t border-gray-200 pt-4">
+        <button onClick={() => setShowApi((v) => !v)} className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900">
+          {showApi ? <ChevronDown size={14} /> : <ChevronRight size={14} />} Advanced — publish through LinkedIn's and X's official APIs instead (optional, not needed)
+        </button>
+        {showApi && <div className="mt-3"><LinkedAccountsCard /></div>}
+      </div>
     </div>
+  );
+}
+
+/** The Chromes that publish: which X accounts and LinkedIn pages each can post to. */
+function PublishingChromes({ browsers }: { browsers: BrowserRow[] }) {
+  const online = browsers.filter((b) => b.online);
+  return (
+    <section className="bg-white rounded-xl border border-gray-200 p-4 mb-5">
+      <div className="flex items-baseline justify-between gap-2 mb-2">
+        <div className="text-sm font-semibold text-gray-900">Publishing Chromes</div>
+        <div className="text-xs text-gray-500">{online.length} online · each one posts only for the accounts it is signed in to</div>
+      </div>
+      {browsers.length === 0 ? (
+        <p className="text-sm text-gray-600">No Chrome has introduced itself yet. A Chrome with the Social extension {LATEST_EXT} or later appears here within 5 minutes of being opened.</p>
+      ) : (
+        <div className="divide-y divide-gray-100">
+          {browsers.map((b) => (
+            <div key={b.id} className="py-2 flex flex-wrap items-start gap-x-4 gap-y-1 text-sm">
+              <div className="flex items-center gap-2 min-w-[220px]">
+                <span className={`w-2 h-2 rounded-full ${b.online ? "bg-emerald-500" : "bg-gray-300"}`} />
+                <span className="font-medium text-gray-900">{b.label}</span>
+                <span className={`text-[11px] ${older(b.version, LATEST_EXT) ? "text-red-600 font-medium" : "text-gray-400"}`}>v{b.version || "?"}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-gray-700"><NetChip n="TWITTER" /> {b.xSignedIn ? (b.x.length ? b.x.map((h) => "@" + h).join(", ") : "signed in") : <span className="text-red-700">signed out</span>}</div>
+              <div className="flex items-center gap-1.5 text-gray-700"><NetChip n="LINKEDIN" /> {b.linkedinSignedIn ? `${b.linkedinName || "signed in"}${b.linkedinPages.length ? ` · can post on ${b.linkedinPages.length} page${b.linkedinPages.length === 1 ? "" : "s"}` : ""}` : <span className="text-red-700">signed out</span>}</div>
+              <div className="text-xs text-gray-400 ml-auto">{b.online ? "online" : `last seen ${ago(b.lastSeenAt)}`}{b.lastPostAt ? ` · last post ${ago(b.lastPostAt)}` : ""}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -92,14 +182,37 @@ function AccountRow({ r, canWrite, onSaved }: { r: Row; canWrite: boolean; onSav
     setBusy(false);
   }
 
+  const [open, setOpen] = useState(false);
   const input = "w-full text-sm border border-gray-300 rounded-lg px-2.5 py-1.5 disabled:bg-gray-50";
+  const conns = r.connections || [];
+  const bad = conns.some((c) => c.level !== "ok");
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
-      <div className="flex flex-wrap items-center gap-2 mb-3">
+    <div className={`bg-white rounded-xl border p-4 ${bad ? "border-red-200" : "border-gray-200"}`}>
+      <div className="flex flex-wrap items-center gap-2 mb-2">
         <div className="text-sm font-semibold text-gray-900">{r.name}</div>
         <span className="text-[10px] uppercase tracking-wide text-gray-500">{r.clientType.toLowerCase()}</span>
         {r.pending > 0 && <span className="text-[11px] px-2 rounded-full bg-violet-50 text-violet-700">{r.pending} with the client</span>}
+        <button onClick={() => setOpen((v) => !v)} className="ml-auto inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900">
+          {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />} Edit where posts go, reviewer &amp; review link
+        </button>
       </div>
+      {r.route === "client" ? (
+        <div className="text-sm text-gray-700">Published by {r.name}&apos;s own Chrome extension — {r.client?.live.overall.label.replace(/the publishing browser/g, `${r.name}'s browser`)}</div>
+      ) : conns.length === 0 ? (
+        <div className="text-sm text-red-800 flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-red-600" /> No LinkedIn page or X account set — press Edit and add them.</div>
+      ) : (
+        <div className="space-y-1.5">
+          {conns.map((c) => (
+            <div key={c.platform + c.target} className="flex items-start gap-2 text-sm">
+              <NetChip n={c.platform} />
+              <span className="font-medium text-gray-800 min-w-[180px] truncate">{c.platform === "TWITTER" ? "@" + c.target.replace(/^@/, "") : c.target.replace(/^https?:\/\/(www\.)?linkedin\.com\//, "").replace(/\/$/, "")}</span>
+              <span className={`inline-flex items-center gap-1.5 shrink-0 ${TONE[c.level].text}`}><span className={`w-2 h-2 rounded-full ${TONE[c.level].dot}`} />{TONE[c.level].word}</span>
+              <span className="text-gray-600 text-[13px]">{c.message}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {open && (<div className="mt-4 pt-3 border-t border-gray-100">
       <div className="grid md:grid-cols-4 gap-2">
         <label className="block"><span className="text-[11px] text-gray-600 inline-flex items-center gap-1"><NetChip n="LINKEDIN" /> Main LinkedIn — page, profile or group{li ? ` (${KIND_LABEL[liKind(li)].toLowerCase()})` : ""}</span>
           <input disabled={!canWrite} value={li} onChange={(e) => setLi(e.target.value)} placeholder="linkedin.com/company/… · /in/… · /groups/…" className={input} /></label>
@@ -136,6 +249,7 @@ function AccountRow({ r, canWrite, onSaved }: { r: Row; canWrite: boolean; onSav
         {msg && <span className="text-gray-600">{msg}</span>}
       </div>
       <Route r={r} canWrite={canWrite} busy={busy} call={call} />
+      </div>)}
     </div>
   );
 }

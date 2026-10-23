@@ -133,8 +133,26 @@ export function toLocalInput(iso: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function LiveStrip({ live }: { live: LiveAll | null }) {
+export function LiveStrip({ live, chromes }: { live: LiveAll | null; chromes?: { online: number; total: number; problems: number } | null }) {
   if (!live) return null;
+  // v4.63.0: several Chromes can publish — each for the accounts it is signed in
+  // to. The strip says how many are online and how many accounts need fixing;
+  // the detail is on Publishing → Connections.
+  if (chromes && chromes.total > 0) {
+    const bad = chromes.online === 0 || chromes.problems > 0;
+    return (
+      <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 border rounded-lg px-3 py-2 mb-5 text-sm ${bad ? "bg-amber-50 border-amber-200" : "bg-emerald-50 border-emerald-200"}`}>
+        <span className="font-medium text-gray-800">Publishing</span>
+        <span className={chromes.online ? "text-emerald-700 inline-flex items-center gap-1" : "text-red-700 inline-flex items-center gap-1"}>
+          {chromes.online ? <CheckCircle2 size={14} /> : <WifiOff size={14} />} {chromes.online} Chrome{chromes.online === 1 ? "" : "s"} online
+        </span>
+        {chromes.problems > 0
+          ? <span className="text-red-700 inline-flex items-center gap-1"><XCircle size={14} /> {chromes.problems} account{chromes.problems === 1 ? "" : "s"} can&apos;t be posted to yet</span>
+          : <span className="text-emerald-700 inline-flex items-center gap-1"><CheckCircle2 size={14} /> every account connected</span>}
+        <Link href="/publishing/accounts" className="ml-auto text-gray-800 underline font-medium">Connections</Link>
+      </div>
+    );
+  }
   const one = (l: Live, name: string) => {
     const ok = l.level === "live";
     const Icon = ok ? CheckCircle2 : l.level === "signed_out" ? XCircle : WifiOff;
@@ -151,11 +169,7 @@ export function LiveStrip({ live }: { live: LiveAll | null }) {
       <span className="font-medium text-gray-800">Publishing browser</span>
       {one(live.linkedin, "LinkedIn")}
       {one(live.x, "X")}
-      {bad && (
-        <Link href="/settings#publishing" className="ml-auto text-gray-800 underline font-medium">
-          Connection
-        </Link>
-      )}
+      <Link href="/publishing/accounts" className="ml-auto text-gray-800 underline font-medium">Connections</Link>
     </div>
   );
 }

@@ -17,7 +17,9 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     clientId = typeof body?.clientId === "string" && body.clientId ? body.clientId : null;
-    const job = await requestCollection(orgId, clientId);
+    // v4.63.0: { deep: true } = full history for one company (scrolls ~8× further back).
+    const deep = body?.deep === true && !!clientId;
+    const job = await requestCollection(orgId, clientId, undefined, deep);
     const { listening } = await queueStatus(orgId);
     return NextResponse.json({ success: true, data: { job, listening } });
   } catch (e) {

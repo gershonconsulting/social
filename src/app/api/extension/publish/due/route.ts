@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { deliveryScope, resolvePublishCaller } from "@/lib/publish-caller";
 import prisma from "@/lib/db-raw";
 import { getPublisherState, getSettings, savePublisherState, sweep } from "@/lib/publishing";
+import { listBrowsers, shouldHandTo, validBrowserId } from "@/lib/publish-browsers";
 
 function parseMedia(j: string | null): { url: string; mime: string; name: string }[] {
   if (!j) return [];
@@ -41,7 +42,11 @@ export async function GET(req: NextRequest) {
     const settings = await getSettings(orgId);
     if (!settings.enabled) return NextResponse.json({ success: true, data: { enabled: false, post: null } });
 
-    const skip = (new URL(req.url).searchParams.get("skip") || "").split(",").filter(Boolean);
+    const qs = new URL(req.url).searchParams;
+    const skip = (qs.get("skip") || "").split(",").filter(Boolean);
+    // v4.63.0: only the Chrome that can publish to this account gets the post.
+    const browserId = validBrowserId(qs.get("browser"));
+    const browsers = await listBrowsers(orgId);
     const now = Date.now();
     const candidates = await prisma.scheduledPost.findMany({
       where: {
@@ -51,13 +56,14 @@ export async function GET(req: NextRequest) {
         scheduledAt: { lte: new Date(now), gte: new Date(now - settings.graceMinutes * 60000) },
       },
       orderBy: [{ scheduledAt: "asc" }, { platform: "asc" }],
-      take: 5,
+      take: 25,
     });
     // v4.60.0: posts of a company with a connected account go through the API, not this browser.
     const { apiRouted } = await import("@/lib/linked-publish");
     const linkedCache = new Map();
     for (const d of candidates) {
       if (await apiRouted(orgId, d, linkedCache)) continue;
+      if (!shouldHandTo(browserId, browsers, d.platform, d.target)) continue;
       const claimed = await prisma.scheduledPost.updateMany({
         where: { id: d.id, status: "SCHEDULED" },
         data: { status: "POSTING", claimedAt: new Date(), attempts: { increment: 1 } },

@@ -14,7 +14,7 @@ import {
 
 /** Default batch name, CloudCampaign-style: "<Company> — <Month YYYY>". */
 export function batchName(client: string, when = new Date()): string {
-  return `${client} — ${when.toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "America/New_York" })}`;
+  return `${client.replace(/\s+/g, " ").trim()} — ${when.toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "America/New_York" })}`;
 }
 
 export async function submitForReview(
@@ -65,7 +65,6 @@ export async function submitBatch(
   name?: string | null,
 ): Promise<{ sent: string[]; skipped: { id: string; title: string; reason: string }[]; batch: string; emailed: boolean }> {
   const client = await prisma.client.findFirst({ where: { id: clientId, organizationId: orgId }, select: { name: true } });
-  const batch = (name || "").trim().slice(0, 120) || batchName(client?.name || "Content");
   const items = await prisma.contentItem.findMany({
     where: {
       organizationId: orgId,
@@ -75,6 +74,10 @@ export async function submitBatch(
     },
     orderBy: [{ scheduledAt: "asc" }, { createdAt: "asc" }],
   });
+  // v4.61.1: name the batch after the month the posts are FOR (earliest planned
+  // date), not the month it is sent — Autopilot sends November content in October.
+  const firstPlanned = items.find((i) => i.scheduledAt)?.scheduledAt ?? undefined;
+  const batch = (name || "").trim().slice(0, 120) || batchName(client?.name || "Content", firstPlanned ?? new Date());
   const sent: string[] = [];
   const skipped: { id: string; title: string; reason: string }[] = [];
   for (const it of items) {

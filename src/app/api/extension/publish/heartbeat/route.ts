@@ -12,7 +12,71 @@ export const runtime = "edge";
 import { NextRequest, NextResponse } from "next/server";
 import { resolvePublishCaller } from "@/lib/publish-caller";
 import prisma from "@/lib/db-raw";
-import { getPublisherState, getSettings, normalizeHandle, savePublisherState, sweep, type NetSession } from "@/lib/publishing";
+import { clientRoutedIds, destinationsOf, getPublisherState, getSettings, getTarget, normalizeHandle, savePublisherState, sweep, PUBLISHING_CLIENT_WHERE, type NetSession } from "@/lib/publishing";
+import { getBrowser, LI_CHECK_TTL_MS, LI_FAIL_TTL_MS, liKey, saveBrowser, validBrowserId, xKey, type PublishBrowser } from "@/lib/publish-browsers";
+
+type Probe = { target?: string; ok?: boolean; why?: string | null };
+type BrowserIn = { id?: string; label?: string } | undefined;
+
+/** Every LinkedIn page/group this caller may publish to. */
+async function linkedInTargets(orgId: string, clientId: string | null): Promise<string[]> {
+  const routed = clientId ? [] : await clientRoutedIds(orgId);
+  const clients = await prisma.client.findMany({
+    where: { organizationId: orgId, ...PUBLISHING_CLIENT_WHERE, ...(clientId ? { id: clientId } : {}), status: { not: "ARCHIVED" } },
+    select: { id: true },
+  });
+  const out = new Set<string>();
+  for (const c of clients) {
+    if (routed.includes(c.id)) continue;
+    const t = await getTarget(orgId, c.id);
+    for (const d of destinationsOf(t)) if (d.network === "LINKEDIN" && !/\/in\//.test(d.target)) out.add(d.target);
+  }
+  return Array.from(out);
+}
+
+/** v4.63.0: remember what this Chrome can publish; ask it to check the pages it was never checked on. */
+async function registerBrowser(
+  orgId: string, clientId: string | null, bin: BrowserIn,
+  b: { x?: { signedIn?: boolean; as?: string | null; accounts?: string[] }; linkedin?: { signedIn?: boolean; name?: string | null }; version?: string; probes?: Probe[] } | null,
+): Promise<string[]> {
+  const id = validBrowserId(bin?.id);
+  if (!id) return [];
+  const now = new Date();
+  const prev = await getBrowser(orgId, id);
+  const xIn = !!b?.x?.signedIn;
+  const accounts = Array.isArray(b?.x?.accounts) ? b!.x!.accounts!.map((a) => xKey(a)).filter((a): a is string => !!a) : null;
+  const br: PublishBrowser = {
+    id,
+    label: String(bin?.label || prev?.label || "Chrome").slice(0, 80),
+    version: b?.version ?? prev?.version ?? null,
+    lastSeenAt: now.toISOString(),
+    x: {
+      signedIn: xIn,
+      as: xIn ? (xKey(b?.x?.as) || prev?.x.as || null) : null,
+      accounts: xIn ? (accounts && accounts.length ? accounts : prev?.x.accounts || []) : [],
+    },
+    linkedin: { signedIn: !!b?.linkedin?.signedIn, name: (b?.linkedin?.name || prev?.linkedin.name || null) },
+    li: { ...(prev?.li || {}) },
+    lastPostAt: prev?.lastPostAt ?? null,
+    lastError: prev?.lastError ?? null,
+  };
+  if (br.x.as && !br.x.accounts.includes(br.x.as)) br.x.accounts.unshift(br.x.as);
+  for (const p of Array.isArray(b?.probes) ? b!.probes!.slice(0, 20) : []) {
+    const k = liKey(p.target);
+    if (k) br.li[k] = { ok: !!p.ok, at: now.toISOString(), why: p.ok ? null : (p.why || "not an admin").slice(0, 120) };
+  }
+  await saveBrowser(orgId, br);
+  if (!br.linkedin.signedIn) return [];
+  const due: string[] = [];
+  for (const t of await linkedInTargets(orgId, clientId)) {
+    const k = liKey(t);
+    if (!k) continue;
+    const c = br.li[k];
+    const ttl = c && !c.ok ? LI_FAIL_TTL_MS : LI_CHECK_TTL_MS;
+    if (!c || now.getTime() - Date.parse(c.at) > ttl) due.push(t);
+  }
+  return due.slice(0, 4);
+}
 
 type In = { signedIn?: boolean; as?: string | null } | undefined;
 
@@ -34,7 +98,9 @@ export async function POST(req: NextRequest) {
     if (!caller.ok) {
       return NextResponse.json({ success: false, code: caller.reason, error: "Extension not bound to a workspace" }, { status: 401 });
     }
-    const b = (await req.json().catch(() => null)) as { x?: In; linkedin?: In; version?: string; error?: string | null } | null;
+    const b = (await req.json().catch(() => null)) as {
+      x?: In & { accounts?: string[] }; linkedin?: In & { name?: string | null }; version?: string; error?: string | null; browser?: BrowserIn; probes?: Probe[];
+    } | null;
     const now = new Date().toISOString();
     const st = await getPublisherState(caller.orgId, caller.clientId);
     st.lastSeenAt = now;
@@ -44,6 +110,7 @@ export async function POST(req: NextRequest) {
     if (b?.error !== undefined) st.lastError = b.error;
     await savePublisherState(caller.orgId, st, caller.clientId);
     await sweep(caller.orgId).catch(() => null);
+    const checkLinkedIn = await registerBrowser(caller.orgId, caller.clientId, b?.browser, b).catch(() => [] as string[]);
 
     const settings = await getSettings(caller.orgId);
     const u = await prisma.user.findFirst({
@@ -58,6 +125,7 @@ export async function POST(req: NextRequest) {
       success: true,
       data: {
         enabled: settings.enabled,
+        checkLinkedIn,
         voice: {
           x: caller.clientId ? "X signed you out. Please sign back in so your scheduled posts can go out." : `${lead}I need you now. Project: Social. Task: X signed you out. Please sign back in so scheduled posts can go out.`,
           linkedin: caller.clientId ? "LinkedIn signed you out. Please sign back in so your scheduled posts can go out." : `${lead}I need you now. Project: Social. Task: LinkedIn signed you out. Please sign back in so scheduled posts can go out.`,
