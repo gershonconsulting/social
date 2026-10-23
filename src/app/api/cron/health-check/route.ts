@@ -5,6 +5,7 @@ import { ClientStatus } from "@prisma/client";
 import { resolveFrom } from "@/lib/email/sender";
 import { siteUrl } from "@/lib/site";
 import { withAuditBcc } from "@/lib/mail-bcc";
+import { healthAlertHtml } from "@/lib/alerts/health-email";
 
 /**
  * Collection health-check — a server-side "dead man's switch" for social.gershon.ai.
@@ -134,55 +135,9 @@ function humanGap(hours: number | null): string {
   return `${Math.floor(hours / 24)} days ago`;
 }
 
+/** The e-mail itself lives in lib/alerts/health-email.ts (house style, 2026-10-23). */
 function alertHtml(s: HealthStatus): string {
-  const lastTxt = s.lastPostAt
-    ? new Date(s.lastPostAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "America/New_York" }) + " ET"
-    : "never";
-  const gap = humanGap(s.hoursSinceLastPost);
-  const errLine = s.erroringConnections > 0
-    ? `<tr><td style="padding:4px 0;color:#7f1d1d;">${s.erroringConnections} platform connection(s) are currently reporting sync errors.</td></tr>`
-    : "";
-  return `<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;background:#f4f4f5;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#18181b;">
-  <div style="max-width:560px;margin:0 auto;padding:24px 16px;">
-    <div style="background:#dc2626;color:#fff;border-radius:12px 12px 0 0;padding:20px 24px;">
-      <div style="font-size:20px;font-weight:800;letter-spacing:-0.01em;">⚠️ Radar for social.gershonCRM.com has stopped collecting</div>
-    </div>
-    <div style="background:#ffffff;border:1px solid #e4e4e7;border-top:none;border-radius:0 0 12px 12px;padding:24px;">
-      <p style="margin:0 0 14px;font-size:15px;line-height:1.5;">
-        No new social posts have been ingested in <strong>${s.staleHours}+ hours</strong>.
-        The last post was collected <strong>${gap}</strong> (${lastTxt}), and
-        <strong>${s.postsLast24h}</strong> posts landed in the last 24 hours.
-      </p>
-      <p style="margin:0 0 14px;font-size:15px;line-height:1.5;">
-        This usually means the <strong>collection path is down</strong> — most often the
-        Chrome extension isn't running (browser closed, signed out, cookies expired, or the
-        extension was disabled).
-      </p>
-      <table style="width:100%;border-collapse:collapse;font-size:14px;margin:0 0 18px;">
-        <tr><td style="padding:4px 0;color:#3f3f46;">Active clients monitored:</td><td style="padding:4px 0;text-align:right;font-weight:600;">${s.activeClients}</td></tr>
-        <tr><td style="padding:4px 0;color:#3f3f46;">Enabled platform connections:</td><td style="padding:4px 0;text-align:right;font-weight:600;">${s.enabledConnections}</td></tr>
-        <tr><td style="padding:4px 0;color:#3f3f46;">Last post collected:</td><td style="padding:4px 0;text-align:right;font-weight:600;">${lastTxt}</td></tr>
-        ${errLine}
-      </table>
-      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:14px 16px;margin:0 0 18px;">
-        <div style="font-weight:700;font-size:14px;margin-bottom:6px;">Fix in ~1 minute</div>
-        <ol style="margin:0;padding-left:18px;font-size:14px;line-height:1.6;color:#3f3f46;">
-          <li>Open Chrome on the collection machine and confirm you're signed in to LinkedIn &amp; X.</li>
-          <li>Open <code>chrome://extensions</code>, find the Gershon collector, and click <strong>↺ Reload</strong> if it's off or errored.</li>
-          <li>Open the dashboard's Logs page to confirm today's collection turns green.</li>
-        </ol>
-      </div>
-      <a href="${DASHBOARD_URL}" style="display:inline-block;background:#18181b;color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 20px;border-radius:8px;">Open the dashboard →</a>
-      <p style="margin:18px 0 0;font-size:12px;color:#a1a1aa;line-height:1.5;">
-        You're getting this because collection went quiet. You won't be re-alerted more than
-        once every ${s.realertHours} hours. When collection resumes, these alerts stop on
-        their own. — Radar health-check
-      </p>
-    </div>
-  </div>
-</body></html>`;
+  return healthAlertHtml(s, humanGap(s.hoursSinceLastPost), DASHBOARD_URL);
 }
 
 async function readLastAlertAt(): Promise<Date | null> {

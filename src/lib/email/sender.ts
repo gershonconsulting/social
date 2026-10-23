@@ -48,9 +48,24 @@ function bareAddress(value: string): string {
 export function resolveFrom(override?: string | null): string {
   for (const candidate of [override, process.env.DIGEST_FROM]) {
     const value = (candidate || "").trim();
-    if (value && !LEGACY_FROM.has(bareAddress(value))) return value;
+    if (value && !LEGACY_FROM.has(bareAddress(value))) return withGcName(value);
   }
-  return SOCIAL_FROM;
+  return withGcName(SOCIAL_FROM);
+}
+
+/**
+ * Sender rule (2026-10-23 nightly): every Gershon-internal report shows a
+ * display name starting with "GC ". A DIGEST_FROM / HEALTH_ALERT_FROM secret
+ * that still carries the old "Social GershonCRM" name (or no name at all) is
+ * re-labelled "GC Social"; the ADDRESS is always kept exactly as configured.
+ */
+export const GC_SOCIAL_NAME = "GC Social";
+export function withGcName(from: string): string {
+  const m = from.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
+  const name = m ? m[1].trim() : "";
+  const addr = m ? m[2].trim() : from.trim();
+  if (/^GC\s/.test(name)) return from;
+  return `${GC_SOCIAL_NAME} <${addr}>`;
 }
 
 /** Split a comma-separated recipient string into a clean list. */

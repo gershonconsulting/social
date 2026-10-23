@@ -1,8 +1,10 @@
 /**
  * HTML for the daily progress report email.
  *
- * Inline CSS only — Gmail strips <style> blocks. Gershon red (#FE1B04) on
- * white, matching the daily digest so the two read as one family.
+ * Inline CSS only — Gmail strips <style> blocks. Report e-mail house style
+ * (2026-10-23): white page, single column, max-width 680px, dark text
+ * #12211d, links #1f6f5c, brand red #CC3333 as the accent line. Never light
+ * text on a dark band.
  *
  * The visual hierarchy is deliberate: if the system failed to do its job, the
  * failure is the biggest thing on the screen and everything else is detail.
@@ -10,8 +12,11 @@
 
 import type { DailyReport, Metric } from "./daily-report";
 import { siteUrl } from "@/lib/site";
+import { BUSINESS_TZ } from "./et-days";
 
-const RED = "#FE1B04";
+const RED = "#CC3333";
+const INK = "#12211d";
+const LINK = "#1f6f5c";
 const SITE = siteUrl();
 
 const esc = (s: string) =>
@@ -58,10 +63,10 @@ function metricRow(m: Metric): string {
   return `
   <tr>
     <td style="padding:11px 12px;border-bottom:1px solid #eee;">
-      <div style="font-weight:600;font-size:14px;color:#111;">${esc(m.label)}</div>
+      <div style="font-weight:600;font-size:14px;color:#12211d;">${esc(m.label)}</div>
       ${m.hint ? `<div style="font-size:11px;color:#9ca3af;margin-top:2px;">${esc(m.hint)}</div>` : ""}
     </td>
-    <td style="padding:11px 12px;border-bottom:1px solid #eee;text-align:right;font-size:22px;font-weight:800;color:#111;white-space:nowrap;">${fmt(m.yesterday)}</td>
+    <td style="padding:11px 12px;border-bottom:1px solid #eee;text-align:right;font-size:22px;font-weight:800;color:#12211d;white-space:nowrap;">${fmt(m.yesterday)}</td>
     <td style="padding:11px 12px;border-bottom:1px solid #eee;text-align:right;font-size:13px;white-space:nowrap;">
       <div style="color:#6b7280;">${fmt(m.dayBefore)}</div>
       <div style="margin-top:2px;">${deltaCell(m.yesterday, m.dayBefore, m.higherIsBetter)}</div>
@@ -77,12 +82,12 @@ function statusBlock(r: DailyReport): string {
   const s = r.status;
   if (s.level === "critical") {
     return `
-  <div style="background:#7f1d1d;color:#fff;padding:26px 24px;border-bottom:4px solid ${RED};">
-    <div style="font-size:13px;font-weight:800;letter-spacing:2px;text-transform:uppercase;opacity:0.85;">⛔ Critical — action required</div>
-    <div style="font-size:26px;font-weight:900;line-height:1.2;margin-top:10px;">${esc(s.headline)}</div>
-    <div style="font-size:14px;line-height:1.55;margin-top:12px;opacity:0.95;">${esc(s.detail)}</div>
+  <div style="background:#fdf2f2;color:#7f1d1d;padding:24px 24px;border-bottom:1px solid #f3caca;border-left:4px solid ${RED};">
+    <div style="font-size:13px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:${RED};">⛔ Critical — action required</div>
+    <div style="font-size:24px;font-weight:900;line-height:1.2;margin-top:10px;color:${INK};">${esc(s.headline)}</div>
+    <div style="font-size:14px;line-height:1.55;margin-top:12px;">${esc(s.detail)}</div>
     <div style="margin-top:16px;">
-      <a href="${SITE}/extension" style="display:inline-block;padding:11px 20px;background:#fff;color:#7f1d1d;font-weight:800;font-size:13px;text-decoration:none;border-radius:8px;">Run a full sync now →</a>
+      <a href="${SITE}/extension" style="display:inline-block;padding:11px 20px;background:${RED};color:#ffffff;font-weight:800;font-size:13px;text-decoration:none;border-radius:8px;">Run a full sync now →</a>
     </div>
   </div>`;
   }
@@ -161,7 +166,7 @@ export function renderDailyReportHtml(r: DailyReport): string {
       (m) => `
     <tr>
       <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;">
-        <a href="${SITE}/clients/${m.id}" style="color:#111;text-decoration:none;font-weight:600;font-size:13px;">${esc(m.name)}</a>
+        <a href="${SITE}/clients/${m.id}" style="color:#12211d;text-decoration:none;font-weight:600;font-size:13px;">${esc(m.name)}</a>
         <span style="font-size:11px;color:#9ca3af;"> · ${esc(CATEGORY_LABELS[m.category] ?? m.category)}</span>
       </td>
       <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:700;font-size:15px;">${m.yesterday}</td>
@@ -175,7 +180,7 @@ export function renderDailyReportHtml(r: DailyReport): string {
       (q) => `
     <tr>
       <td style="padding:6px 12px;border-bottom:1px solid #f3f4f6;font-size:13px;">
-        <a href="${SITE}/clients/${q.id}" style="color:#111;text-decoration:none;">${esc(q.name)}</a>
+        <a href="${SITE}/clients/${q.id}" style="color:#12211d;text-decoration:none;">${esc(q.name)}</a>
       </td>
       <td style="padding:6px 12px;border-bottom:1px solid #f3f4f6;text-align:right;font-size:12px;color:#6b7280;">${q.dayBefore} the day before → 0</td>
     </tr>`,
@@ -206,10 +211,10 @@ export function renderDailyReportHtml(r: DailyReport): string {
           <span style="font-weight:600;font-size:11px;color:${f.kind === "unavailable" ? "#b91c1c" : "#b45309"};text-transform:uppercase;letter-spacing:0.6px;margin-left:6px;">${f.kind === "unavailable" ? "Page not available" : "Wrong company"}</span>
         </div>
         <div style="font-size:12px;color:#78350f;margin-top:3px;">${esc(f.detail)}</div>
-        ${f.url ? `<div style="font-size:12px;margin-top:3px;"><a href="${esc(f.url)}" style="color:#6b7280;">${esc(f.url)}</a></div>` : ""}
+        ${f.url ? `<div style="font-size:12px;margin-top:3px;"><a href="${esc(f.url)}" style="color:${LINK};">${esc(f.url)}</a></div>` : ""}
       </td>
       <td style="padding:9px 12px;border-bottom:1px solid #fde68a;background:#fffbeb;text-align:right;white-space:nowrap;vertical-align:middle;">
-        <a href="${SITE}/clients/${encodeURIComponent(f.clientId)}" style="display:inline-block;padding:7px 12px;background:#111;color:#fff;font-size:12px;font-weight:700;text-decoration:none;border-radius:6px;">Change the link →</a>
+        <a href="${SITE}/clients/${encodeURIComponent(f.clientId)}" style="display:inline-block;padding:7px 12px;background:${RED};color:#ffffff;font-size:12px;font-weight:700;text-decoration:none;border-radius:6px;">Change the link →</a>
       </td>
     </tr>`,
     )
@@ -221,7 +226,7 @@ export function renderDailyReportHtml(r: DailyReport): string {
       : `<div style="padding:18px 24px;border-bottom:1px solid #e5e7eb;">
     <div style="font-size:12px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#b45309;margin-bottom:4px;">LinkedIn links to fix (${r.pagesToFix.length})</div>
     <div style="font-size:12px;color:#6b7280;margin-bottom:10px;">These links open no company page, or another company's page. Nothing is collected correctly for them until the link is changed.</div>
-    <table style="width:100%;border-collapse:collapse;"><tbody>${fixRows}</tbody></table>
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><tbody>${fixRows}</tbody></table></div>
   </div>`;
 
   const p = r.progress;
@@ -229,13 +234,14 @@ export function renderDailyReportHtml(r: DailyReport): string {
   const progressBg = p.level === "warn" ? "#fffbeb" : "#f0fdf4";
 
   return `<!doctype html>
-<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;margin:0;padding:24px;background:#f3f4f6;color:#111;">
-<div style="max-width:700px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;margin:0;padding:0;background:#ffffff;color:${INK};">
+<div style="max-width:680px;margin:0 auto;background:#ffffff;">
 
-  <div style="background:${RED};color:#fff;padding:20px 24px;">
-    <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.6px;opacity:0.88;">social.gershonCRM.com</div>
-    <div style="font-size:23px;font-weight:800;margin-top:4px;">Daily Report</div>
-    <div style="font-size:14px;margin-top:2px;opacity:0.92;">${esc(r.day.label)}</div>
+  <div style="height:4px;background:${RED};line-height:4px;font-size:0;">&nbsp;</div>
+  <div style="padding:20px 24px 16px;border-bottom:1px solid #e5e7eb;">
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.6px;color:${RED};font-weight:700;">GC Social · Collection</div>
+    <div style="font-size:23px;font-weight:800;margin-top:4px;color:${INK};">Social Collection Report</div>
+    <div style="font-size:14px;margin-top:2px;color:#4b5563;">${esc(r.day.label)}</div>
   </div>
 
   ${statusBlock(r)}
@@ -250,7 +256,7 @@ export function renderDailyReportHtml(r: DailyReport): string {
 
   <div style="padding:18px 24px;">
     <div style="font-size:12px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#6b7280;margin-bottom:10px;">Scorecard</div>
-    <table style="width:100%;border-collapse:collapse;">
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
       <thead>
         <tr style="background:#f3f4f6;">
           <th style="text-align:left;padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:0.8px;color:#6b7280;">Measure</th>
@@ -260,7 +266,7 @@ export function renderDailyReportHtml(r: DailyReport): string {
         </tr>
       </thead>
       <tbody>${r.metrics.map(metricRow).join("")}</tbody>
-    </table>
+    </table></div>
   </div>
 
   <div style="padding:4px 24px 18px;">
@@ -286,12 +292,12 @@ export function renderDailyReportHtml(r: DailyReport): string {
 
   ${extensionBlock(r)}
 
-  <div style="padding:16px 24px;background:#111;text-align:center;">
-    <a href="${SITE}/dashboard" style="display:inline-block;padding:11px 22px;background:${RED};color:#fff;font-weight:700;font-size:13px;text-decoration:none;border-radius:8px;">Open the dashboard →</a>
+  <div style="padding:18px 24px;text-align:center;">
+    <a href="${SITE}/dashboard" style="display:inline-block;padding:11px 22px;background:${RED};color:#ffffff;font-weight:700;font-size:13px;text-decoration:none;border-radius:8px;">Open the dashboard →</a>
   </div>
 
-  <div style="padding:14px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;">
-    Generated by social.gershonCRM.com on ${esc(new Date(r.generatedAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }))} ·
+  <div style="padding:14px 24px;border-top:1px solid #e5e7eb;font-size:11px;line-height:1.5;color:#6b7280;">
+    Source: ${esc(SITE.replace(/^https?:\/\//, ""))} (Social app database, Chrome extension collection) · Data as of ${esc(new Date(r.generatedAt).toLocaleString("en-US", { timeZone: BUSINESS_TZ, dateStyle: "medium", timeStyle: "short" }))} ET ·
     app v${esc((process.env.NEXT_PUBLIC_APP_VERSION || "dev").slice(0, 7))} ·
     extension v${esc(r.extension.installed ?? "?")} of v${esc(r.extension.latest)}
   </div>
