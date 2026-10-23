@@ -21,8 +21,13 @@
  * `vars.*` over its hard-coded fallbacks.
  */
 
-/** The app's outbound identity. Must stay on the verified gershon.ai domain. */
-export const SOCIAL_FROM = "Social GershonCRM <social@gershon.ai>";
+/**
+ * The app's outbound identity. Must stay on the verified gershon.ai domain.
+ * Display name starts with "GC " (Olivier's rule, 2026-09: every automated Gershon
+ * report/alert is recognisable at a glance). Address unchanged. Was
+ * "Social GershonCRM <social@gershon.ai>" until 2026-10-22.
+ */
+export const SOCIAL_FROM = "GC Social <social@gershon.ai>";
 
 /** Who gets the daily "what was collected" digest. */
 export const DIGEST_RECIPIENTS = [
