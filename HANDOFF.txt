@@ -25,8 +25,24 @@ Preview: https://claude.ai/artifact/KJjafTUE8znwZX87p7hTf2 (sample data)
   Merges cleanly with PR #3 in either order.
 [TODO] No version bump on purpose: package.json / extension-version.ts are
   changed by PR #2 and already conflict with trunk; bump when merging.
-[TODO] Monthly campaign report, alerts and reviewer e-mails still use the
-  old red (not report e-mails in tonight's audit).
+[READY TO TEST] (follow-up, same night) The MONTHLY report e-mails and the
+  ALERT e-mails are now in the same house style (white, 680px, dark text,
+  #CC3333 top line, light-red tint instead of dark/red bands, Source / Data
+  as of footer; phone 390px no sideways scroll - tiles wrap 2 x 2, wide
+  tables scroll in their own box):
+  - Monthly per-category report + per-company client report
+    (src/lib/reports/monthly/render-html.ts)
+  - Monthly Competition report (src/lib/reports/monthly/competition.ts, e-mail part)
+  - Campaign monthly report e-mail / share page (src/lib/campaigns/render.ts)
+  - Weekly / monthly posting alert (src/lib/alerts/render.ts)
+  - "Collection has stopped" health alert: template moved to
+    src/lib/alerts/health-email.ts, route only calls it
+    (src/app/api/cron/health-check/route.ts)
+  The client-facing monthly e-mail keeps the "Social · Gershon.AI" label and
+  sender (it goes to the client, not internal).
+[TODO] The monthly PDF attachments (render-pdf.ts, competitionPdf) still use
+  the old red #D92D20 and a dark header - PDFs, not e-mails, left as is.
+[TODO] Reviewer e-mails (publishing review) not touched - not report e-mails.
 
 
 0. WHO YOU ARE READING THIS
