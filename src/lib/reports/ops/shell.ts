@@ -102,11 +102,10 @@ export function table(head: string, rows: string): string {
   return `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${head}${rows}</table>`;
 }
 
-export type OpsKind = "posting" | "content" | "competitive" | "intelligence";
+export type OpsKind = "posting" | "competitive" | "intelligence";
 export const OPS_LABEL: Record<OpsKind | "collection", string> = {
   collection: "Collection",
   posting: "Posting",
-  content: "Content Ready",
   competitive: "Competitive",
   intelligence: "Intelligence",
 };
@@ -116,7 +115,6 @@ function siblings(current: OpsKind | "collection"): string {
   const links: Array<[OpsKind | "collection", string]> = [
     ["collection", `${SITE}/api/report/daily`],
     ["posting", `${SITE}/api/report/ops?kind=posting`],
-    ["content", `${SITE}/api/report/ops?kind=content`],
     ["competitive", `${SITE}/api/report/ops?kind=competitive`],
     ["intelligence", `${SITE}/api/report/ops?kind=intelligence`],
   ];

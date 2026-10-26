@@ -45,7 +45,7 @@ export function Landing({
           </a>
           <nav className="nav-links">
             <a className="link" href="#features">Features</a>
-            <a className="link" href="#publishing">Publishing</a>
+            <a className="link" href="#world">Your world</a>
             <a className="link" href="#how">How it works</a>
             <a className="link" href="#reporting">Reporting</a>
             <a className="link" href="#extension">Extension</a>
@@ -61,12 +61,12 @@ export function Landing({
       <section className="hero">
         <div className="rings"><span /><span /><span /><span /><div className="sweep" /></div>
         <div className="wrap">
-          <span className="kicker">◆ Social network management software · LinkedIn &amp; X</span>
-          <h1>Manage every social account<br /><span className="g">from first draft to monthly proof.</span></h1>
+          <span className="kicker">◆ Social listening for your business world · LinkedIn &amp; X</span>
+          <h1>See who is posting what<br /><span className="g">across your whole business world.</span></h1>
           <p className="sub">
-            Social is one place to plan, approve, publish and measure LinkedIn and X for every company you manage.
-            Write the content, get the client&apos;s approval in one batch, schedule it on both networks at once — then
-            Social checks what really went live and turns it into analytics and a client-ready monthly report.
+            Social collects every LinkedIn and X post from the companies you are connected with — your clients, your
+            partners, your competitors and your own company — every day, in the background. Then it turns them into
+            analytics, competitor comparisons and a monthly report you can send.
           </p>
           <div className="cta-row">
             <a className="btn btn-primary" href={primaryHref}>
@@ -78,34 +78,34 @@ export function Landing({
             </a>
           </div>
           <div className="trust">
-            LinkedIn + X in one place · client approval built in · runs in your own browser, no password sharing ·{" "}
+            LinkedIn + X in one place · clients, partners, competitors, internal · runs in your own browser, no password sharing ·{" "}
             <a href={secondaryHref} style={{ color: "#bcd0ff", fontWeight: 600, textDecoration: "underline" }}>
               {signedIn ? "Jump to the summary →" : "Already have an account? Sign in →"}
             </a>
           </div>
 
           <div className="mock">
-            <div className="bar"><i /><i /><i /><span className="u">social.gershon.ai/publishing</span></div>
+            <div className="bar"><i /><i /><i /><span className="u">social.gershon.ai/dashboard</span></div>
             <div className="flow">
               <div className="stage">
-                <h4>1 · Plan &amp; approve</h4>
-                <div className="big">Content</div>
-                <div className="lbl">written, reviewed and validated by the client</div>
-                <ul><li>Content library &amp; calendar</li><li>Batch client review</li><li>One week always ready</li></ul>
+                <h4>1 · Connect</h4>
+                <div className="big">Your world</div>
+                <div className="lbl">the companies you work with and watch</div>
+                <ul><li>Clients &amp; partners</li><li>Competitors</li><li>Your own company</li></ul>
               </div>
               <div className="arrow">→</div>
               <div className="stage">
-                <h4>2 · Publish</h4>
+                <h4>2 · Collect</h4>
                 <div className="big">LinkedIn + X</div>
-                <div className="lbl">scheduled once, posted on both networks</div>
-                <ul><li>One picture per post</li><li>AI-suggested X version</li><li>Every post verified</li></ul>
+                <div className="lbl">every post, every day, automatically</div>
+                <ul><li>Runs in your own Chrome</li><li>No password sharing</li><li>Likes, comments, reposts</li></ul>
               </div>
               <div className="arrow">→</div>
               <div className="stage">
-                <h4>3 · Measure &amp; report</h4>
-                <div className="big">Proof</div>
-                <div className="lbl">collected daily, charted and ready to send</div>
-                <ul><li>Green / amber / red status</li><li>Followers &amp; competitors</li><li>Monthly report &amp; PDF</li></ul>
+                <h4>3 · Understand</h4>
+                <div className="big">Intelligence</div>
+                <div className="lbl">who said what, and what it means</div>
+                <ul><li>Themes &amp; key words</li><li>Followers &amp; competitors</li><li>Monthly report &amp; PDF</li></ul>
               </div>
             </div>
           </div>
@@ -114,8 +114,8 @@ export function Landing({
 
       <div className="wrap">
         <div className="stats">
-          <div className="stat"><b>LinkedIn + X</b><span>publish and track both, together</span></div>
-          <div className="stat"><b>Batch approval</b><span>clients validate content in one pass</span></div>
+          <div className="stat"><b>LinkedIn + X</b><span>collected together, every day</span></div>
+          <div className="stat"><b>4 circles</b><span>clients, partners, competitors, internal</span></div>
           <div className="stat"><b>Daily</b><span>collection, digest and alerts</span></div>
           <div className="stat"><b>Monthly PDF</b><span>one-page report per company</span></div>
         </div>
@@ -124,16 +124,14 @@ export function Landing({
       <section className="pad" id="features">
         <div className="wrap">
           <div className="eyebrow">Features</div>
-          <h2 className="sec">Everything you need to run social for the companies you manage.</h2>
+          <h2 className="sec">Everything you need to follow the companies around you.</h2>
           <p className="lead">
-            Most tools stop at the scheduler. Social covers the whole cycle — content, approval, publishing, monitoring
-            and reporting — and measures what was <em>actually</em> published, not just what was queued.
+            Social does one thing well: it collects what the companies in your world <em>actually</em> published on
+            LinkedIn and X, and helps you understand it.
           </p>
           <div className="grid3">
-            <div className="card"><div className="ic">🗓️</div><h3>Publishing calendar &amp; scheduler</h3><p>Plan posts on a calendar and publish to LinkedIn and X at the same time. Every post carries its picture, and Social checks that each one really went out.</p></div>
-            <div className="card"><div className="ic">✅</div><h3>Client review &amp; approval</h3><p>Send content to the client in one batch, discuss it in comments, and let them approve all at once — with clear Approved, Pending approval and Submitted status.</p></div>
-            <div className="card"><div className="ic">📦</div><h3>Always a week ahead</h3><p>A content inventory keeps one week of validated posts ready to publish, warns you when it runs low and reminds clients about posts still waiting for approval.</p></div>
-            <div className="card"><div className="ic">✨</div><h3>Intelligence (AI)</h3><p>Suggest the X version of a LinkedIn post within the character limit, read each company&apos;s themes and tone, and turn collected content into ready-to-use post ideas.</p></div>
+            <div className="card"><div className="ic">🌐</div><h3>Your whole business world</h3><p>Follow your clients, partners, competitors and your own company in one place, each in its own category, with its own timeline of posts.</p></div>
+            <div className="card"><div className="ic">✨</div><h3>Intelligence (AI)</h3><p>Read each company&apos;s themes, key words and tone, and spot what changed since last week — always linked back to the posts it came from.</p></div>
             <div className="card"><div className="ic">🧩</div><h3>Automatic daily collection</h3><p>The Chrome extension collects every company&apos;s LinkedIn and X posts in the background, in your own session — no password sharing, nothing to run by hand.</p></div>
             <div className="card"><div className="ic">🚦</div><h3>Posting compliance at a glance</h3><p>Each company gets a green / amber / red status over the window you choose — last week, last month, this month, this year or all time.</p></div>
             <div className="card"><div className="ic">🔭</div><h3>Competitor Watch</h3><p>Compare a company with the competitors you track: who posts, what they post about, their key words and how often they publish.</p></div>
@@ -143,35 +141,34 @@ export function Landing({
         </div>
       </section>
 
-      <section className="pad band" id="publishing">
+      <section className="pad band" id="world">
         <div className="wrap why">
           <div>
-            <div className="eyebrow" style={{ textAlign: "left" }}>Publishing</div>
-            <h2>Write once, approve once, publish on LinkedIn and X.</h2>
+            <div className="eyebrow" style={{ textAlign: "left" }}>Your world</div>
+            <h2>Who is posting what — in one feed.</h2>
             <p>
-              Publishing replaces your separate scheduler. Your team creates the content, the client reviews the whole
-              batch from a single email link, and approved posts go out on schedule on both networks — from your browser,
-              or from the client&apos;s own Chrome extension when they publish under their own account.
+              Add the companies you are connected with and Social reads their LinkedIn pages and X accounts every day.
+              You see every post, with its date, its link and how people reacted, grouped the way you work.
             </p>
             <ul className="checklist">
-              <li><CheckIcon /><span>One picture per post, on LinkedIn and X.</span></li>
-              <li><CheckIcon /><span>✨ One click suggests the X version, always under the X limit.</span></li>
-              <li><CheckIcon /><span>Every scheduled post is checked to confirm it really went live.</span></li>
-              <li><CheckIcon /><span>Inventory warnings and review reminders keep a week of content ready.</span></li>
+              <li><CheckIcon /><span>Clients — what the companies you serve are saying.</span></li>
+              <li><CheckIcon /><span>Partners — what they promote and announce.</span></li>
+              <li><CheckIcon /><span>Competitors — their topics, key words and posting rhythm.</span></li>
+              <li><CheckIcon /><span>Internal — your own company, measured the same way.</span></li>
             </ul>
           </div>
           <div className="pricecard">
-            <div className="tag">Client review — one batch, one email</div>
-            <div className="amt">3 <small>clear statuses</small></div>
+            <div className="tag">Collection only — nothing is posted</div>
+            <div className="amt">4 <small>circles of companies</small></div>
             <ul>
-              <li><b style={{ color: "#16a34a" }}>● Approved</b> — validated, ready to publish</li>
-              <li><b style={{ color: "#ea580c" }}>● Pending approval</b> — the client left comments</li>
-              <li><b style={{ color: "#dc2626" }}>● Submitted</b> — sent, not reviewed yet</li>
-              <li>Approve all in one click</li>
-              <li>Comments stay with each post</li>
+              <li><b>Clients</b></li>
+              <li><b>Partners</b></li>
+              <li><b>Competitors</b></li>
+              <li><b>Internal</b></li>
+              <li>Collected daily on LinkedIn and X</li>
             </ul>
-            <a className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} href={signedIn ? "/publishing" : "/login"}>
-              {signedIn ? "Open Publishing" : "Sign in to start publishing"}
+            <a className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} href={signedIn ? "/clients" : "/login"}>
+              {signedIn ? "Open your companies" : "Sign in to start"}
             </a>
           </div>
         </div>
@@ -183,8 +180,8 @@ export function Landing({
           <h2 className="sec">Up and running in three steps.</h2>
           <div className="steps">
             <div className="step"><div className="n">1</div><h3>Sign up &amp; add your companies</h3><p>Sign in with LinkedIn to get your own workspace, add the companies you manage (or sync them from your CRM) with their LinkedIn page and X handle.</p></div>
-            <div className="step"><div className="n">2</div><h3>Install the extension</h3><p>Load the Chrome extension once. It publishes your approved posts and collects what every company posted — in the background, every day.</p></div>
-            <div className="step"><div className="n">3</div><h3>Publish, measure, report</h3><p>Run your calendar and client approvals, watch the dashboard for anyone slipping, and send each client their monthly report or PDF.</p></div>
+            <div className="step"><div className="n">2</div><h3>Install the extension</h3><p>Load the Chrome extension once. It collects what every company posted — in the background, every day.</p></div>
+            <div className="step"><div className="n">3</div><h3>Read, compare, report</h3><p>Browse who posted what, compare companies with their competitors, and send each client their monthly report or PDF.</p></div>
           </div>
         </div>
       </section>
@@ -230,7 +227,7 @@ export function Landing({
           <div className="eyebrow">The Chrome extension</div>
           <h2 className="sec">Get the Social Chrome extension.</h2>
           <p className="lead">
-            The extension publishes and collects inside <em>your</em> browser, using <em>your</em> LinkedIn and X
+            The extension collects inside <em>your</em> browser, using <em>your</em> LinkedIn and X
             sessions — so there is no password sharing and nothing to configure on a server. It works in the background
             and tells you when a newer version is available.
           </p>
@@ -278,10 +275,10 @@ export function Landing({
 
       <section className="final">
         <div className="wrap">
-          <h2>Run every social account you manage from one place.</h2>
+          <h2>Know what your whole business world is posting.</h2>
           <p>
-            Plan, approve and publish on LinkedIn and X — then let Social prove what went live and send the report
-            for you.
+            Clients, partners, competitors and your own company — every LinkedIn and X post, collected and explained
+            in one place.
           </p>
           <div className="cta-row">
             <a className="btn btn-primary" href={primaryHref}>
@@ -301,7 +298,7 @@ export function Landing({
           </a>
           <div className="foot-links">
             <a className="link" href="#features">Features</a>
-            <a className="link" href="#publishing">Publishing</a>
+            <a className="link" href="#world">Your world</a>
             <a className="link" href="#how">How it works</a>
             <a className="link" href="#reporting">Reporting</a>
             <a className="link" href="#extension">Extension</a>

@@ -15,7 +15,10 @@
 import prisma from "@/lib/db";
 import { objectivesFor } from "@/lib/campaigns/objectives";
 import { readHeartbeat } from "@/lib/extension/heartbeat";
-import { PUBLISHING_CLIENT_TYPES } from "@/lib/publishing";
+import type { ClientType } from "@prisma/client";
+
+/** Our own work: campaign clients + Gershon itself (was lib/publishing, removed in v4.65.0). */
+const PUBLISHING_CLIENT_TYPES = ["CAMPAIGN", "INTERNAL"] as ClientType[];
 import { etDayKey, etDayShort, etMidnight } from "../et-days";
 import {
   banner, esc, isWeekend, kpis, LEVEL_COLOR, page, pill, section, shortDay, SITE, table, TD, TDR, TH, THR,
@@ -230,7 +233,7 @@ export function renderPosting(r: PostingReport): string {
     title: "Social Posting Report",
     subtitle: `Did we post for every company? — ${r.dayShort} and the 7 days to it`,
     body,
-    cta: { href: `${SITE}/publishing`, label: "Open Publishing" },
+    cta: { href: "https://publish.gershon.ai/publishing", label: "Open Publish" },
   });
 }
 

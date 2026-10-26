@@ -19,7 +19,7 @@ jobs:
         run: |
           for i in $(seq 1 150); do
             code=$(curl -sS -o /tmp/out.json -w '%{http_code}' --max-time 290 \
-              -X POST 'https://social.gershon.ai/api/cron/autopilot' \
+              -X POST 'https://publish.gershon.ai/api/cron/autopilot' \
               -H "Authorization: Bearer ${{ secrets.CF_CRON_SECRET }}")
             remaining=$(python3 -c "import json;print(json.load(open('/tmp/out.json')).get('data',{}).get('remaining',-1))" 2>/dev/null || echo -1)
             echo "call $i: HTTP $code remaining=$remaining"
