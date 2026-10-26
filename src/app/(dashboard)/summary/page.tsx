@@ -1,18 +1,16 @@
 export const runtime = 'edge';
 import { Suspense } from "react";
-import { DashboardContent } from "@/components/dashboard/dashboard-content";
+import { EcosystemSummary } from "@/components/dashboard/ecosystem-dashboard";
 
 export const dynamic = "force-dynamic";
 
-// Summary = the classic dashboard view (KPIs, posting cadence, company cards).
-// The top-level "Dashboard" is now the dynamic insights + charts overview.
+// v4.65.0: Social's ecosystem Summary — one row per tracked company, every
+// category (narrowed by the sidebar filter). Compliance/objectives live in
+// Social Tracking now.
 export default function SummaryPage() {
   return (
     <Suspense fallback={<div className="animate-pulse text-gray-400">Loading summary…</div>}>
-      <DashboardContent
-        heading="Summary"
-        subheading="Company-by-company posting, compliance, and engagement"
-      />
+      <EcosystemSummary />
     </Suspense>
   );
 }

@@ -22,6 +22,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 export const CATEGORY_OPTIONS = [
+  { key: "COMPANY", label: "Company" },
   { key: "CAMPAIGN", label: "Campaign" },
   { key: "CLIENT", label: "Client" },
   { key: "PROSPECT", label: "Prospect" },
@@ -37,8 +38,12 @@ export const NETWORK_OPTIONS = [
   { key: "TIKTOK", label: "TikTok" },
 ] as const;
 
-/** The default view: campaign companies, current month, every network. */
-export const DEFAULT_CATEGORIES = ["CAMPAIGN"];
+/**
+ * The default view: every category, current month, every network.
+ * v4.65.0: Social covers the whole ecosystem (campaign-only views moved to
+ * Social Tracking), so nothing is narrowed by default.
+ */
+export const DEFAULT_CATEGORIES: string[] = [];
 
 export interface ViewFilters {
   categories: string[];
@@ -57,7 +62,9 @@ interface Ctx extends ViewFilters {
   isDefault: boolean;
 }
 
-const STORAGE_KEY = "social.viewFilters.v1";
+// v2 (v4.65.0): the default changed from Campaign-only to everything, so an
+// old session's stored Campaign-only filter is not carried over.
+const STORAGE_KEY = "social.viewFilters.v2";
 
 // v4.59.0 audit: months follow the viewer's own clock, not UTC — in Sint
 // Maarten / New York "this month" used to roll over at 8pm on the last day.

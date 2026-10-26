@@ -1,7 +1,7 @@
 ================================================================
 HANDOFF.txt  -  social
 Written by: Claude (Anthropic) - token-limit handoff protocol
-Date: 2026-09-09
+Date: 2026-10-26 (last update: v4.65.0)
 ================================================================
 
 0. WHO YOU ARE READING THIS
@@ -51,6 +51,39 @@ Reporting     : the daily Phantombuster digest goes to
 
 3. RECENTLY DONE  [DONE]
 ----------------------------------------------------------------
+- 2026-10-26 v4.65.0 — Social gets its OWN Dashboard + Summary (three-platform
+  split, docs THREE-PLATFORM-SPLIT.md §2 / §14.2 / §17). Campaign command center
+  (objectives, compliance, "5/week", content stock) removed from Social — it is
+  Social Tracking's job now (being ported there by another worker).
+  /dashboard "Who is posting what": KPIs (posts, sources that posted, interactions,
+       avg/post, each vs previous comparable period); collection coverage (checked OK /
+       enabled, stale, failing, never checked, sources with an account); activity by
+       category (company/client/partner/competitor/prospect/internal/campaign/recycled)
+       x LinkedIn / X; "Who posted what" feed; needs attention / next actions (links);
+       most active + quiet (30d) sources; trending hashtags (#tags + hashtags column);
+       top posts by engagement. Window picker Last week / Last month / This month /
+       This year / All time (default This month); sidebar Category + Network filters
+       now drive /dashboard and /summary; default category filter = ALL (was Campaign;
+       storage key bumped to social.viewFilters.v2). Followers only per company/network.
+  /summary: one row per tracked company — category, networks, posts vs previous,
+       last post, avg interactions/post, followers per network (+30d change),
+       collection freshness; sortable; links to the company page.
+  Data: src/lib/ecosystem/data.ts (all GROUP BY / window functions in Postgres,
+       capped feed/top/hashtags; ~13 KB payload on fixture data), windows in
+       src/lib/ecosystem/windows.ts (tests/ecosystem-windows.test.mts). No chart lib.
+  Removed: dashboard-overview(-client), dashboard-content, dashboard-client,
+       collection-status-panel, extension-health-banner (no other importers).
+  Sidebar: Dashboard + Summary are always the first two entries ("Getting started"
+       moved after them). Publishing menu untouched. Extension untouched (0.25.1).
+  ✅ tsc, next build, tests pass; raw SQL verified on a local Postgres with the Prisma
+     schema + SSR render smoke test. /dashboard client chunk 30.4 KB (9.1 KB gzip),
+     route 141 B, first load 119 kB.
+  ✅ committed and pushed to branch release/social-v4.65.0 (NOT deployed).
+  ❌ Production deploy waits for Olivier's explicit OK: merge/push release/social-v4.65.0
+     to claude/social-campaign-verification-jiG5E (commit carries [skip-db-push]; no
+     schema change), then check https://social.gershon.ai footer shows 4.65.0.
+  ❌ Not built yet from §14.2/§17: saved insights, keyword alerts, weekly intelligence
+     report, competitive side-by-side, own-post interaction view.
 - 2026-10-26 v4.64.0 — Claude scheduled tasks moved into the app (GitHub Actions
   schedules in .github/workflows; verification output on issue #5):
   [17] pb-import-daily.yml — 07:00 New York daily: GET /api/cron/pb-import-latest

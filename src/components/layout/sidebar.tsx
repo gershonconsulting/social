@@ -142,7 +142,8 @@ export function Sidebar() {
   const groups = setupIncomplete
     ? navGroups.map((g) =>
         g.label === "Overview"
-          ? { ...g, items: [{ href: "/welcome", icon: Rocket, label: "Getting started" }, ...g.items] }
+          ? // v4.65.0: Dashboard and Summary stay the first two entries.
+            { ...g, items: [...g.items.slice(0, 2), { href: "/welcome", icon: Rocket, label: "Getting started" }, ...g.items.slice(2)] }
           : g,
       )
     : navGroups;

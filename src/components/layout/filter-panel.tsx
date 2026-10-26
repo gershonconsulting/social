@@ -20,10 +20,11 @@ import {
 } from "@/lib/view-filters";
 
 /** Pages whose content the shared filters actually drive. */
-// v4.59.0 audit: /dashboard (v4.58 Campaign command center) is campaign-only
-// with its own period picker and never read these filters — showing them there
-// suggested they did something.
-const FILTERED_PATHS = ["/summary"];
+// v4.65.0: Social's Dashboard and Summary both read Category + Network; they
+// carry their own period picker (Last week … All time), so the Month group is
+// only shown on pages that read it (none today).
+const FILTERED_PATHS = ["/dashboard", "/summary"];
+const MONTH_PATHS: string[] = [];
 
 function Check({ on, label, count, onClick }: { on: boolean; label: string; count?: number; onClick: () => void }) {
   return (
@@ -93,6 +94,7 @@ export function FilterPanel() {
   if (!applies) return null;
 
   const months = recentMonths(12);
+  const showMonth = MONTH_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
   return (
     <div className="pt-4 border-t border-[#1F2229]">
@@ -102,7 +104,7 @@ export function FilterPanel() {
         {!isDefault && (
           <button
             onClick={reset}
-            title="Back to the default view: Campaign, this month, all networks"
+            title="Back to the default view: every category, all networks"
             className="ml-auto inline-flex items-center gap-1 text-[10px] font-semibold text-[#FF8A7E] hover:underline"
           >
             <RotateCcw size={10} /> Reset
@@ -121,6 +123,7 @@ export function FilterPanel() {
         ))}
       </Group>
 
+      {showMonth && (
       <Group
         title="By month"
         hint={month === "ALL" ? "all time" : undefined}
@@ -134,6 +137,7 @@ export function FilterPanel() {
           ))}
         </div>
       </Group>
+      )}
 
       <Group
         title="By network"
