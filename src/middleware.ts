@@ -59,6 +59,12 @@ const MACHINE_PATHS = [
   "/api/connect/",
 ];
 
+/**
+ * Exact machine routes (no prefix match). /api/matrix-stats — the weekly Client
+ * Platform Matrix email; the route checks the SHA-256 of its own secret.
+ */
+const MACHINE_EXACT = ["/api/matrix-stats"];
+
 /** Sign-in itself, including every OAuth callback. */
 const AUTH_PATHS = ["/api/auth/"];
 
@@ -100,6 +106,7 @@ export async function middleware(req: NextRequest) {
   if (!pathname.startsWith("/api/")) return NextResponse.next();
   if (startsWithAny(pathname, AUTH_PATHS)) return NextResponse.next();
   if (startsWithAny(pathname, MACHINE_PATHS)) return NextResponse.next();
+  if (MACHINE_EXACT.includes(pathname)) return NextResponse.next();
   if (startsWithAny(pathname, EXTENSION_PATHS)) return NextResponse.next();
 
   const token = await getToken({

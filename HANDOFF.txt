@@ -160,3 +160,12 @@ UPDATE 2026-10-18  -  v4.51.0  Publishing Autopilot + Knowledge Base
        Full spec: docs/AUTOPILOT.md
 [TODO] Check each internal company has LinkedIn + X set in Publishing -> Accounts.
 [TODO] Review the AI-drafted Knowledge Base of each internal company.
+
+----------------------------------------------------------------
+UPDATE 2026-10-26  -  POST /api/matrix-stats (Client Platform Matrix)
+----------------------------------------------------------------
+[DONE] POST https://social.gershon.ai/api/matrix-stats — read-only, auth = SHA-256 of body
+       "secret" vs hash hardcoded in src/app/api/matrix-stats/route.ts (exact-path
+       whitelist MACHINE_EXACT in middleware). Matches people to primary-org Clients by
+       company name / email domain vs website; note "campaign" or "N posts (30d)";
+       "others" = unmatched ACTIVE CAMPAIGN clients. Contract shared with 3 other apps.
