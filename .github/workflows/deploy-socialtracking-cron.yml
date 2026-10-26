@@ -1,0 +1,65 @@
+name: Deploy Social Tracking cron Worker
+
+# Deploys Cloudflare Worker "gershon-socialtracking-cron" from
+# gershonconsulting/socialtracking@main cron/ (approved by Olivier 2026-10-26).
+# Crons (UTC): "30 12 * * 1" -> POST socialtracking.gershon.ai/api/report/weekly
+#              "0 12 1 * *"  -> POST socialtracking.gershon.ai/api/report/monthly
+# Secret binding REPORT_CRON_KEY = CF_CRON_SECRET, which deploy-siblings.yml already sets as
+# CRON_SECRET on the gershon-socialtracking Pages project; the app accepts Bearer CRON_SECRET or
+# REPORT_CRON_KEY, so no Pages change / redeploy is needed. Both report routes are idempotent.
+# Trigger: push to branch deploy-cron/socialtracking (or manual dispatch).
+on:
+  push:
+    branches: ['deploy-cron/socialtracking']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: gershonconsulting/socialtracking
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: wrangler deploy + secret
+        working-directory: cron
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          KEY: ${{ secrets.CF_CRON_SECRET }}
+        run: |
+          : > /tmp/log.txt
+          npx --yes wrangler@3 deploy 2>&1 | tail -20 | tee -a /tmp/log.txt
+          test "${PIPESTATUS[0]}" = "0" || { echo "DEPLOY FAILED" | tee -a /tmp/log.txt; exit 1; }
+          printf '%s' "$KEY" | npx --yes wrangler@3 secret put REPORT_CRON_KEY 2>&1 | tail -5 | tee -a /tmp/log.txt
+
+      - name: Check schedules on Cloudflare
+        env:
+          T: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          A: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "schedules:" | tee -a /tmp/log.txt
+          curl -s "https://api.cloudflare.com/client/v4/accounts/$A/workers/scripts/gershon-socialtracking-cron/schedules" -H "Authorization: Bearer $T" | jq -c '{success,errors,schedules:.result.schedules}' | tee -a /tmp/log.txt
+          echo "secrets:" | tee -a /tmp/log.txt
+          curl -s "https://api.cloudflare.com/client/v4/accounts/$A/workers/scripts/gershon-socialtracking-cron/secrets" -H "Authorization: Bearer $T" | jq -c '{success,errors,names:[.result[]?.name]}' | tee -a /tmp/log.txt
+          cat /tmp/log.txt >> $GITHUB_STEP_SUMMARY
+
+      - name: Post result to the jobs log issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BODY="Social Tracking cron deploy run ${{ github.run_id }} ($(date -u +%FT%TZ)):
+          \`\`\`
+          $(cat /tmp/log.txt 2>/dev/null | sed 's/[A-Za-z0-9_-]\{40,\}/[redacted]/g' || echo 'no log')
+          \`\`\`"
+          gh issue comment 5 -R gershonconsulting/social -b "$BODY"
