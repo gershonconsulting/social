@@ -1,0 +1,79 @@
+# Full backup of the Social database (the data collected by social.gershon.ai).
+# Requested by Olivier 2026-10-26 before the three-platform split: "make sure we
+# don't lose the data we collected". READ-ONLY on the database: pg_dump + counts.
+#
+# Output (encrypted with AES-256, passphrase = the CF_NEXTAUTH_SECRET repo secret):
+#   1. Cloudflare R2 bucket "gershon-backups", key social/<UTC timestamp>.dump.enc  (private)
+#   2. GitHub Actions artifact "social-db-<timestamp>" (encrypted; 90 days) as a second copy
+# plus a per-table row-count table printed in the run log and saved next to the dump.
+# Restore: openssl enc -d -aes-256-cbc -pbkdf2 -in X.dump.enc -out X.dump -pass pass:<secret>
+#          pg_restore --no-owner -d <target db url> X.dump
+name: Backup Social database
+
+on:
+  push:
+    branches:
+      - 'backup/**'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stamp
+        id: s
+        run: echo "ts=$(date -u +%Y%m%dT%H%M%SZ)" >> $GITHUB_OUTPUT
+
+      - name: Dump (read-only) and count rows
+        env:
+          DB: ${{ secrets.CF_DATABASE_URL }}
+        run: |
+          mkdir -p out
+          # Match the server's major version
+          V=$(docker run --rm postgres:17 psql "$DB" -tAc "show server_version_num" | cut -c1-2)
+          echo "server major: $V"
+          IMG=postgres:${V:-17}
+          docker run --rm -v "$PWD/out:/out" $IMG pg_dump "$DB" --format=custom --no-owner --no-privileges --file=/out/social.dump
+          ls -la out
+          docker run --rm $IMG psql "$DB" -tA -F$'\t' -c "
+            select table_name,
+                   (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', table_schema, table_name), false, true, '')))[1]::text::bigint
+            from information_schema.tables
+            where table_schema='public' and table_type='BASE TABLE'
+            order by 1" > out/row-counts.tsv
+          echo "### Row counts (public schema)"; column -t -s$'\t' out/row-counts.tsv
+          echo "TOTAL ROWS: $(awk -F'\t' '{s+=$2} END {print s}' out/row-counts.tsv)"
+          # Prove the dump is readable
+          docker run --rm -v "$PWD/out:/out" $IMG pg_restore --list /out/social.dump | tail -n +1 | wc -l | xargs echo "objects in dump:"
+
+      - name: Encrypt
+        env:
+          K: ${{ secrets.CF_NEXTAUTH_SECRET }}
+        run: |
+          cd out
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in social.dump -out social-${{ steps.s.outputs.ts }}.dump.enc -pass env:K
+          rm social.dump
+          sha256sum social-${{ steps.s.outputs.ts }}.dump.enc | tee social-${{ steps.s.outputs.ts }}.sha256
+          cp row-counts.tsv row-counts-${{ steps.s.outputs.ts }}.tsv
+          ls -la
+
+      - name: Copy 1 — Cloudflare R2 (private bucket)
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx --yes wrangler@3 r2 bucket create gershon-backups 2>&1 | tail -2 || true
+          for f in out/social-*.dump.enc out/social-*.sha256 out/row-counts-*.tsv; do
+            npx --yes wrangler@3 r2 object put "gershon-backups/social/$(basename $f)" --file "$f" --remote 2>&1 | tail -1
+          done
+
+      - name: Copy 2 — GitHub artifact (encrypted)
+        uses: actions/upload-artifact@v4
+        with:
+          name: social-db-${{ steps.s.outputs.ts }}
+          path: |
+            out/social-*.dump.enc
+            out/social-*.sha256
+            out/row-counts-*.tsv
+          retention-days: 90
