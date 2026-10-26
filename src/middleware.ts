@@ -57,7 +57,12 @@ const MACHINE_PATHS = [
  * Exact machine routes (no prefix match). /api/matrix-stats — the weekly Client
  * Platform Matrix email; the route checks the SHA-256 of its own secret.
  */
-const MACHINE_EXACT = ["/api/matrix-stats"];
+const MACHINE_EXACT = [
+  "/api/matrix-stats",
+  // talkingpoints.gershon.ai email relay — the route reads the queued email back
+  // from Talking Points itself (one-time id), so it needs no session.
+  "/api/relay/talkingpoints",
+];
 
 /**
  * v4.65.0 — Social is a COLLECTION platform only (Olivier, 2026-10-26): it
