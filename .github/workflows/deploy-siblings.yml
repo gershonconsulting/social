@@ -1,0 +1,114 @@
+# Deploys the two internal platforms split out of Social (2026-10-26):
+#   branch deploy/publish        -> gershonconsulting/publish@main        -> Pages gershon-publish        -> publish.gershon.ai
+#   branch deploy/socialtracking -> gershonconsulting/socialtracking@main -> Pages gershon-socialtracking -> socialtracking.gershon.ai
+# It lives in the social repo because this repo holds the shared secrets.
+# It NEVER runs prisma db push: Social stays the only schema owner (spec section 9).
+name: Deploy sibling platform
+
+on:
+  push:
+    branches:
+      - 'deploy/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pick the platform from the branch name
+        id: p
+        run: |
+          APP="${GITHUB_REF_NAME#deploy/}"
+          case "$APP" in
+            publish)        echo "project=gershon-publish"        >> $GITHUB_OUTPUT; echo "host=publish.gershon.ai"        >> $GITHUB_OUTPUT; echo "li_id=86ju2np6725xfp" >> $GITHUB_OUTPUT ;;
+            socialtracking) echo "project=gershon-socialtracking" >> $GITHUB_OUTPUT; echo "host=socialtracking.gershon.ai" >> $GITHUB_OUTPUT; echo "li_id=78dytmirdwt7l5" >> $GITHUB_OUTPUT ;;
+            *) echo "Unknown platform $APP"; exit 1 ;;
+          esac
+          echo "app=$APP" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+        with:
+          repository: gershonconsulting/${{ steps.p.outputs.app }}
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client (no schema push)
+        run: npx prisma generate
+
+      - name: Build for Cloudflare Pages
+        run: npx @cloudflare/next-on-pages
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_APP_VERSION: ${{ github.sha }}
+          NEXT_PUBLIC_BUILD_DATE: ${{ github.event.head_commit.timestamp }}
+          NEXT_PUBLIC_BUILD_NUMBER: ${{ github.run_number }}
+
+      - name: Create the Pages project if missing
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler pages project create ${{ steps.p.outputs.project }} --production-branch main || echo "already exists"
+
+      - name: Set Pages secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PUB_LI: ${{ secrets.PUBLISH_LINKEDIN_CLIENT_SECRET }}
+          TRK_LI: ${{ secrets.TRACKING_LINKEDIN_CLIENT_SECRET }}
+          V_DB: ${{ secrets.CF_DATABASE_URL }}
+          V_NA: ${{ secrets.CF_NEXTAUTH_SECRET }}
+          V_CRON: ${{ secrets.CF_CRON_SECRET }}
+          V_CAMP: ${{ secrets.CF_CAMPAIGN_API_KEY }}
+          V_RESEND: ${{ secrets.RESEND_API_KEY }}
+          V_TO: ${{ vars.DIGEST_TO || 'oattia@gmail.com' }}
+          V_FROM: ${{ vars.DIGEST_FROM || 'onboarding@resend.dev' }}
+        run: |
+          P=${{ steps.p.outputs.project }}
+          H=https://${{ steps.p.outputs.host }}
+          put() { printf '%s' "$2" | npx wrangler pages secret put "$1" --project-name "$P" > /dev/null && echo "set $1"; }
+          put DATABASE_URL "$V_DB"
+          put NEXTAUTH_URL "$H"
+          put NEXT_PUBLIC_APP_URL "$H"
+          put NEXTAUTH_SECRET "$V_NA"
+          put CRON_SECRET "$V_CRON"
+          put CAMPAIGN_API_KEY "$V_CAMP"
+          put RESEND_API_KEY "$V_RESEND"
+          put DIGEST_TO "$V_TO"
+          put DIGEST_FROM "$V_FROM"
+          put LINKEDIN_CLIENT_ID "${{ steps.p.outputs.li_id }}"
+          if [ "${{ steps.p.outputs.app }}" = "publish" ]; then LI="$PUB_LI"; else LI="$TRK_LI"; fi
+          if [ -n "$LI" ]; then put LINKEDIN_CLIENT_SECRET "$LI"; else echo "WARNING: LinkedIn client secret for this app is not in GitHub secrets yet"; fi
+
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler pages deploy .vercel/output/static --project-name ${{ steps.p.outputs.project }} --branch main --commit-dirty=true
+
+      - name: Attach the custom domain (best effort)
+        continue-on-error: true
+        env:
+          T: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          A: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          H=${{ steps.p.outputs.host }}; P=${{ steps.p.outputs.project }}
+          echo "Pages domain:"; curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/$A/pages/projects/$P/domains" -H "Authorization: Bearer $T" -H "Content-Type: application/json" --data "{\"name\":\"$H\"}" | jq -c '{success,errors,status:.result.status}'
+          Z=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=gershon.ai" -H "Authorization: Bearer $T" | jq -r '.result[0].id // empty')
+          echo "zone found: ${Z:+yes}"
+          if [ -n "$Z" ]; then
+            echo "DNS record:"; curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$Z/dns_records" -H "Authorization: Bearer $T" -H "Content-Type: application/json" --data "{\"type\":\"CNAME\",\"name\":\"${H%%.gershon.ai}\",\"content\":\"$P.pages.dev\",\"proxied\":true}" | jq -c '{success,errors}'
+          fi
+          sleep 20
+          echo "Domain status:"; curl -s "https://api.cloudflare.com/client/v4/accounts/$A/pages/projects/$P/domains/$H" -H "Authorization: Bearer $T" | jq -c '{success,status:.result.status,validation:.result.validation_data.status}'
+
+      - name: Smoke test
+        run: |
+          sleep 15
+          echo "pages.dev:"; curl -s https://${{ steps.p.outputs.project }}.pages.dev/api/ping; echo
+          echo "domain:";   curl -s --max-time 20 https://${{ steps.p.outputs.host }}/api/ping || echo "(domain not live yet)"; echo
