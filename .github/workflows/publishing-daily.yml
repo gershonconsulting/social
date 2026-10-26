@@ -17,7 +17,7 @@ jobs:
           response=$(curl -s -o /tmp/out.json -w "%{http_code}" \
             -X POST \
             -H "Authorization: Bearer ${{ secrets.CF_CRON_SECRET }}" \
-            "https://social.gershon.ai/api/cron/publishing-daily")
+            "https://publish.gershon.ai/api/cron/publishing-daily")
           echo "HTTP $response"
           head -c 3000 /tmp/out.json; echo ""
           if [ "$response" != "200" ]; then exit 1; fi

@@ -4,12 +4,13 @@
  */
 import { primaryOrgId } from "../monthly/data";
 import { buildPostingReport, renderPosting, postingSubject } from "./posting";
-import { buildContentReport, renderContent, contentSubject } from "./content";
 import { buildCompetitiveReport, renderCompetitive, competitiveSubject } from "./competitive";
 import { buildIntelligenceReport, renderIntelligence, intelligenceSubject, INTEL_TO } from "./intelligence";
 import { deliver, type DeliveryResult, type OpsKind } from "./shell";
 
-export const OPS_KINDS: OpsKind[] = ["posting", "content", "competitive", "intelligence"];
+// v4.65.0: "content" (Content Ready — approved posts waiting to publish) left
+// with publishing; Publish's own daily inventory email covers it.
+export const OPS_KINDS: OpsKind[] = ["posting", "competitive", "intelligence"];
 
 /** Who each report goes to by default: everything to report@, Intelligence to sales@. */
 export function defaultTo(kind: OpsKind): string | undefined {
@@ -23,10 +24,6 @@ export async function buildOps(kind: OpsKind, orgId?: string, opts: { refresh?: 
   if (kind === "posting") {
     const r = await buildPostingReport(org);
     return { kind, dayKey: r.dayKey, subject: postingSubject(r), html: renderPosting(r), data: r };
-  }
-  if (kind === "content") {
-    const r = await buildContentReport(org);
-    return { kind, dayKey: r.dayKey, subject: contentSubject(r), html: renderContent(r), data: r };
   }
   if (kind === "intelligence") {
     const r = await buildIntelligenceReport(org, opts);

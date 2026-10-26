@@ -14,7 +14,10 @@
  */
 import prisma from "@/lib/db";
 import { getAISettings, runChat } from "@/lib/content/provider";
-import { PUBLISHING_CLIENT_TYPES } from "@/lib/publishing";
+import type { ClientType } from "@prisma/client";
+
+/** Our own work: campaign clients + Gershon itself (was lib/publishing, removed in v4.65.0). */
+const PUBLISHING_CLIENT_TYPES = ["CAMPAIGN", "INTERNAL"] as ClientType[];
 import { etMidnight } from "../et-days";
 import { buildCompetitiveReport, type CompetitiveReport } from "./competitive";
 import { banner, esc, fmt, kpis, page, pill, section, SITE, type Level } from "./shell";

@@ -16,12 +16,13 @@
  * back, all for CAMPAIGN companies only:
  *
  *   window selector (Last week / Last month / This month / This year / All time)
- *   → health strip (collection · pace · runway · reviews · failed posts)
+ *   → three answers (pace · post success · efficiency)
  *   → 4 KPIs with change vs the previous period and a trend line
  *   → posts per week, 13 weeks, LinkedIn vs X, against the weekly objective
- *   → publishing pipeline + next scheduled posts
+ *   (v4.65.0: content stock + publishing pipeline left for Publish —
+ *    Social only collects and understands.)
  *   → company scoreboard (posts vs objective, trend, engagement, followers
- *     per company — never summed across companies —, content runway, status)
+ *     per company — never summed across companies —, status)
  *   → top posts of the window + data collection detail
  *
  * Hand-drawn SVG only — no charting library on this edge-rendered page.
@@ -31,7 +32,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   CheckCircle2, XCircle, ArrowUpRight, ArrowDownRight, Minus,
-  Heart, MessageCircle, Repeat2, Eye, ExternalLink, CalendarClock,
+  Heart, MessageCircle, Repeat2, Eye, ExternalLink,
 } from "lucide-react";
 import type { DashData, DashCompany } from "./dashboard-overview";
 
@@ -149,7 +150,6 @@ export function DashboardOverviewClient({ data }: { data: DashData }) {
   const [w, setW] = useState<W>("tm");
   const { companies, today } = data;
   const mk = monthKey(today);
-  const nextMk = addMonths(mk, 1);
 
   const firstMonth = useMemo(
     () => (data.months.length ? data.months.reduce((a, r) => (r[2] < a ? r[2] : a), data.months[0][2]) : null),
@@ -217,43 +217,6 @@ export function DashboardOverviewClient({ data }: { data: DashData }) {
 
     return { cur, prev, tot: sum(cur), totPrev: prev ? sum(prev) : null, weeks, perWeek, weekPct, weekDue };
   }, [data.days, data.cover, companies, range, today]);
-
-  /* ── 2. Stock: content ready for the rest of this month and next month ── */
-  const stock = useMemo(() => {
-    const tomorrow = addDays(today, 1);
-    const restDue = weekdays(tomorrow, `${mk}-${daysInMonth(mk)}`);
-    const nextDue = weekdays(`${nextMk}-01`, `${nextMk}-${daysInMonth(nextMk)}`);
-    const READY = new Set(["APPROVED", "SCHEDULED"]);
-    const rows = companies.map(() => ({
-      restReady: new Set<string>(), nextReady: new Set<string>(),
-      nextReview: 0, nextDrafts: 0, undated: 0, undatedOther: 0,
-    }));
-    for (const [c, status, d] of data.stock) {
-      const r = rows[c];
-      if (!d) { if (status === "APPROVED") r.undated++; else r.undatedOther++; continue; }
-      const inNext = monthKey(d) === nextMk;
-      const inRest = d >= tomorrow && monthKey(d) === mk;
-      if (READY.has(status)) {
-        if (inNext && isWeekday(d)) r.nextReady.add(d);
-        if (inRest && isWeekday(d)) r.restReady.add(d);
-      } else if (inNext) {
-        if (status === "DRAFT") r.nextDrafts++; else r.nextReview++;
-      }
-    }
-    const out = rows.map((r) => ({
-      rest: r.restReady.size, next: r.nextReady.size, nextReview: r.nextReview, nextDrafts: r.nextDrafts,
-      undated: r.undated, undatedOther: r.undatedOther,
-    }));
-    const nextReadyTot = out.reduce((s, r) => s + r.next, 0);
-    return {
-      restDue, nextDue, rows: out,
-      nextPct: nextDue && companies.length ? nextReadyTot / (nextDue * companies.length) : 0,
-      nextReadyTot,
-      nextReviewTot: out.reduce((s, r) => s + r.nextReview, 0),
-      nextDraftsTot: out.reduce((s, r) => s + r.nextDrafts, 0),
-      undatedTot: out.reduce((s, r) => s + r.undated, 0),
-    };
-  }, [data.stock, companies, today, mk, nextMk]);
 
   /* ── 3. Performance in the window ── */
   const perf = useMemo(() => {
@@ -385,8 +348,8 @@ export function DashboardOverviewClient({ data }: { data: DashData }) {
         </div>
       </div>
 
-      {/* The four answers */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* The three answers */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <Answer
           n={1}
           q="How far from 100%?"
@@ -399,15 +362,6 @@ export function DashboardOverviewClient({ data }: { data: DashData }) {
         />
         <Answer
           n={2}
-          q={`Stock for ${monthLabel(nextMk, true)}`}
-          value={`${Math.round(stock.nextPct * 100)}%`}
-          tone={pctTone(stock.nextPct)}
-          meter={stock.nextPct}
-          line={<>{stock.nextReadyTot} of {stock.nextDue * companies.length} weekdays have approved content</>}
-          sub={`${stock.nextReviewTot} with client · ${stock.nextDraftsTot} drafts${stock.undatedTot ? ` · ${stock.undatedTot} approved, no date` : ""}`}
-        />
-        <Answer
-          n={3}
           q="How successful are the posts?"
           value={epp.toFixed(1)}
           unit="engagements / post"
@@ -416,7 +370,7 @@ export function DashboardOverviewClient({ data }: { data: DashData }) {
           deltaLabel={range.prevLabel}
         />
         <Answer
-          n={4}
+          n={3}
           q="Getting more efficient?"
           value={eff.eppChange === null ? "—" : `${eff.eppChange >= 0 ? "+" : ""}${Math.round(eff.eppChange * 100)}%`}
           tone={eff.eppChange === null ? undefined : eff.eppChange >= 0 ? "#2E7D4F" : "#D92D20"}
@@ -477,51 +431,10 @@ export function DashboardOverviewClient({ data }: { data: DashData }) {
         </div>
       </section>
 
-      {/* 2 — Stock */}
-      <section className="gx-card overflow-hidden">
-        <SectionHead n={2} title="Content in stock" sub={`Approved or scheduled posts on a weekday · ${stock.restDue} weekdays left in ${monthLabel(mk, true)}, ${stock.nextDue} in ${monthLabel(nextMk, true)}`}
-          action={<Link href="/publishing" className="text-xs font-medium text-red-700 hover:underline">Open Publishing</Link>} />
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[760px]">
-            <thead>
-              <tr className="text-left text-xs text-gray-500 bg-gray-50">
-                <th className="px-5 py-2.5 font-medium">Company</th>
-                <th className="px-3 py-2.5 font-medium">Rest of {monthLabel(mk, true)}</th>
-                <th className="px-3 py-2.5 font-medium">{monthLabel(nextMk, true)} ready</th>
-                <th className="px-3 py-2.5 font-medium">{monthLabel(nextMk, true)} in progress</th>
-                <th className="px-3 py-2.5 font-medium">Approved, no date</th>
-                <th className="px-5 py-2.5 font-medium">Still to produce for {monthLabel(nextMk, true)}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {companies.map((co, i) => ({ co, i, s: stock.rows[i] }))
-                .sort((a, b) => a.s.next - b.s.next)
-                .map(({ co, s }) => {
-                  const toMake = Math.max(0, stock.nextDue - s.next - s.nextReview - s.nextDrafts - s.undated);
-                  return (
-                    <tr key={co.id} className="border-t border-gray-100 hover:bg-gray-50">
-                      <td className="px-5 py-3"><div className="flex items-center gap-2.5"><Logo co={co} /><span className="font-medium text-gray-900">{co.name}</span></div></td>
-                      <td className="px-3 py-3"><Meter num={s.rest} den={stock.restDue} /></td>
-                      <td className="px-3 py-3"><Meter num={s.next} den={stock.nextDue} /></td>
-                      <td className="px-3 py-3 text-xs text-gray-700">{s.nextReview} with client · {s.nextDrafts} drafts</td>
-                      <td className="px-3 py-3 gx-num text-gray-700">{s.undated || "—"}</td>
-                      <td className="px-5 py-3">
-                        {toMake === 0
-                          ? <span className="gx-pill bg-green-50 text-green-800"><CheckCircle2 size={11} /> Covered</span>
-                          : <span className="gx-pill bg-red-50 text-red-700">{toMake} posts</span>}
-                      </td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
       {/* 3 — Performance */}
       <div className="grid gap-4 lg:grid-cols-5">
         <section className="gx-card overflow-hidden lg:col-span-3">
-          <SectionHead n={3} title="How successful the posts are" sub={`${windowLabel} · engagement = likes + comments + reposts · followers are per company, change over 30 days`} />
+          <SectionHead n={2} title="How successful the posts are" sub={`${windowLabel} · engagement = likes + comments + reposts · followers are per company, change over 30 days`} />
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[600px]">
               <thead>
@@ -602,7 +515,7 @@ export function DashboardOverviewClient({ data }: { data: DashData }) {
 
       {/* 4 — Efficiency over the campaign */}
       <section className="gx-card overflow-hidden">
-        <SectionHead n={4} title="Efficiency over the campaign" sub="Month by month since each campaign started · start = first 3 full months, now = last 3 full months" />
+        <SectionHead n={3} title="Efficiency over the campaign" sub="Month by month since each campaign started · start = first 3 full months, now = last 3 full months" />
         <div className="grid lg:grid-cols-5">
           <div className="lg:col-span-3 overflow-x-auto">
             <table className="w-full text-sm min-w-[640px]">
@@ -657,31 +570,8 @@ export function DashboardOverviewClient({ data }: { data: DashData }) {
         </div>
       </section>
 
-      {/* Operations */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <section className="gx-card p-5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold text-gray-900">Publishing pipeline</h2>
-            <Link href="/publishing" className="text-xs font-medium text-red-700 hover:underline">Open</Link>
-          </div>
-          <Pipeline p={data.pipeline} />
-        </section>
-        <section className="gx-card p-5">
-          <div className="text-base font-semibold text-gray-900 flex items-center gap-1.5"><CalendarClock size={15} /> Next up</div>
-          {data.upcoming.length === 0 ? <div className="text-sm text-gray-500 mt-3">Nothing scheduled.</div> : (
-            <ul className="space-y-2.5 mt-3">
-              {data.upcoming.slice(0, 5).map((u, k) => (
-                <li key={k} className="flex gap-2.5 text-sm">
-                  <div className="w-12 shrink-0 text-xs text-gray-500 gx-num pt-0.5">{new Date(u.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-medium text-gray-900 flex items-center gap-1.5"><Dot c={u.platform === "LINKEDIN" ? C_LI : C_X} /> {companies[u.c]?.name}</div>
-                    <div className="text-xs text-gray-500 truncate">{u.text}</div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+      {/* Operations — v4.65.0: the publishing pipeline left for Publish. */}
+      <div className="grid gap-4">
         <section className="gx-card p-5">
           <h2 className="text-base font-semibold text-gray-900">Data collection</h2>
           <p className="text-xs text-gray-500 mt-0.5 mb-3">Last run {relTime(data.lastUpdate)}</p>
@@ -926,29 +816,4 @@ function Spark({ values, bars }: { values: number[]; bars?: boolean }) {
   );
 }
 
-function Pipeline({ p }: { p: DashData["pipeline"] }) {
-  const stages = [
-    { label: "Drafts", n: p.drafts, c: "#D4D0C7" },
-    { label: "With client", n: p.review, c: "#E65A4B" },
-    { label: "Changes asked", n: p.changes, c: "#F59E0B" },
-    { label: "Approved", n: p.approved, c: "#86C79A" },
-    { label: "Scheduled", n: p.scheduled, c: "#2E7D4F" },
-    { label: "Published 30d", n: p.published30, c: "#15171C" },
-  ];
-  const max = Math.max(1, ...stages.map((s) => s.n));
-  return (
-    <div className="mt-4 space-y-2">
-      {stages.map((s) => (
-        <div key={s.label} className="flex items-center gap-2 text-xs">
-          <div className="w-24 text-gray-600 shrink-0">{s.label}</div>
-          <div className="flex-1 h-4 bg-gray-50 rounded overflow-hidden">
-            <div className="h-full rounded" style={{ width: `${(s.n / max) * 100}%`, background: s.c, minWidth: s.n ? 4 : 0 }} />
-          </div>
-          <div className="w-8 text-right gx-num font-medium text-gray-900">{s.n}</div>
-        </div>
-      ))}
-      {p.failed > 0 && <div className="text-xs font-medium text-red-700 pt-1">{p.failed} failed / missed in the last 30 days</div>}
-    </div>
-  );
-}
 
