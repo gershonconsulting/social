@@ -51,6 +51,20 @@ Reporting     : the daily Phantombuster digest goes to
 
 3. RECENTLY DONE  [DONE]
 ----------------------------------------------------------------
+- 2026-10-26 v4.64.0 — Claude scheduled tasks moved into the app (GitHub Actions
+  schedules in .github/workflows; verification output on issue #5):
+  [17] pb-import-daily.yml — 07:00 New York daily: GET /api/cron/pb-import-latest
+       ?platform=TWITTER then ?platform=LINKEDIN, sequential (UTC slots 11:00 EDT /
+       12:00 EST, offset guard keeps one). Claude task #17 can be switched off. (status below)
+  [19] missing-today.yml + POST /api/report/missing-today — 09:00 New York daily (UTC
+       13:00 EDT / 14:00 EST): emails social@gershonconsulting.com from
+       "GC Social <reports@gershon.ai>", subject "[19] Social — still missing today: N — date";
+       ❌ line = link unresolvable / page does not exist, 🔒 line = just blocked. Nothing
+       sent when N = 0; one email per NY day (Setting missing_today_sent). Cloud scrape dropped.
+  deploy-socialtracking-cron.yml — deploys Worker gershon-socialtracking-cron
+       (socialtracking repo cron/) on push to branch deploy-cron/socialtracking.
+  deploy.yml: "prisma db push" is now skipped when the commit message contains
+       [skip-db-push] (code-only deploys must not touch the shared Neon schema).
 - Per-computer 'Collecting session ON/OFF' viewer mode added
   (2026-09-09), 5 files, shipped as a single PR to avoid five
   production deploys. Card sits in Settings, above the captured-

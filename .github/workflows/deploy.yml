@@ -24,7 +24,10 @@ jobs:
       - name: Generate Prisma Client
         run: npx prisma generate
 
+      # Skipped when the pushed commit message contains [skip-db-push]: code-only
+      # changes must not touch the shared Neon schema (spec section 9).
       - name: Push Prisma schema to database
+        if: ${{ !contains(github.event.head_commit.message, '[skip-db-push]') }}
         run: npx prisma db push --accept-data-loss
         env:
           DATABASE_URL: ${{ secrets.CF_DATABASE_URL }}

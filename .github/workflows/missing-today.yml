@@ -1,0 +1,69 @@
+name: "[19] Social still missing today"
+
+# Replaces Claude scheduled task #19 "Social daily cloud scrape" (2026-10-26).
+# The scrape is dropped (LinkedIn / X block cloud IPs). Instead the app emails
+# social@gershonconsulting.com the (client, platform) pairs with no post today:
+#   subject "[19] Social — still missing today: <N> — <YYYY-MM-DD>", from GC Social <reports@gershon.ai>.
+# Nothing is sent when N = 0.
+#
+# Owner: Social (collection status). Destination: POST https://social.gershon.ai/api/report/missing-today
+#   (Bearer CF_CRON_SECRET = Pages CRON_SECRET). Writes: Setting "missing_today_sent" only.
+# Schedule: 09:00 America/New_York — slots 13:00 UTC (EDT, -0400) and 14:00 UTC (EST, -0500);
+#   the offset guard keeps exactly one. Dedup: one email per New York day (route-side), so a retry
+#   or manual run never double-sends. Retry: one retry after 60 s on non-200.
+on:
+  schedule:
+    - cron: '0 13 * * *'
+    - cron: '0 14 * * *'
+  workflow_dispatch:
+  push:
+    branches: ['verify/missing-today']
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep only the 09:00 New York slot
+        id: g
+        run: |
+          OFF=$(TZ=America/New_York date +%z)
+          S="${{ github.event.schedule }}"
+          RUN=yes
+          if [ -n "$S" ]; then
+            if [ "$S" = "0 13 * * *" ] && [ "$OFF" != "-0400" ]; then RUN=no; fi
+            if [ "$S" = "0 14 * * *" ] && [ "$OFF" != "-0500" ]; then RUN=no; fi
+          fi
+          echo "slot='$S' ny_offset=$OFF run=$RUN"
+          echo "run=$RUN" >> $GITHUB_OUTPUT
+
+      - name: POST /api/report/missing-today
+        if: steps.g.outputs.run == 'yes'
+        env:
+          KEY: ${{ secrets.CF_CRON_SECRET }}
+        run: |
+          : > /tmp/log.txt
+          for TRY in 1 2; do
+            CODE=$(curl -sS -m 120 -o /tmp/out.json -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer $KEY" \
+              "https://social.gershon.ai/api/report/missing-today" || echo 000)
+            echo "try $TRY: HTTP $CODE $(head -c 1500 /tmp/out.json)" | tee -a /tmp/log.txt
+            [ "$CODE" = "200" ] && break
+            [ $TRY = 1 ] && sleep 60
+          done
+          cat /tmp/log.txt >> $GITHUB_STEP_SUMMARY
+          test "$CODE" = "200"
+
+      - name: Post verification result (verify branch only)
+        if: always() && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BODY="[19] missing-today verification run ${{ github.run_id }} ($(date -u +%FT%TZ)):
+          \`\`\`
+          $(cat /tmp/log.txt 2>/dev/null || echo 'no log')
+          \`\`\`"
+          gh issue comment 5 -R ${{ github.repository }} -b "$BODY"
