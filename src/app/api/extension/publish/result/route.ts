@@ -13,8 +13,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { deliveryScope, resolvePublishCaller } from "@/lib/publish-caller";
 import prisma from "@/lib/db-raw";
 import {
-  MAX_ATTEMPTS, NET_LABEL, addEvent, alertTeam, esc, getPublisherState, quote, rollUp, savePublisherState, SITE, type Net,
+  MAX_ATTEMPTS, NET_LABEL, addEvent, alertTeam, esc, getPublisherState, quote, rollUp, savePublisherState, type Net,
 } from "@/lib/publishing";
+import { publishLink } from "@/lib/publishing-mail";
 import { learnFromResult, validBrowserId } from "@/lib/publish-browsers";
 
 function postIdFrom(url: string | null | undefined): string | null {
@@ -65,7 +66,8 @@ export async function POST(req: NextRequest) {
           `A ${NET_LABEL[d.platform as Net] ?? d.platform} post failed to publish`,
           `<p>After ${d.attempts} tries this post could not be published on ${NET_LABEL[d.platform as Net] ?? d.platform}.</p>${quote(d.text)}
            <p>Reason: ${esc(error || "unknown")}</p><p>Nothing was posted. Fix the cause, then press Retry.</p>`,
-          `${SITE}/publishing/calendar`,
+          "POST_FAILED_BROWSER",
+          { href: publishLink("/publishing/calendar", { client: d.clientId, item: d.contentId }), label: "Open the post in Publish" },
         );
       }
     }

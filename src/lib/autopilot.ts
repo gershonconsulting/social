@@ -35,8 +35,9 @@ import prisma from "@/lib/db-raw";
 import { getAIBinding, getAISettings, runChat } from "@/lib/content/provider";
 import { objectivesFor, saveObjectives } from "@/lib/campaigns/objectives";
 import {
-  addEvent, alertTeam, destinationsOf, esc, notifyReadyForPublishing, sendMail, validatorOf, getSettings, getTarget, LINKEDIN_MAX, MEDIA_SELECT, reviewToken, reviewUrl, scheduleItem, SITE, xLength, xMax,
+  addEvent, alertTeam, destinationsOf, esc, notifyReadyForPublishing, sendMail, validatorOf, getSettings, getTarget, LINKEDIN_MAX, MEDIA_SELECT, reviewToken, reviewUrl, scheduleItem, xLength, xMax,
 } from "@/lib/publishing";
+import { publishLink } from "@/lib/publishing-mail";
 import { submitForReview } from "@/lib/publishing-review";
 import { aboutOf } from "@/lib/reports/ops/intelligence";
 import { clean, fitTo } from "@/lib/x-fit";
@@ -497,6 +498,8 @@ async function submitMonth(orgId: string, s: AutopilotSettings, w: PlanWindow): 
        When it is validated, social@gershonconsulting.com is told it is ready for publishing.</p>
        ${skipped.length ? `<p style="color:#b45309;font-size:13px">Not sent: ${esc(skipped.slice(0, 5).join(" · "))}</p>` : ""}`,
       { href: link, label: "Validate the content" },
+      "AUTOPILOT_MONTH",
+      v.isTeam ? "internal" : "client",
     );
     emailed = emailed || ok;
   }
@@ -557,7 +560,7 @@ async function revise(orgId: string, s: AutopilotSettings, budget: number): Prom
     }
   }
   if (n) {
-    await alertTeam(orgId, `Autopilot rewrote ${n} post${n === 1 ? "" : "s"} from your comments`, `<p>${n} post${n === 1 ? " is" : "s are"} back for your review. Unanswered, ${n === 1 ? "it is" : "they are"} approved automatically in ${s.autoApproveHours} hours.</p>`, `${SITE}/publishing`);
+    await alertTeam(orgId, `Autopilot rewrote ${n} post${n === 1 ? "" : "s"} from your comments`, `<p>${n} post${n === 1 ? " is" : "s are"} back for your review. Unanswered, ${n === 1 ? "it is" : "they are"} approved automatically in ${s.autoApproveHours} hours.</p>`, "AUTOPILOT_REWROTE", { href: publishLink("/publishing"), label: "Review them in Publish" });
   }
   return n;
 }
@@ -698,7 +701,7 @@ async function runStepLocked(orgId: string, budget: number, now: Date): Promise<
     const key = "autopilot_problem_day";
     const today = etYmd(now);
     if ((await readSetting(orgId, key)) !== today) {
-      if (await alertTeam(orgId, "Autopilot could not schedule some approved posts", `<p>${base.problems.map(esc).join("<br>")}</p>`, `${SITE}/publishing/accounts`)) {
+      if (await alertTeam(orgId, "Autopilot could not schedule some approved posts", `<p>${base.problems.map(esc).join("<br>")}</p>`, "AUTOPILOT_SCHEDULE_FAILED", { href: publishLink("/publishing/accounts"), label: "Open Connections in Publish" })) {
         await writeSetting(orgId, key, today);
       }
     }

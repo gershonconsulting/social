@@ -9,8 +9,9 @@
 import prisma from "@/lib/db-raw";
 import type { ReviseResult } from "@/lib/publishing-revise";
 import {
-  addEvent, alertTeam, mediaCount, esc, getSettings, getTarget, notifyReadyForPublishing, quote, reviewToken, reviewUrl, sendMail, textProblems, SITE, validatorOf,
+  addEvent, alertTeam, mediaCount, esc, getSettings, getTarget, notifyReadyForPublishing, quote, reviewToken, reviewUrl, sendMail, textProblems, validatorOf,
 } from "@/lib/publishing";
+import { publishLink } from "@/lib/publishing-mail";
 
 /** Default batch name, CloudCampaign-style: "<Company> — <Month YYYY>". */
 export function batchName(client: string, when = new Date()): string {
@@ -47,6 +48,8 @@ export async function submitForReview(
       `<p>${hi}</p><p>A new post is ready for your review${item.version > 1 ? ` (version ${item.version})` : ""}:</p>${quote(item.text)}
        <p>You can comment, ask for changes, or approve it — nothing is published before you approve.</p>`,
       { href: reviewUrl(token), label: "Review the post" },
+      "REVIEW_ONE",
+      v.isTeam ? "internal" : "client",
     );
   }
   return null;
@@ -102,6 +105,8 @@ export async function submitBatch(
         `<p>${hi}</p><p><b>${esc(batch)}</b> is ready for your review — ${sent.length} post${sent.length === 1 ? "" : "s"}:</p><ul>${list}</ul>
          <p>Approve them one by one or all at once, comment, or ask for changes. Nothing is published before you approve.</p>`,
         { href: reviewUrl(token), label: "Review the content" },
+        "REVIEW_BATCH",
+        v.isTeam ? "internal" : "client",
       );
     }
   }
@@ -144,7 +149,7 @@ export async function clientAction(
     // v4.55.0 — the comment becomes a new version of the post.
     const r = await reviseNow(orgId, item.id, text, who);
     if (out) out.revised = r;
-    await alertTeam(orgId, `${label} commented on a post`, `<p><b>${esc(who)}</b> (${esc(label)}) wrote:</p>${quote(text)}${revisedHtml(r, item.text)}`);
+    await alertTeam(orgId, `${label} commented on a post`, `<p><b>${esc(who)}</b> (${esc(label)}) wrote:</p>${quote(text)}${revisedHtml(r, item.text)}`, "CLIENT_COMMENTED", { href: publishLink("/publishing", { client: clientId, item: item.id }), label: "Open the post in Publish" });
     return null;
   }
   if (action === "request_changes") {
@@ -155,7 +160,7 @@ export async function clientAction(
     // v4.55.0 — the requested changes are written straight away as a new version.
     const r = await reviseNow(orgId, item.id, text, who);
     if (out) out.revised = r;
-    await alertTeam(orgId, `${label} asked for changes`, `<p><b>${esc(who)}</b> (${esc(label)}) asked for changes:</p>${quote(text)}${revisedHtml(r, item.text)}`);
+    await alertTeam(orgId, `${label} asked for changes`, `<p><b>${esc(who)}</b> (${esc(label)}) asked for changes:</p>${quote(text)}${revisedHtml(r, item.text)}`, "CLIENT_CHANGES", { href: publishLink("/publishing", { client: clientId, item: item.id }), label: "Open the post in Publish" });
     return null;
   }
   if (action === "approve") {

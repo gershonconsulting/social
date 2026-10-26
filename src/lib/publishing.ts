@@ -29,9 +29,9 @@
  */
 import type { ClientType } from "@prisma/client";
 import prisma from "@/lib/db-raw";
-import { resolveFrom } from "@/lib/email/sender";
 import { siteUrl } from "@/lib/site";
 import { withAuditBcc } from "@/lib/mail-bcc";
+import { PUBLISH_MAILS, PUBLISH_ORIGIN, PUBLISH_REPLY_TO, numberedSubject, publishFrom, publishHtml, publishLink, type MailAudience, type PubMail } from "@/lib/publishing-mail";
 
 export const SITE = siteUrl();
 
@@ -385,7 +385,8 @@ export async function reviewToken(orgId: string, clientId: string, rotate = fals
   return t;
 }
 export function reviewUrl(token: string): string {
-  return `${SITE}/review/${token}`;
+  // v4.65.0: the client's review page lives on Publish (same database, same token).
+  return `${PUBLISH_ORIGIN}/review/${token}`;
 }
 export async function resolveReviewToken(token: string): Promise<{ orgId: string; clientId: string } | null> {
   if (!/^[a-f0-9]{36}$/.test(token)) return null;
@@ -430,21 +431,34 @@ export async function teamRecipient(orgId: string): Promise<string | null> {
   return s.readyEmail || READY_EMAIL_DEFAULT;
 }
 
-export async function sendMail(to: string | null, subject: string, html: string, cta?: { href: string; label: string }): Promise<boolean> {
+/**
+ * Every Publish email goes through here (v4.65.0): numbered subject, sent from
+ * publish.gershon.ai, Publish header/footer and a direct link into the platform.
+ * `audience` overrides the catalogue's audience — a client validation email
+ * that goes to the team (no reviewer set) is internal.
+ */
+export async function sendMail(
+  to: string | null,
+  subject: string,
+  html: string,
+  cta: { href: string; label: string } | undefined,
+  mail: PubMail,
+  audience?: MailAudience,
+): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey || !to) return false;
-  const button = cta
-    ? `<p><a href="${cta.href}" style="display:inline-block;background:#111;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">${esc(cta.label)}</a></p>`
-    : "";
+  const aud = audience ?? PUBLISH_MAILS[mail].audience;
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify(withAuditBcc({
-        from: resolveFrom(),
+        from: publishFrom(aud),
+        reply_to: PUBLISH_REPLY_TO,
         to: [to],
-        subject,
-        html: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#111">${html}${button}</div>`,
+        subject: numberedSubject(mail, subject),
+        html: publishHtml(mail, aud, html, cta),
+        tags: [{ name: "platform", value: "publish" }, { name: "email", value: PUBLISH_MAILS[mail].no.replace("-", "_") }],
       })),
     });
     return r.ok;
@@ -453,8 +467,14 @@ export async function sendMail(to: string | null, subject: string, html: string,
   }
 }
 
-export async function alertTeam(orgId: string, subject: string, html: string, href = `${SITE}/publishing`): Promise<boolean> {
-  return sendMail(await teamRecipient(orgId), subject, html, { href, label: "Open Publishing" });
+export async function alertTeam(
+  orgId: string,
+  subject: string,
+  html: string,
+  mail: PubMail,
+  link: { href?: string; label?: string } = {},
+): Promise<boolean> {
+  return sendMail(await teamRecipient(orgId), subject, html, { href: link.href || publishLink(), label: link.label || "Open in Publish" }, mail, "internal");
 }
 
 export function quote(text: string): string {
@@ -602,7 +622,8 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
       `A ${NET_LABEL[d.platform as Net] ?? d.platform} post did not go out`,
       `<p>Scheduled for <b>${nyTime(d.scheduledAt)}</b> on <b>${NET_LABEL[d.platform as Net] ?? d.platform}</b> — <b>not published</b>.</p>${quote(d.text)}
        <p>Reason: ${esc(d.lastError || (d.clientId && routedEarly.has(d.clientId) ? "the client's own publishing browser (Chrome with the Social extension) was offline or signed out." : "the publishing browser (Chrome with the Social extension) was offline or signed out."))}</p>`,
-      `${SITE}/publishing/calendar`,
+      "POST_MISSED",
+      { href: publishLink("/publishing/calendar", { client: d.clientId, item: d.contentId }), label: "Open the post in Publish" },
     );
   }
 
@@ -620,7 +641,8 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
       orgId,
       `A ${NET_LABEL[d.platform as Net] ?? d.platform} post may not have gone out`,
       `<p>Publishing started ${nyTime(d.claimedAt)} and never reported back.</p>${quote(d.text)}<p>Check the network: if it is not there, press Retry.</p>`,
-      `${SITE}/publishing/calendar`,
+      "POST_STUCK",
+      { href: publishLink("/publishing/calendar", { client: d.clientId, item: d.contentId }), label: "Open the post in Publish" },
     );
   }
 
@@ -682,7 +704,8 @@ export async function sweep(orgId: string): Promise<{ missed: number; failed: nu
           `${label} signed you out — ${pending} scheduled post${pending === 1 ? " is" : "s are"} on hold`,
           `<p>${label} signed ${whose} out at <b>${nyTime(new Date(s.signedOutSince))}</b>.</p>
            <p>On the publishing computer the ${label} login page is already open — 1Password fills it in one click.</p>`,
-          `${SITE}/publishing/calendar`,
+          "SIGNED_OUT",
+          { href: publishLink("/publishing/calendar", { client: pubClient }), label: "Open the calendar in Publish" },
         )
       ) {
         s.emailedFor = s.signedOutSince;
@@ -728,7 +751,7 @@ export async function notifyReadyForPublishing(orgId: string, itemIds: string[],
     .slice(0, 40)
     .map((i) => `<tr><td style="padding:4px 8px;border-bottom:1px solid #eee;white-space:nowrap">${esc(i.scheduledAt ? nyTime(i.scheduledAt).replace(" (New York)", "") : "no date yet")}</td>
       <td style="padding:4px 8px;border-bottom:1px solid #eee">${esc(nameOf(i.clientId))}</td>
-      <td style="padding:4px 8px;border-bottom:1px solid #eee">${esc((i.title || i.text).split("\n")[0].slice(0, 110))}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee"><a href="${publishLink("/publishing", { client: i.clientId, item: i.id })}" style="color:#111">${esc((i.title || i.text).split("\n")[0].slice(0, 110))}</a></td>
       <td style="padding:4px 8px;border-bottom:1px solid #eee;color:#666">${esc(parsePlatforms(i.platforms).map((n) => NET_LABEL[n]).join(" + "))}</td></tr>`)
     .join("");
   const s = await getSettings(orgId);
@@ -739,7 +762,8 @@ export async function notifyReadyForPublishing(orgId: string, itemIds: string[],
      <table style="border-collapse:collapse;font-size:13px">${rows}</table>
      ${items.length > 40 ? `<p>…and ${items.length - 40} more.</p>` : ""}
      <p style="color:#555;font-size:13px">They go out on their planned day through the publishing browser; Publishing → Calendar shows each one.</p>`,
-    { href: `${SITE}/publishing/calendar`, label: "Open the publishing calendar" },
+    { href: publishLink("/publishing/calendar", { client: clientIds.length === 1 ? clientIds[0] : null }), label: "Open the calendar in Publish" },
+    "READY_FOR_PUBLISHING",
   );
 }
 

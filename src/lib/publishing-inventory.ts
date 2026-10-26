@@ -22,7 +22,8 @@
  */
 import prisma from "@/lib/db-raw";
 import { objectivesFor } from "@/lib/campaigns/objectives";
-import { alertTeam, esc, getTarget, quote, reviewToken, reviewUrl, sendMail, SITE, PUBLISHING_CLIENT_WHERE } from "@/lib/publishing";
+import { alertTeam, esc, getTarget, quote, reviewToken, reviewUrl, sendMail, PUBLISHING_CLIENT_WHERE } from "@/lib/publishing";
+import { publishLink } from "@/lib/publishing-mail";
 
 export const TARGET_DAYS = 7;
 export const REVIEW_REMIND_AFTER_DAYS = 2;
@@ -153,6 +154,7 @@ export async function remindReviewers(orgId: string, now = Date.now()): Promise<
        ${allWaiting.slice(0, 3).map((w) => quote(w.text.slice(0, 280))).join("")}
        ${allWaiting.length > 3 ? `<p>…and ${allWaiting.length - 3} more.</p>` : ""}`,
       { href: reviewUrl(await reviewToken(orgId, clientId)), label: "Review the posts" },
+      "REVIEW_REMINDER",
     );
     if (ok) {
       await setStamp(orgId, key, new Date(now).toISOString());
@@ -175,17 +177,22 @@ export async function teamDigest(orgId: string, now = Date.now(), force = false)
   if (!force && (await getStamp(orgId, "publishing_digest_day")) === today) return { sent: false, rows };
 
   const color = { critical: "#b91c1c", low: "#b45309", ok: "#047857" } as const;
-  const table = attention
-    .map((r) => {
-      const notes: string[] = [];
-      if (r.level !== "ok") notes.push(`<b style="color:${color[r.level]}">${r.coverageDays} of 7 days ready</b> — ${r.missing} more approved post${r.missing === 1 ? "" : "s"} needed`);
-      if (r.overdueReviews) notes.push(`${r.overdueReviews} waiting for the client for ${days(r.oldestReviewDays)}+`);
-      if (r.overdueChanges) notes.push(`${r.overdueChanges} with changes requested, not yet revised`);
-      if (r.drafts) notes.push(`${r.drafts} draft${r.drafts === 1 ? "" : "s"} not sent for review`);
-      return `<tr><td style="padding:6px 10px;border-bottom:1px solid #eee;vertical-align:top"><b>${esc(r.name)}</b><br><span style="color:#666;font-size:12px">${r.perWeek}/week · ${r.ready} ready</span></td>
-        <td style="padding:6px 10px;border-bottom:1px solid #eee">${notes.join("<br>")}</td></tr>`;
-    })
-    .join("");
+  const linkStyle = "color:#b91c1c;font-weight:bold;text-decoration:none";
+  const rowsHtml: string[] = [];
+  for (const r of attention) {
+    const notes: string[] = [];
+    if (r.level !== "ok") notes.push(`<b style="color:${color[r.level]}">${r.coverageDays} of 7 days ready</b> — ${r.missing} more approved post${r.missing === 1 ? "" : "s"} needed`);
+    if (r.overdueReviews) notes.push(`${r.overdueReviews} waiting for the client for ${days(r.oldestReviewDays)}+`);
+    if (r.overdueChanges) notes.push(`${r.overdueChanges} with changes requested, not yet revised`);
+    if (r.drafts) notes.push(`${r.drafts} draft${r.drafts === 1 ? "" : "s"} not sent for review`);
+    // v4.65.0 — direct links: the company's content in Publish, and the page
+    // its reviewer validates on (when posts are waiting for them).
+    const links = [`<a href="${publishLink("/publishing", { client: r.clientId })}" style="${linkStyle}">Validate in Publish →</a>`];
+    if (r.inReview) links.push(`<a href="${reviewUrl(await reviewToken(orgId, r.clientId))}" style="${linkStyle}">Client review page →</a>`);
+    rowsHtml.push(`<tr><td style="padding:8px 10px;border-bottom:1px solid #eee;vertical-align:top"><b>${esc(r.name)}</b><br><span style="color:#666;font-size:12px">${r.perWeek}/week · ${r.ready} ready</span></td>
+        <td style="padding:8px 10px;border-bottom:1px solid #eee">${notes.join("<br>")}<div style="margin-top:4px;font-size:13px">${links.join(" &nbsp;·&nbsp; ")}</div></td></tr>`);
+  }
+  const table = rowsHtml.join("");
   const critical = attention.filter((r) => r.level === "critical").length;
   const sent = await alertTeam(
     orgId,
@@ -194,8 +201,9 @@ export async function teamDigest(orgId: string, now = Date.now(), force = false)
       : `Content inventory: ${attention.length} client${attention.length === 1 ? "" : "s"} need${attention.length === 1 ? "s" : ""} attention`,
     `<p>Every client should always have <b>one week of approved content</b> ready to publish. Today:</p>
      <table style="border-collapse:collapse;font-size:14px">${table}</table>
-     <p style="color:#555;font-size:13px">Clients' reviewers are reminded automatically after ${REVIEW_REMIND_AFTER_DAYS} days.</p>`,
-    `${SITE}/publishing`,
+     <p style="color:#555;font-size:13px">Clients' reviewers are reminded automatically after ${REVIEW_REMIND_AFTER_DAYS} days (email PUB-104).</p>`,
+    "INVENTORY",
+    { href: publishLink("/publishing"), label: "Open Publish" },
   );
   if (sent) await setStamp(orgId, "publishing_digest_day", today);
   return { sent, rows };

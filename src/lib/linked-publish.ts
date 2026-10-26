@@ -13,8 +13,9 @@
  */
 import prisma from "@/lib/db-raw";
 import {
-  MAX_ATTEMPTS, NET_LABEL, addEvent, alertTeam, esc, getSettings, quote, rollUp, SITE, type Net,
+  MAX_ATTEMPTS, NET_LABEL, addEvent, alertTeam, esc, getSettings, quote, rollUp, type Net,
 } from "@/lib/publishing";
+import { publishLink } from "@/lib/publishing-mail";
 import {
   getLinked, saveLinked, linkedinPost, linkedinToken, liMatches, xMatches, xPost, xTokenFresh, type Linked,
 } from "@/lib/linked-accounts";
@@ -106,8 +107,9 @@ export async function apiPublishDue(orgId: string): Promise<{ posted: number; fa
           orgId,
           `A ${NET_LABEL[net] ?? net} post failed to publish`,
           `<p>The connected ${NET_LABEL[net] ?? net} account could not publish this post.</p>${quote(d.text)}<p>Reason: ${esc(msg)}</p>
-           <p>Fix the cause (Settings → Linked accounts), then press Retry.</p>`,
-          `${SITE}/settings#linked`,
+           <p>Fix the cause (Publish → Connections), then press Retry.</p>`,
+          "POST_FAILED_ACCOUNT",
+          { href: publishLink("/publishing/accounts", { client: d.clientId }), label: "Open Connections in Publish" },
         );
       }
     }

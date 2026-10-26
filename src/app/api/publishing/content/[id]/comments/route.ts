@@ -31,6 +31,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           `New version of your post (version ${revised.version})`,
           `<p><b>${esc(c.name || "Your copywriter")}</b> wrote:</p>${quote(body)}<p>Here is the new version, ready for your review:</p>${quote(revised.text)}`,
           { href, label: "Review the new version" },
+          "NEW_VERSION",
         );
       } else {
         await sendMail(
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           "New reply on your post review",
           `<p><b>${esc(c.name || "Your copywriter")}</b> replied:</p>${quote(body)}<p>On:</p>${quote(item.text)}`,
           { href, label: "Open the review" },
+          "TEAM_REPLY",
         );
       }
     }
