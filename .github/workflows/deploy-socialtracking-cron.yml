@@ -53,6 +53,14 @@ jobs:
           curl -s "https://api.cloudflare.com/client/v4/accounts/$A/workers/scripts/gershon-socialtracking-cron/secrets" -H "Authorization: Bearer $T" | jq -c '{success,errors,names:[.result[]?.name]}' | tee -a /tmp/log.txt
           cat /tmp/log.txt >> $GITHUB_STEP_SUMMARY
 
+      - name: Auth check with the Worker's key (dry run, sends nothing)
+        env:
+          KEY: ${{ secrets.CF_CRON_SECRET }}
+        run: |
+          CODE=$(curl -sS -m 90 -o /tmp/dry.json -w '%{http_code}' -X POST -H "Authorization: Bearer $KEY" \
+            "https://socialtracking.gershon.ai/api/report/weekly?dry=1" || echo 000)
+          echo "weekly dry-run auth check: HTTP $CODE $(head -c 300 /tmp/dry.json)" | tee -a /tmp/log.txt
+
       - name: Post result to the jobs log issue
         if: always()
         env:
