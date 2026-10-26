@@ -6,7 +6,7 @@ import { Providers } from "@/components/providers";
 export const metadata: Metadata = {
   title: "Social by Gershon.AI",
   applicationName: "Social by Gershon.AI",
-  description: "Social Media Campaign Compliance & Reporting — Gershon Consulting",
+  description: "Social by Gershon.AI — collect and understand what your clients, partners, competitors and your own company post on LinkedIn and X",
 };
 
 export default function RootLayout({

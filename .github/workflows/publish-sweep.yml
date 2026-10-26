@@ -16,7 +16,7 @@ jobs:
           response=$(curl -s -o /tmp/sweep.json -w "%{http_code}" \
             -X POST \
             -H "Authorization: Bearer ${{ secrets.CF_CRON_SECRET }}" \
-            "https://social.gershon.ai/api/cron/publish-sweep")
+            "https://publish.gershon.ai/api/cron/publish-sweep")
           echo "HTTP $response"
           head -c 2000 /tmp/sweep.json; echo ""
           if [ "$response" != "200" ]; then exit 1; fi

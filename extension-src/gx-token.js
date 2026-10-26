@@ -15,6 +15,8 @@
 
 (function () {
   var API_ORIGIN = "https://social.gershon.ai";
+  // 0.26.0: publishing moved to Publish — its calls carry the same token.
+  var PUBLISH_ORIGIN = "https://publish.gershon.ai";
   var STORAGE_KEY = "workspaceToken";
 
   var cached = null;      // string | "" once read
@@ -53,7 +55,7 @@
 
   globalThis.fetch = async function (input, init) {
     var url = typeof input === "string" ? input : (input && input.url) || "";
-    if (url.indexOf(API_ORIGIN) !== 0) return nativeFetch(input, init);
+    if (url.indexOf(API_ORIGIN) !== 0 && url.indexOf(PUBLISH_ORIGIN + "/api/extension/") !== 0) return nativeFetch(input, init);
 
     var token = await readToken();
     if (!token) {

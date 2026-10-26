@@ -8,11 +8,11 @@ import { APP_VERSION, EXTENSION_LATEST } from "@/lib/extension-version";
 export const metadata: Metadata = {
   title: "Social by Gershon.AI — Social network management software for LinkedIn & X",
   description:
-    "Social is social network management software for LinkedIn and X: plan content, get client approval in one batch, publish on both networks at once, then track what really went live with daily collection, competitor watch, analytics and monthly PDF reports.",
+    "Social collects every LinkedIn and X post from the companies you are connected with — clients, partners, competitors and your own company — and turns them into analytics, competitor watch and monthly PDF reports.",
   openGraph: {
     title: "Social by Gershon.AI — Social network management software",
     description:
-      "Plan, approve, publish and measure LinkedIn and X for every company you manage — from first draft to monthly proof.",
+      "See who is posting what across your whole business world — clients, partners, competitors and your own company, on LinkedIn and X.",
     type: "website",
     url: "https://social.gershon.ai",
   },
