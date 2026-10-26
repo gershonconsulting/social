@@ -21,7 +21,7 @@ jobs:
           APP="${GITHUB_REF_NAME#deploy/}"
           case "$APP" in
             publish)        echo "project=gershon-publish"        >> $GITHUB_OUTPUT; echo "host=publish.gershon.ai"        >> $GITHUB_OUTPUT; echo "li_id=86ju2np6725xfp" >> $GITHUB_OUTPUT ;;
-            socialtracking) echo "project=gershon-socialtracking" >> $GITHUB_OUTPUT; echo "host=socialtracking.gershon.ai" >> $GITHUB_OUTPUT; echo "li_id=78dytmirdwt7l5" >> $GITHUB_OUTPUT ;;
+            socialtracking) echo "project=gershon-socialtracking" >> $GITHUB_OUTPUT; echo "host=socialtracking.gershon.ai" >> $GITHUB_OUTPUT; echo "li_id=86ju2np6725xfp" >> $GITHUB_OUTPUT ;;
             *) echo "Unknown platform $APP"; exit 1 ;;
           esac
           echo "app=$APP" >> $GITHUB_OUTPUT
@@ -89,7 +89,7 @@ jobs:
           put DIGEST_TO "$V_TO"
           put DIGEST_FROM "$V_FROM"
           put LINKEDIN_CLIENT_ID "${{ steps.p.outputs.li_id }}"
-          if [ "${{ steps.p.outputs.app }}" = "publish" ]; then LI="$PUB_LI"; else LI="$TRK_LI"; fi
+          if [ "${{ steps.p.outputs.app }}" = "publish" ]; then LI="$PUB_LI"; else LI="${PUB_LI:-$TRK_LI}"; fi
           if [ -n "$LI" ]; then put LINKEDIN_CLIENT_SECRET "$LI"; else echo "WARNING: LinkedIn client secret for this app is not in GitHub secrets yet"; fi
 
       - name: Deploy to Cloudflare Pages
