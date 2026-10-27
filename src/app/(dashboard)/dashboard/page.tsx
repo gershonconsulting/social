@@ -2,6 +2,7 @@ export const runtime = 'edge';
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { DashboardOverview } from "@/components/dashboard/dashboard-overview";
+import { EcosystemFrames } from "@/components/dashboard/ecosystem-frames";
 import { shouldShowOnboarding } from "@/lib/onboarding";
 
 export const dynamic = "force-dynamic";
@@ -17,8 +18,13 @@ export default async function DashboardPage() {
   }
 
   return (
+    <>
     <Suspense fallback={<div className="animate-pulse text-gray-400">Loading dashboard…</div>}>
       <DashboardOverview />
     </Suspense>
+    <Suspense fallback={<div className="animate-pulse text-gray-400 mt-5">Loading ecosystem…</div>}>
+      <EcosystemFrames />
+    </Suspense>
+    </>
   );
 }
