@@ -7,7 +7,6 @@ import { buildOps, isOpsKind, OPS_KINDS, sendOps } from "@/lib/reports/ops";
  * report@gershonconsulting.com, next to the Collection report (/api/report/daily):
  *
  *   ?kind=posting      did every campaign / internal company post?
- *   ?kind=content      approved content ready to publish, per company
  *   ?kind=competitive  competitor & partner posts collected per day / week, and what they are about
  *   ?kind=intelligence AI insights + actions from competitor & partner posts — goes to sales@ (v4.50.0)
  *                      GET &refresh=1 re-runs the AI instead of using today's cached answer

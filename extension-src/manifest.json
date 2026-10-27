@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Social by Gershon.AI — LinkedIn & X Collector + Publisher",
-  "version": "0.25.1",
-  "description": "Collects LinkedIn and X posts, and publishes approved posts on LinkedIn and X, for the workspace of whoever is signed in to social.gershon.ai in this browser. Does nothing until then.",
+  "version": "0.26.0",
+  "description": "Collects LinkedIn and X posts for the workspace of whoever is signed in to social.gershon.ai in this browser, and publishes the posts approved on publish.gershon.ai. Does nothing until then.",
   "permissions": [
     "cookies",
     "tabs",
@@ -19,7 +19,8 @@
     "https://x.com/*",
     "https://twitter.com/*",
     "https://social.gershon.ai/*",
-    "https://social.gershoncrm.com/*"
+    "https://social.gershoncrm.com/*",
+    "https://publish.gershon.ai/*"
   ],
   "background": {
     "service_worker": "gx-boot.js"
@@ -62,6 +63,15 @@
       "js": [
         "gx-bridge.js",
         "content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://publish.gershon.ai/connect/*"
+      ],
+      "js": [
+        "gx-bridge.js"
       ],
       "run_at": "document_idle"
     }

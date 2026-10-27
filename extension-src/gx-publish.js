@@ -3,7 +3,7 @@
 // 0.25.0: each Chrome says which X accounts and LinkedIn pages it can publish
 // to; the dashboard only hands it posts it can actually publish.
 //
-// The dashboard (social.gershon.ai/publishing) holds the content, the
+// Publish (publish.gershon.ai/publishing, 0.26.0) holds the content, the
 // client review loop and the calendar. This file does the publishing:
 //
 //   1. KEEP THE CONNECTIONS LIVE.
@@ -38,7 +38,7 @@
 // Loaded before gx-collect.js (gx-boot.js) so it uses the real tab APIs.
 
 (function () {
-  var API = "https://social.gershon.ai/api/extension/publish";
+  var API = "https://publish.gershon.ai/api/extension/publish"; // 0.26.0: publishing left Social
   var COOKIE_SAVE = "https://social.gershon.ai/api/cookies/save";
   var X_LOGIN_URL = "https://x.com/i/flow/login";
   var BEARER = "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA";
