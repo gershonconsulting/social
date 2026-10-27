@@ -19,6 +19,7 @@ import prisma from "@/lib/db";
 import { siteUrl } from "@/lib/site";
 import { APP_VERSION } from "@/lib/extension-version";
 import { BUSINESS_TZ } from "../et-days";
+import { withAuditBcc } from "@/lib/mail-bcc";
 
 export const RED = "#FE1B04";
 export const GREEN = "#047857";
@@ -101,11 +102,10 @@ export function table(head: string, rows: string): string {
   return `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${head}${rows}</table>`;
 }
 
-export type OpsKind = "posting" | "content" | "competitive" | "intelligence";
+export type OpsKind = "posting" | "competitive" | "intelligence";
 export const OPS_LABEL: Record<OpsKind | "collection", string> = {
   collection: "Collection",
   posting: "Posting",
-  content: "Content Ready",
   competitive: "Competitive",
   intelligence: "Intelligence",
 };
@@ -115,7 +115,6 @@ function siblings(current: OpsKind | "collection"): string {
   const links: Array<[OpsKind | "collection", string]> = [
     ["collection", `${SITE}/api/report/daily`],
     ["posting", `${SITE}/api/report/ops?kind=posting`],
-    ["content", `${SITE}/api/report/ops?kind=content`],
     ["competitive", `${SITE}/api/report/ops?kind=competitive`],
     ["intelligence", `${SITE}/api/report/ops?kind=intelligence`],
   ];
@@ -198,7 +197,7 @@ export async function deliver(
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ from: process.env.OPS_REPORT_FROM || OPS_FROM, to: [to], subject, html }),
+      body: JSON.stringify(withAuditBcc({ from: process.env.OPS_REPORT_FROM || OPS_FROM, to: [to], subject, html })),
     });
     if (!r.ok) {
       const body = await r.text().catch(() => "");

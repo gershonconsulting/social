@@ -28,8 +28,6 @@ import {
   StopCircle,
   Rocket,
   Puzzle,
-  Send,
-  BookOpen,
 } from "lucide-react";
 import { useDemoMode, setDemoMode } from "@/lib/use-demo-mode";
 import { FilterPanel } from "./filter-panel";
@@ -64,23 +62,6 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       },
       { href: "/networks", icon: Network, label: "Networks" },
       { href: "/analytics", icon: BarChart3, label: "Analytics" },
-    ],
-  },
-  {
-    label: "Publishing",
-    items: [
-      {
-        href: "/publishing",
-        icon: Send,
-        label: "Publishing",
-        children: [
-          { href: "/publishing", label: "Content & review" },
-          { href: "/publishing/calendar", label: "Calendar" },
-          { href: "/publishing/accounts", label: "Accounts & review links" },
-          { href: "/publishing/autopilot", label: "Autopilot" },
-        ],
-      },
-      { href: "/knowledge-base", icon: BookOpen, label: "Knowledge Base" },
     ],
   },
   {

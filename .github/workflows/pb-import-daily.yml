@@ -1,0 +1,75 @@
+name: "[17] Social daily PB import"
+
+# Replaces Claude scheduled task #17 (2026-10-26). Pulls the latest
+# Phantombuster CSVs into Social: X first, then LinkedIn, one after the other
+# (two concurrent calls blow the Cloudflare worker time budget).
+#
+# Owner: Social (spec docs/THREE-PLATFORM-SPLIT.md section 9 — collection/import jobs).
+# Destination: https://social.gershon.ai/api/cron/pb-import-latest (Bearer CF_CRON_SECRET = Pages CRON_SECRET).
+# Schedule: 07:00 America/New_York. GitHub cron is UTC only, so two slots fire
+#   (11:00 UTC and 12:00 UTC) and the "NY offset" guard keeps exactly one:
+#   11:00 UTC runs while New York is on EDT (-0400), 12:00 UTC while on EST (-0500).
+# Writes: SocialPost upserts (unique per post) + PlatformConnection lastSyncAt — idempotent,
+#   so a retry or manual run never duplicates posts. Retry: one retry per platform after 60 s.
+on:
+  schedule:
+    - cron: '0 11 * * *'
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+  push:
+    branches: ['verify/pb-import']
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep only the 07:00 New York slot
+        id: g
+        run: |
+          OFF=$(TZ=America/New_York date +%z)
+          S="${{ github.event.schedule }}"
+          RUN=yes
+          if [ -n "$S" ]; then
+            if [ "$S" = "0 11 * * *" ] && [ "$OFF" != "-0400" ]; then RUN=no; fi
+            if [ "$S" = "0 12 * * *" ] && [ "$OFF" != "-0500" ]; then RUN=no; fi
+          fi
+          echo "slot='$S' ny_offset=$OFF run=$RUN"
+          echo "run=$RUN" >> $GITHUB_OUTPUT
+
+      - name: Import X then LinkedIn (sequential)
+        if: steps.g.outputs.run == 'yes'
+        env:
+          KEY: ${{ secrets.CF_CRON_SECRET }}
+        run: |
+          set -u
+          FAIL=0
+          : > /tmp/log.txt
+          for P in TWITTER LINKEDIN; do
+            for TRY in 1 2; do
+              CODE=$(curl -sS -m 180 -o /tmp/$P.json -w '%{http_code}' \
+                -H "Authorization: Bearer $KEY" \
+                "https://social.gershon.ai/api/cron/pb-import-latest?platform=$P" || echo 000)
+              SUM=$(jq -c '{success, perPlatform: [.data.perPlatform[]? | {platform, rowsParsed, clientsMatched, postsUpserted, error}]}' /tmp/$P.json 2>/dev/null || head -c 300 /tmp/$P.json)
+              echo "$P try $TRY: HTTP $CODE $SUM" | tee -a /tmp/log.txt
+              [ "$CODE" = "200" ] && break
+              [ $TRY = 1 ] && sleep 60
+            done
+            [ "$CODE" = "200" ] || FAIL=1
+          done
+          cat /tmp/log.txt >> $GITHUB_STEP_SUMMARY
+          exit $FAIL
+
+      - name: Post verification result (verify branch only)
+        if: always() && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BODY="[17] pb-import verification run ${{ github.run_id }} ($(date -u +%FT%TZ)):
+          \`\`\`
+          $(cat /tmp/log.txt 2>/dev/null || echo 'no log')
+          \`\`\`"
+          gh issue comment 5 -R ${{ github.repository }} -b "$BODY"

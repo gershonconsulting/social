@@ -111,9 +111,22 @@ self.linkedinDomScraper = function (scrollPasses) {
     }
 
     var passes = 0;
+    // 0.25.0: keep what was read while scrolling — on a long scroll LinkedIn
+    // drops the oldest cards from the page — and press "Show more results".
+    var kept = {};
+    function keep() {
+      try { var got = readNew(); if (!got.length) got = readOld(); got.forEach(function (p) { if (p && p.externalPostId && !kept[p.externalPostId]) kept[p.externalPostId] = p; }); } catch (_) {}
+    }
     var timer = setInterval(function () {
       try { window.scrollBy(0, 1800); } catch (_) {}
       passes++;
+      if ((scrollPasses || 6) > 6) {
+        try {
+          var more = Array.from(document.querySelectorAll("button")).find(function (b) { return /^\s*show more (results|posts)\s*$/i.test(b.innerText || ""); });
+          if (more) more.click();
+        } catch (_) {}
+        if (passes % 3 === 0) keep();
+      }
       if (passes >= (scrollPasses || 6)) { clearInterval(timer); setTimeout(harvest, 2000); }
     }, 1000);
 
@@ -213,6 +226,19 @@ self.linkedinDomScraper = function (scrollPasses) {
       return posts;
     }
 
+    // 0.25.0: counts on the old layout (still used by the admin "Page posts" list).
+    function oldCount(card, sel, re) {
+      try {
+        var box = card.querySelector(".social-details-social-counts");
+        if (!box) return 0;
+        var txt = sel ? ((box.querySelector(sel) || {}).innerText || "") : (box.innerText || "").replace(/\n/g, " ");
+        var m = re ? txt.match(re) : txt.match(/([\d,.]+\s*[KkMm]?)/);
+        if (!m) return 0;
+        var n = parseFloat(m[1].replace(/,/g, ""));
+        if (/k/i.test(m[1])) n *= 1000; else if (/m/i.test(m[1])) n *= 1000000;
+        return isFinite(n) ? Math.round(n) : 0;
+      } catch (_) { return 0; }
+    }
     function readOld() {
       var cards = document.querySelectorAll("div.feed-shared-update-v2, div.update-components-update-v2");
       var posts = [], seen = {};
@@ -235,8 +261,10 @@ self.linkedinDomScraper = function (scrollPasses) {
             postTextSnippet: text.slice(0, 280),
             hasMedia: !!card.querySelector("video, .update-components-image, .update-components-video"),
             publishedAtUtc: (parseDate(timeStr.split("•")[0]) || new Date()).toISOString(),
-            likeCount: 0, commentCount: 0, shareCount: 0,
-            rawPayload: { source: "extension-v0.13.2-legacy", timeText: timeStr.slice(0, 60) }
+            likeCount: oldCount(card, ".social-details-social-counts__reactions-count", null),
+            commentCount: oldCount(card, null, /([\d,.]+\s*[KkMm]?)\s+comments?/i),
+            shareCount: oldCount(card, null, /([\d,.]+\s*[KkMm]?)\s+reposts?/i),
+            rawPayload: { source: "extension-v0.25.0-legacy-layout", timeText: timeStr.slice(0, 60) }
           });
         } catch (_) {}
       }
@@ -246,6 +274,12 @@ self.linkedinDomScraper = function (scrollPasses) {
     function harvest() {
       try {
         var posts = readNew();
+        if (!posts.length) posts = readOld();
+        if (Object.keys(kept).length) {
+          var have = {};
+          posts.forEach(function (p) { have[p.externalPostId] = true; });
+          Object.keys(kept).forEach(function (k) { if (!have[k]) posts.push(kept[k]); });
+        }
         if (!posts.length) posts = readOld();
         if (posts.length) {
           var name = pageName();

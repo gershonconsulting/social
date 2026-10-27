@@ -1,7 +1,9 @@
 // Publishing — posts approved content on LinkedIn AND X from THIS browser.
 // (extension 0.15.0; replaces HeroPost)
+// 0.25.0: each Chrome says which X accounts and LinkedIn pages it can publish
+// to; the dashboard only hands it posts it can actually publish.
 //
-// The dashboard (social.gershon.ai/publishing) holds the content, the
+// Publish (publish.gershon.ai/publishing, 0.26.0) holds the content, the
 // client review loop and the calendar. This file does the publishing:
 //
 //   1. KEEP THE CONNECTIONS LIVE.
@@ -36,7 +38,7 @@
 // Loaded before gx-collect.js (gx-boot.js) so it uses the real tab APIs.
 
 (function () {
-  var API = "https://social.gershon.ai/api/extension/publish";
+  var API = "https://publish.gershon.ai/api/extension/publish"; // 0.26.0: publishing left Social
   var COOKIE_SAVE = "https://social.gershon.ai/api/cookies/save";
   var X_LOGIN_URL = "https://x.com/i/flow/login";
   var BEARER = "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA";
@@ -105,6 +107,70 @@
     return s.xHandle || null;
   }
 
+  // ── Who this Chrome is and what it can publish (0.25.0) ────────────────
+  // The dashboard hands a post only to a Chrome that can publish it: X
+  // accounts signed in here (the account switcher), LinkedIn pages whose
+  // admin view opens here. Same id as gx-remote.js uses for collection.
+  async function browserId() {
+    try {
+      var r = await chrome.storage.local.get("agentId");
+      if (r && r.agentId) return r.agentId;
+      var id = "ag_" + (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, "").slice(0, 16) : String(Date.now()) + Math.random().toString(36).slice(2, 8));
+      await chrome.storage.local.set({ agentId: id });
+      return id;
+    } catch (e) { return null; }
+  }
+  async function liName() {
+    var s = await getState();
+    if (s.liName && s.liNameAt && Date.now() - s.liNameAt < HANDLE_TTL_MS) return s.liName;
+    var js = await cookie(["https://www.linkedin.com/"], "JSESSIONID");
+    if (!js) return s.liName || null;
+    try {
+      var r = await fetch("https://www.linkedin.com/voyager/api/me", {
+        credentials: "include",
+        headers: { "csrf-token": js.replace(/"/g, ""), "x-restli-protocol-version": "2.0.0", accept: "application/json" }
+      });
+      if (r.ok) {
+        var j = await r.json();
+        var mp = (j && (j.miniProfile || (j.data && j.data.miniProfile))) || null;
+        if (!mp && j && Array.isArray(j.included)) mp = j.included.find(function (x) { return x && x.firstName; }) || null;
+        var n = mp ? [mp.firstName, mp.lastName].filter(Boolean).join(" ") : null;
+        if (n) { await setState({ liName: n, liNameAt: Date.now() }); return n; }
+      }
+    } catch (e) {}
+    return s.liName || null;
+  }
+  /** Every X account signed in to this browser (X keeps several at once). */
+  async function xAccounts(force) {
+    var s = await getState();
+    if (!force && s.xAccounts && s.xAccountsAt && Date.now() - s.xAccountsAt < 30 * 60 * 1000) return s.xAccounts;
+    var ct0 = await xCookie("ct0");
+    var out = [];
+    if (ct0) {
+      try {
+        var r = await fetch("https://x.com/i/api/1.1/account/multi/list.json", {
+          credentials: "include",
+          headers: { authorization: "Bearer " + BEARER, "x-csrf-token": ct0, "x-twitter-auth-type": "OAuth2Session", "x-twitter-active-user": "yes" }
+        });
+        if (r.ok) {
+          var j = await r.json();
+          (j && j.users || []).forEach(function (u) { if (u && u.screen_name) out.push(String(u.screen_name)); });
+        }
+      } catch (e) {}
+    }
+    var me = await xWhoAmI(false);
+    if (me && out.map(function (a) { return a.toLowerCase(); }).indexOf(me.toLowerCase()) === -1) out.unshift(me);
+    if (!out.length && s.xAccounts) return s.xAccounts;
+    await setState({ xAccounts: out, xAccountsAt: Date.now() });
+    return out;
+  }
+  async function browserLabel() {
+    var os = "";
+    try { var p = await chrome.runtime.getPlatformInfo(); os = { win: "Windows", mac: "Mac", linux: "Linux", cros: "ChromeOS" }[p.os] || p.os; } catch (e) {}
+    var n = await liName();
+    return "Chrome" + (os ? " on " + os : "") + (n ? " (" + n + ")" : "");
+  }
+
   async function saveXSession() {
     // 0.17.0: a client's own browser keeps its X session to itself.
     try { var tk = await chrome.storage.local.get("workspaceToken"); if (((tk && tk.workspaceToken) || "").indexOf("gp_") === 0) return; } catch (e) {}
@@ -126,17 +192,28 @@
     var xIn = await xSignedIn();
     var liIn = await liSignedIn();
     var xAs = xIn ? await xWhoAmI(false) : null;
+    var accts = xIn ? await xAccounts(false) : [];
+    var st0 = await getState();
+    var probes = st0.pendingProbes || [];
     try {
       var r = await fetch(API + "/heartbeat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(Object.assign({ x: { signedIn: xIn, as: xAs }, linkedin: { signedIn: liIn }, version: version() }, extra || {}))
+        body: JSON.stringify(Object.assign({
+          x: { signedIn: xIn, as: xAs, accounts: accts },
+          linkedin: { signedIn: liIn, name: liIn ? await liName() : null },
+          version: version(),
+          browser: { id: await browserId(), label: await browserLabel() },
+          probes: probes
+        }, extra || {}))
       });
       var j = await r.json().catch(function () { return null; });
       var patch = { beatAt: Date.now() };
       if (j && j.success && j.data) {
         patch.voiceX = (j.data.voice && j.data.voice.x) || null;
         patch.enabled = j.data.enabled !== false;
+        patch.checkLinkedIn = Array.isArray(j.data.checkLinkedIn) ? j.data.checkLinkedIn.slice(0, 4) : [];
+        if (r.ok) patch.pendingProbes = [];
       }
       await setState(patch);
       return j && j.data;
@@ -248,7 +325,7 @@
       await fetch(API + "/result", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: id, outcome: outcome, postUrl: postUrl || null, error: error || null })
+        body: JSON.stringify({ id: id, outcome: outcome, postUrl: postUrl || null, error: error || null, browser: await browserId() })
       });
     } catch (e) {}
   }
@@ -357,6 +434,21 @@
     return { url: url, text: box ? box.innerText : null, hasButton: !!btn,
       enabled: !!btn && btn.getAttribute("aria-disabled") !== "true" && !btn.disabled, toast: toast ? toast.innerText : null };
   }
+  // Runs in x.com: replace whatever is in the post box with the text.
+  function xTypeText(text) {
+    var box = document.querySelector('[data-testid="tweetTextarea_0"]');
+    if (!box) return false;
+    var ed = box.closest('[contenteditable="true"]') || box.querySelector('[contenteditable="true"]') || box;
+    ed.focus();
+    try { document.execCommand("selectAll", false, null); document.execCommand("delete", false, null); } catch (e) {}
+    try {
+      var dt = new DataTransfer();
+      dt.setData("text/plain", text);
+      ed.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+    } catch (e) {}
+    if (!(box.innerText || "").trim()) { try { document.execCommand("insertText", false, text); } catch (e) {} }
+    return true;
+  }
   function xClickPost() {
     var btn = document.querySelector('[data-testid="tweetButton"]') || document.querySelector('[data-testid="tweetButtonInline"]');
     if (!btn || btn.getAttribute("aria-disabled") === "true") return false;
@@ -421,6 +513,17 @@
       if (st && st.login) break;
       if (st && st.hasButton && st.enabled && norm(st.text).indexOf(want.slice(0, 25)) === 0) break;
       await sleep(1000);
+    }
+    if (st && !st.login && st.hasButton && norm(st.text).indexOf(want.slice(0, 25)) !== 0) {
+      // 0.25.0: the intent page sometimes opens with an empty box (after an
+      // account switch, or a restored draft). Type the text in ourselves.
+      for (var tries = 0; tries < 3; tries++) {
+        await run(w.tabId, xTypeText, [d.text]);
+        await sleep(1500);
+        st = await run(w.tabId, xReadComposer);
+        if (st && norm(st.text).indexOf(want.slice(0, 25)) === 0) break;
+      }
+      for (var en = 0; en < 10 && st && !st.enabled; en++) { await sleep(800); st = await run(w.tabId, xReadComposer); }
     }
     if (!st || st.login) { await report(d.id, "failed_before_click", null, "X asked to sign in again."); await onXSignedOut(); return; }
     if (!st.hasButton) { await report(d.id, "failed_before_click", null, "The X composer did not load."); return; }
@@ -692,6 +795,53 @@
     await report(d.id, found ? "posted" : "clicked_unconfirmed", found, null);
   }
 
+  // ── LinkedIn page check (0.25.0) ────────────────────────────────────────
+  // Can this browser's LinkedIn account post on page X? Opening a company page
+  // as one of its admins lands on /company/<id>/admin/…; a group shows its
+  // "Start a public post" box to members. Runs in the minimized publishing
+  // window, a few pages at a time, never while a post is going out.
+  function liProbeRead() {
+    if (/\/login|\/checkpoint|\/authwall|\/uas\//.test(location.href)) return { login: true };
+    var admin = /linkedin\.com\/(company|showcase)\/\d+\/admin\//i.test(location.href);
+    var all = Array.from(document.querySelectorAll('button, a[role="button"], div[role="button"]'));
+    var start = all.some(function (b) { return /^\s*(start a (public )?post|create a post)/i.test(b.innerText || b.getAttribute("aria-label") || ""); });
+    var gone = /this page (doesn.t exist|isn.t available)|page not found/i.test((document.body && document.body.innerText || "").slice(0, 600));
+    return { url: location.href, admin: admin, start: start, gone: gone };
+  }
+  async function probeLinkedIn(targets) {
+    if (!targets || !targets.length || publishing || !(await liSignedIn())) return;
+    publishing = true;
+    var results = [];
+    var w = null;
+    try {
+      w = await openWindow("about:blank", false);
+      for (var i = 0; i < targets.length; i++) {
+        var t = liTarget(targets[i]);
+        if (!t) continue;
+        var url = t.kind === "groups" ? "https://www.linkedin.com/groups/" + t.slug + "/" : "https://www.linkedin.com/" + t.kind + "/" + t.slug + "/";
+        await navigate(w.tabId, url);
+        var r = null;
+        for (var k = 0; k < 10; k++) {
+          r = await run(w.tabId, liProbeRead);
+          if (r && (r.login || r.admin || r.gone || (t.kind === "groups" && r.start))) break;
+          await sleep(1000);
+        }
+        if (r && r.login) break;
+        var ok = !!r && (t.kind === "groups" ? r.start : t.kind === "in" ? true : r.admin);
+        results.push({ target: targets[i], ok: ok, why: ok ? null : (r && r.gone ? "page not found" : t.kind === "groups" ? "not a member" : "not an admin") });
+      }
+    } catch (e) {
+    } finally {
+      if (w && w.winId) { try { await chrome.windows.remove(w.winId); } catch (e) {} }
+      await setState({ publishWindowId: null, checkLinkedIn: [] });
+      publishing = false;
+    }
+    if (results.length) {
+      await setState({ pendingProbes: results });
+      await heartbeat();
+    }
+  }
+
   // ── Loop ────────────────────────────────────────────────────────────────
   async function publishOne(d) {
     var w = null;
@@ -718,7 +868,7 @@
   async function tick() {
     if (!(await bound())) return;
     var s = await getState();
-    if (!s.beatAt || Date.now() - s.beatAt > BEAT_EVERY_MS) await heartbeat();
+    if (!s.beatAt || Date.now() - s.beatAt > BEAT_EVERY_MS || !s.browserBeat) { await heartbeat(); await setState({ browserBeat: true }); }
     if (publishing) return;
     s = await getState();
     if (s.enabled === false) return;
@@ -729,7 +879,7 @@
     publishing = true;
     try {
       for (var i = 0; i < MAX_PER_TICK; i++) {
-        var r = await fetch(API + "/due?skip=" + skip.join(","), { cache: "no-store" });
+        var r = await fetch(API + "/due?skip=" + skip.join(",") + "&browser=" + encodeURIComponent((await browserId()) || ""), { cache: "no-store" });
         var j = await r.json().catch(function () { return null; });
         var d = j && j.success && j.data && j.data.post;
         if (!d) break;
@@ -739,6 +889,9 @@
     } finally {
       publishing = false;
     }
+    // Pages the dashboard asked this Chrome to check (after posting, never before).
+    s = await getState();
+    if (s.checkLinkedIn && s.checkLinkedIn.length) await probeLinkedIn(s.checkLinkedIn);
   }
 
   // ── Wiring (top level, so the service worker re-registers on wake) ──────

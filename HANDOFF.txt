@@ -51,6 +51,29 @@ Reporting     : the daily Phantombuster digest goes to
 
 3. RECENTLY DONE  [DONE]
 ----------------------------------------------------------------
+- 2026-10-26 v4.64.0 — Claude scheduled tasks moved into the app (GitHub Actions
+  schedules in .github/workflows; verification output on issue #5):
+  [17] pb-import-daily.yml — 07:00 New York daily: GET /api/cron/pb-import-latest
+       ?platform=TWITTER then ?platform=LINKEDIN, sequential (UTC slots 11:00 EDT /
+       12:00 EST, offset guard keeps one). Claude task #17 can be switched off.
+       ✅ schedule live (PR #6, 32d6c7b); verified 2026-10-26 20:04 UTC: both calls HTTP 200.
+       ❌ but Phantombuster itself answers "Could not fetch agent metadata from Phantombuster."
+          for BOTH platforms (0 rows) — PB API key / phantom ids in Setting "phantombuster"
+          are invalid or the PB account/agents are gone. Fix in Social -> Settings ->
+          Phantombuster (or the PB dashboard). Not a scheduler problem.
+  [19] missing-today.yml + POST /api/report/missing-today — 09:00 New York daily (UTC
+       13:00 EDT / 14:00 EST): emails social@gershonconsulting.com from
+       "GC Social <reports@gershon.ai>", subject "[19] Social — still missing today: N — date";
+       ❌ line = link unresolvable / page does not exist, 🔒 line = just blocked. Nothing
+       sent when N = 0; one email per NY day (Setting missing_today_sent). Cloud scrape dropped.
+       ✅ live (PR #6); test email 2026-10-26 20:04 UTC "[19] ... missing today: 86", Resend
+          01a179d0-3518-73c5-bdc2-4ca462b564b4, delivered (94 pairs checked, ❌ 2, 🔒 84).
+  deploy-socialtracking-cron.yml — deploys Worker gershon-socialtracking-cron
+       (socialtracking repo cron/) on push to branch deploy-cron/socialtracking.
+       ✅ deployed 2026-10-26 20:01/20:09 UTC, crons 30 12 * * 1 + 0 12 1 * *, secret
+          REPORT_CRON_KEY (= CF_CRON_SECRET); dry-run auth check HTTP 200 (PR #7).
+  deploy.yml: "prisma db push" is now skipped when the commit message contains
+       [skip-db-push] (code-only deploys must not touch the shared Neon schema).
 - Per-computer 'Collecting session ON/OFF' viewer mode added
   (2026-09-09), 5 files, shipped as a single PR to avoid five
   production deploys. Card sits in Settings, above the captured-
@@ -137,3 +160,12 @@ UPDATE 2026-10-18  -  v4.51.0  Publishing Autopilot + Knowledge Base
        Full spec: docs/AUTOPILOT.md
 [TODO] Check each internal company has LinkedIn + X set in Publishing -> Accounts.
 [TODO] Review the AI-drafted Knowledge Base of each internal company.
+
+----------------------------------------------------------------
+UPDATE 2026-10-26  -  POST /api/matrix-stats (Client Platform Matrix)
+----------------------------------------------------------------
+[DONE] POST https://social.gershon.ai/api/matrix-stats — read-only, auth = SHA-256 of body
+       "secret" vs hash hardcoded in src/app/api/matrix-stats/route.ts (exact-path
+       whitelist MACHINE_EXACT in middleware). Matches people to primary-org Clients by
+       company name / email domain vs website; note "campaign" or "N posts (30d)";
+       "others" = unmatched ACTIVE CAMPAIGN clients. Contract shared with 3 other apps.

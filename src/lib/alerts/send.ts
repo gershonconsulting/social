@@ -16,6 +16,7 @@ import prisma from "@/lib/db";
 import { buildPostingAlert, SENT_KEY, DEFAULT_TO, type PeriodKind, type PostingAlert } from "./posting-alerts";
 import { alertSubject, renderAlertBody, wrapAlertEmail } from "./render";
 import { resolveFrom } from "@/lib/email/sender";
+import { withAuditBcc } from "@/lib/mail-bcc";
 
 export async function readSent(): Promise<Record<string, string>> {
   const row = await prisma.setting.findUnique({ where: { key: SENT_KEY } });
@@ -47,7 +48,7 @@ async function sendViaResend(html: string, subject: string, to: string) {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ from, to, subject, html }),
+      body: JSON.stringify(withAuditBcc({ from, to, subject, html })),
     });
     if (!r.ok) {
       const body = await r.text().catch(() => "");

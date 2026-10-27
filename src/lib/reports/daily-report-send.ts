@@ -16,6 +16,7 @@
 import prisma from "@/lib/db";
 import { buildDailyReport, REPORT_SENT_KEY, DEFAULT_REPORT_TO, type DailyReport } from "./daily-report";
 import { renderDailyReportHtml, dailyReportSubject } from "./daily-report-render";
+import { withAuditBcc } from "@/lib/mail-bcc";
 
 const KEEP_KEYS = 30;
 
@@ -75,7 +76,7 @@ async function sendViaResend(
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ from, to, subject, html }),
+      body: JSON.stringify(withAuditBcc({ from, to, subject, html })),
     });
     if (!r.ok) {
       const body = await r.text().catch(() => "");

@@ -7,8 +7,8 @@
  * So this page is now hard-scoped to CAMPAIGN companies (the sidebar category
  * filter does not apply here) and carries real numbers again: posting volume
  * against each company's weekly objective, engagement, views, followers per
- * company, the publishing pipeline and content runway, top posts and
- * collection health.
+ * company, top posts and collection health. (v4.65.0: the publishing
+ * pipeline and content runway left for Publish.)
  *
  * Everything is aggregated in the database (GROUP BY) — never load raw posts
  * into the edge worker (see project_social_outage_2026_08_21). With only the
@@ -19,7 +19,6 @@ import { getCollectionStatus } from "./dashboard-content";
 import { DashboardOverviewClient } from "./dashboard-overview-client";
 import { getCurrentOrgId } from "@/lib/scoped-db";
 import { objectivesFor, DEFAULT_PER_WEEK } from "@/lib/campaigns/objectives";
-import { inventory } from "@/lib/publishing-inventory";
 
 export interface DashCompany {
   id: string;
@@ -30,7 +29,6 @@ export interface DashCompany {
   networks: string[];                 // LINKEDIN / TWITTER with an enabled connection
   lastPost: string | null;            // YYYY-MM-DD
   followers: Array<{ platform: string; now: number; then: number | null }>;
-  runway: { days: number; ready: number; inReview: number; changes: number; level: "ok" | "low" | "critical" } | null;
 }
 
 /** [companyIndex, platform 0=LinkedIn 1=X, date YYYY-MM-DD, posts, engagement, views] */
@@ -40,9 +38,6 @@ export type MonthRow = [number, number, string, number, number, number];
 
 /** [companyIndex, YYYY-MM, weekdays with any post, with a LinkedIn post, with an X post] */
 export type CoverRow = [number, string, number, number, number];
-
-/** Content not yet published, dated or not: [companyIndex, status, NY date YYYY-MM-DD | null] */
-export type StockRow = [number, string, string | null];
 
 export interface TopPost {
   c: number;              // company index
@@ -61,12 +56,9 @@ export interface DashData {
   days: DayRow[];
   months: MonthRow[];
   cover: CoverRow[];
-  stock: StockRow[];
   top: TopPost[];
   collection: { state: string; platform: string; companyIdx: number; lastSyncAt: string | null }[];
   lastUpdate: string | null;
-  pipeline: { drafts: number; review: number; changes: number; approved: number; scheduled: number; published30: number; failed: number };
-  upcoming: Array<{ c: number; platform: string; at: string; text: string }>;
   today: string;
 }
 
@@ -92,7 +84,6 @@ export async function DashboardOverview() {
   const f30 = new Date(now);
   f30.setDate(f30.getDate() - 30);
   const f30Day = isoDay(f30);
-  const p30 = new Date(now.getTime() - 30 * 86400000);
 
   type Agg = { clientId: string; platform: string; k: string; n: number; e: number; v: number };
   type Top = { clientId: string; platform: string; d: string; url: string | null; t: string | null; l: number; c: number; s: number; v: number };
@@ -102,7 +93,7 @@ export async function DashboardOverview() {
   const none = <T,>() => Promise.resolve([] as T[]);
   const orgId = await getCurrentOrgId().catch(() => null);
 
-  const [cover, stockItems, daily, monthly, top, folNow, folThen, conns, collection, items, sched, published30, failed, upcoming, inv, obj] =
+  const [cover, daily, monthly, top, folNow, folThen, conns, collection, obj] =
     await Promise.all([
       // Weekdays (Mon–Fri) that had at least one post, per company per month.
       ids.length
@@ -116,15 +107,6 @@ export async function DashboardOverview() {
               AND EXTRACT(ISODOW FROM to_date("publishedDateLocal", 'YYYY-MM-DD')) < 6
             GROUP BY 1,2`
         : none<Cov>(),
-      // Content still to publish: ready (approved / scheduled), with the client, drafts.
-      prisma.contentItem.findMany({
-        where: {
-          clientId: { in: ids },
-          status: { in: ["DRAFT", "IN_REVIEW", "CHANGES_REQUESTED", "APPROVED", "SCHEDULED"] },
-          OR: [{ scheduledAt: null }, { scheduledAt: { gte: new Date(now.getTime() - 86400000) } }],
-        },
-        select: { clientId: true, status: true, scheduledAt: true },
-      }),
       ids.length
         ? prisma.$queryRaw<Agg[]>`
             SELECT "clientId", platform::text AS platform, "publishedDateLocal" AS k,
@@ -177,33 +159,15 @@ export async function DashboardOverview() {
         select: { clientId: true, platform: true },
       }),
       getCollectionStatus(),
-      prisma.contentItem.groupBy({
-        by: ["status"],
-        where: { clientId: { in: ids } },
-        _count: { _all: true },
-      }),
-      prisma.scheduledPost.count({ where: { clientId: { in: ids }, status: "SCHEDULED", scheduledAt: { gte: now } } }),
-      prisma.scheduledPost.count({ where: { clientId: { in: ids }, status: "POSTED", postedAt: { gte: p30 } } }),
-      prisma.scheduledPost.count({ where: { clientId: { in: ids }, status: { in: ["FAILED", "MISSED"] }, scheduledAt: { gte: p30 } } }),
-      prisma.scheduledPost.findMany({
-        where: { clientId: { in: ids }, status: "SCHEDULED", scheduledAt: { gte: now } },
-        orderBy: { scheduledAt: "asc" },
-        take: 6,
-        select: { clientId: true, platform: true, scheduledAt: true, text: true },
-      }),
-      orgId ? inventory(orgId).catch(() => []) : Promise.resolve([]),
       orgId ? objectivesFor(orgId, clients).catch(() => null) : Promise.resolve(null),
     ]);
 
   const folThenM = new Map(folThen.map((f) => [`${f.clientId}|${f.platform}`, f.n]));
-  const invM = new Map(inv.map((r) => [r.clientId, r]));
-  const status = (s: string) => items.find((i) => i.status === s)?._count._all ?? 0;
 
   const companies: DashCompany[] = clients.map((c) => {
     const nets = Array.from(
       new Set(conns.filter((x) => x.clientId === c.id && (x.platform as string) in PLAT_IDX).map((x) => x.platform as string)),
     );
-    const r = invM.get(c.id);
     const mine = daily.filter((d) => d.clientId === c.id).map((d) => d.k);
     const lastRecent = mine.length ? mine.reduce((a, b) => (a > b ? a : b)) : null;
     const lastAny = monthly.some((m) => m.clientId === c.id) ? lastRecent ?? "older" : null;
@@ -219,9 +183,6 @@ export async function DashboardOverview() {
       followers: folNow
         .filter((f) => f.clientId === c.id && f.platform in PLAT_IDX)
         .map((f) => ({ platform: f.platform, now: f.n, then: folThenM.get(`${c.id}|${f.platform}`) ?? null })),
-      runway: r
-        ? { days: r.coverageDays, ready: r.ready, inReview: r.inReview, changes: r.changesRequested, level: r.level }
-        : null,
     };
   });
 
@@ -229,13 +190,6 @@ export async function DashboardOverview() {
     companies,
     days: daily.map((d) => [idx.get(d.clientId)!, PLAT_IDX[d.platform], d.k, d.n, d.e, d.v]),
     cover: cover.map((r) => [idx.get(r.clientId)!, r.k, r.a, r.li, r.x]),
-    stock: stockItems
-      .filter((i) => i.clientId && idx.has(i.clientId))
-      .map((i) => [
-        idx.get(i.clientId!)!,
-        i.status,
-        i.scheduledAt ? i.scheduledAt.toLocaleDateString("en-CA", { timeZone: "America/New_York" }) : null,
-      ]),
     months: monthly.map((d) => [idx.get(d.clientId)!, PLAT_IDX[d.platform], d.k, d.n, d.e, d.v]),
     top: top.map((t) => ({
       c: idx.get(t.clientId)!,
@@ -252,18 +206,6 @@ export async function DashboardOverview() {
       .filter((x) => idx.has(x.clientId) && x.platform in PLAT_IDX)
       .map((x) => ({ state: x.state, platform: x.platform, companyIdx: idx.get(x.clientId)!, lastSyncAt: x.lastSyncAt })),
     lastUpdate: collection.lastUpdate,
-    pipeline: {
-      drafts: status("DRAFT"),
-      review: status("IN_REVIEW"),
-      changes: status("CHANGES_REQUESTED"),
-      approved: status("APPROVED"),
-      scheduled: sched,
-      published30,
-      failed,
-    },
-    upcoming: upcoming
-      .filter((u) => u.clientId && idx.has(u.clientId))
-      .map((u) => ({ c: idx.get(u.clientId!)!, platform: u.platform, at: u.scheduledAt.toISOString(), text: u.text.slice(0, 140) })),
     today,
   };
 

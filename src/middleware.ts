@@ -51,13 +51,79 @@ const MACHINE_PATHS = [
   "/api/admin/sheets-sync",
   "/api/admin/streak-sync",
   "/api/test/",
-  // v4.37.0 — the client review portal: the private token in the path is the access.
-  "/api/review/",
-  // v4.38.0 — post pictures: the random key in the URL is the access.
-  "/api/media/",
-  // v4.42.0 — a client's publishing-extension connect page: the key in the path is the access.
-  "/api/connect/",
 ];
+
+/**
+ * Exact machine routes (no prefix match). /api/matrix-stats — the weekly Client
+ * Platform Matrix email; the route checks the SHA-256 of its own secret.
+ */
+const MACHINE_EXACT = [
+  "/api/matrix-stats",
+  // talkingpoints.gershon.ai email relay — the route reads the queued email back
+  // from Talking Points itself (one-time id), so it needs no session.
+  "/api/relay/talkingpoints",
+];
+
+/**
+ * v4.65.0 — Social is a COLLECTION platform only (Olivier, 2026-10-26): it
+ * collects the posts of the companies a workspace is connected with —
+ * clients, partners, competitors, internal. Publishing (content, client
+ * review, calendar, Connections, Autopilot, Knowledge Base) lives on
+ * Publish. Old links and not-yet-updated extensions are sent there with a
+ * 308, which keeps the method, the body and the extension's x-gershon-token
+ * header. Nothing below is served by Social any more.
+ */
+const PUBLISH_ORIGIN = "https://publish.gershon.ai";
+const MOVED_TO_PUBLISH = [
+  "/publishing",
+  "/knowledge-base",
+  "/review/",
+  "/connect/",
+  "/api/publishing/",
+  "/api/knowledge-base",
+  "/api/review/",
+  "/api/media/",
+  "/api/connect/",
+  "/api/cron/autopilot",
+  "/api/cron/publishing-daily",
+  "/api/cron/publish-sweep",
+];
+
+function movedToPublish(req: NextRequest): NextResponse | null {
+  const { pathname, search } = req.nextUrl;
+  const hit = MOVED_TO_PUBLISH.some((p) =>
+    p.endsWith("/") ? pathname.startsWith(p) : pathname === p || pathname.startsWith(p + "/"),
+  );
+  return hit ? NextResponse.redirect(`${PUBLISH_ORIGIN}${pathname}${search}`, 308) : null;
+}
+
+/**
+ * Extensions older than 0.26.0 still ask social.gershon.ai for posts to
+ * publish. A redirect would not do for them: they have no permission for
+ * publish.gershon.ai, so the browser would block the answer. Until every
+ * Chrome runs 0.26.0 (which talks to Publish directly), those calls are
+ * passed through to Publish unchanged — Social adds and decides nothing.
+ * Sunset: remove once /api/extension/publish/ traffic here is zero.
+ */
+async function relayToPublish(req: NextRequest): Promise<Response | null> {
+  const { pathname, search } = req.nextUrl;
+  if (!pathname.startsWith("/api/extension/publish/")) return null;
+  const headers = new Headers();
+  for (const h of ["content-type", "x-gershon-token", "authorization"]) {
+    const v = req.headers.get(h);
+    if (v) headers.set(h, v);
+  }
+  const body = req.method === "GET" || req.method === "HEAD" ? undefined : await req.arrayBuffer();
+  try {
+    const r = await fetch(`${PUBLISH_ORIGIN}${pathname}${search}`, { method: req.method, headers, body, redirect: "manual" });
+    return new Response(r.body, {
+      status: r.status,
+      headers: { "content-type": r.headers.get("content-type") || "application/json", "cache-control": "no-store" },
+    });
+  } catch {
+    return NextResponse.json({ success: false, error: "Publish is not reachable" }, { status: 502 });
+  }
+}
 
 /** Sign-in itself, including every OAuth callback. */
 const AUTH_PATHS = ["/api/auth/"];
@@ -94,12 +160,19 @@ function legacyRedirect(req: NextRequest): NextResponse | null {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  const relayed = await relayToPublish(req);
+  if (relayed) return relayed as NextResponse;
+
+  const toPublish = movedToPublish(req);
+  if (toPublish) return toPublish;
+
   const moved = legacyRedirect(req);
   if (moved) return moved;
 
   if (!pathname.startsWith("/api/")) return NextResponse.next();
   if (startsWithAny(pathname, AUTH_PATHS)) return NextResponse.next();
   if (startsWithAny(pathname, MACHINE_PATHS)) return NextResponse.next();
+  if (MACHINE_EXACT.includes(pathname)) return NextResponse.next();
   if (startsWithAny(pathname, EXTENSION_PATHS)) return NextResponse.next();
 
   const token = await getToken({
