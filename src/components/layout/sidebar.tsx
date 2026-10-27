@@ -1,11 +1,13 @@
 "use client";
 
 /**
- * The left menu — v4.9.0 "Charcoal & Signal Red".
+ * The left menu — v4.66.0 unified Gershon design (Linalysis layout).
  *
- * Dark charcoal rail, grouped sections (Overview · Portfolio · System ·
- * Workspace). Red appears only as the thin marker on the current page, so the
- * content area stays the focus. Routes and order are unchanged from v2.6.0.
+ * White 240px rail, grouped sections (Overview · Portfolio ·
+ * System · Workspace), a solid Gershon-red pill on the current page. Below
+ * 1024px it becomes an off-canvas drawer opened by the ☰ button, which sits
+ * inside the white top bar's left gutter so it never covers a page title.
+ * Routes and order are unchanged from v2.6.0.
  */
 
 import { SocialMark, SocialWordmark } from "@/components/brand/social-mark";
@@ -21,6 +23,8 @@ import {
   Settings,
   Users,
   LogOut,
+  Menu,
+  X,
   ScrollText,
   AlertOctagon,
   Network,
@@ -128,13 +132,38 @@ export function Sidebar() {
       )
     : navGroups;
 
+  // Phone / tablet drawer. Closed on every navigation.
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
   return (
-    <aside className="w-[248px] flex-shrink-0 bg-[#111317] text-gray-300 flex flex-col h-screen sticky top-0 border-r border-[#1F2229]">
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label={open ? "Close menu" : "Open menu"}
+        aria-expanded={open}
+        className="lg:hidden fixed top-2.5 left-3 z-50 w-9 h-9 rounded-lg bg-white border border-gray-200 text-gray-900 flex items-center justify-center hover:border-red-600 hover:text-red-600"
+      >
+        {open ? <X size={18} /> : <Menu size={18} />}
+      </button>
+      {open && (
+        <div className="lg:hidden fixed inset-0 z-30 bg-black/20" onClick={() => setOpen(false)} aria-hidden="true" />
+      )}
+    <aside
+      className={cn(
+        "gx-sidebar w-[240px] flex-shrink-0 bg-white text-gray-900 flex flex-col h-screen border-r border-gray-200",
+        "fixed inset-y-0 left-0 z-40 transition-transform lg:sticky lg:top-0 lg:translate-x-0",
+        open ? "is-open translate-x-0" : "-translate-x-full"
+      )}
+    >
       {/* Brand */}
-      <div className="px-5 pt-5 pb-4 border-b border-[#1F2229]">
+      <div className="pl-[60px] lg:pl-5 pr-5 h-14 flex items-center border-b border-gray-200">
         <Link href="/dashboard" className="flex items-center gap-2.5">
-          <SocialMark size={32} className="flex-shrink-0" />
-          <SocialWordmark dark />
+          <SocialMark size={30} className="flex-shrink-0" />
+          <SocialWordmark />
         </Link>
       </div>
 
@@ -142,7 +171,7 @@ export function Sidebar() {
       <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-5">
         {groups.map((group) => (
           <div key={group.label} className="space-y-0.5">
-            <div className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#7D838E]">
+            <div className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500">
               {group.label}
             </div>
             {group.items.map((item) => {
@@ -151,18 +180,19 @@ export function Sidebar() {
                 <div key={item.href}>
                   <Link
                     href={item.href}
+                    aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm font-medium transition-colors",
+                      "flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors",
                       isActive
-                        ? "bg-[#23262D] text-white shadow-[inset_2px_0_0_#D92D20]"
-                        : "text-[#C9CDD4] hover:bg-[#1A1D23] hover:text-white"
+                        ? "bg-red-600 text-white font-semibold hover:bg-red-700"
+                        : "text-gray-900 hover:bg-red-50 hover:text-red-600"
                     )}
                   >
                     <item.icon className="flex-shrink-0" size={17} strokeWidth={1.8} />
                     {item.label}
                   </Link>
                   {item.children && isActive && (
-                    <div className="mt-0.5 mb-1 ml-[30px] pl-2.5 border-l border-[#2A2E37] space-y-0.5">
+                    <div className="mt-1 mb-1 ml-[30px] pl-2.5 border-l border-gray-200 space-y-0.5">
                       {item.children.map((sub) => {
                         // A child that shares its parent's href is active on that exact page only.
                         const subActive =
@@ -171,9 +201,10 @@ export function Sidebar() {
                           <Link
                             key={sub.href}
                             href={sub.href}
+                            aria-current={subActive ? "page" : undefined}
                             className={cn(
                               "block px-2.5 py-1.5 rounded-md text-[13px] font-medium transition-colors",
-                              subActive ? "text-white bg-[#1A1D23]" : "text-[#9BA0AA] hover:text-white"
+                              subActive ? "text-red-700 bg-red-50 font-semibold" : "text-gray-600 hover:text-red-600"
                             )}
                           >
                             {sub.label}
@@ -194,27 +225,28 @@ export function Sidebar() {
       </nav>
 
       {/* User footer */}
-      <div className="px-3 py-3 border-t border-[#1F2229]">
+      <div className="px-3 py-3 border-t border-gray-200">
         <DemoToggleButton />
         <div className="flex items-center gap-2.5 px-2 py-1.5">
-          <div className="w-8 h-8 rounded-full bg-[#2A2E37] text-white text-xs font-semibold flex items-center justify-center flex-shrink-0">
+          <div className="w-8 h-8 rounded-full bg-red-600 text-white text-xs font-semibold flex items-center justify-center flex-shrink-0">
             {initials(session?.user?.name, session?.user?.email)}
           </div>
           <div className="flex-1 min-w-0 leading-tight">
-            <div className="text-[13px] font-medium text-white truncate">{session?.user?.name}</div>
-            <div className="text-xs text-[#8E949F] truncate capitalize">{role}</div>
+            <div className="text-[13px] font-medium text-gray-900 truncate">{session?.user?.name}</div>
+            <div className="text-xs text-gray-500 truncate capitalize">{role}</div>
           </div>
           <button
             onClick={() => signOut({ callbackUrl: "/login" })}
             aria-label="Sign out"
             title="Sign out"
-            className="w-8 h-8 rounded-md flex items-center justify-center text-[#8E949F] hover:bg-[#1A1D23] hover:text-white transition-colors"
+            className="w-8 h-8 rounded-md flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors"
           >
             <LogOut size={16} />
           </button>
         </div>
       </div>
     </aside>
+    </>
   );
 }
 
@@ -231,8 +263,8 @@ function DemoToggleButton() {
       className={
         "w-full flex items-center gap-2.5 px-2.5 py-1.5 mb-1 rounded-md text-[13px] font-medium transition-colors " +
         (demoOn
-          ? "bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/40"
-          : "text-[#8E949F] hover:bg-[#1A1D23] hover:text-white")
+          ? "bg-amber-50 text-amber-800 ring-1 ring-amber-300"
+          : "text-gray-600 hover:bg-red-50 hover:text-red-600")
       }
     >
       {demoOn ? <StopCircle size={15} /> : <PlayCircle size={15} />}
