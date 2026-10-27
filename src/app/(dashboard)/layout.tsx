@@ -10,7 +10,8 @@ import { seedValosWorkspace } from "@/lib/workspaces/seed-valos";
 import { purgeValosFromGershonOnce } from "@/lib/workspaces/purge-valos-from-gershon";
 import { ExtensionInstallBanner } from "@/components/layout/extension-install-banner";
 import { CollectionHealthBanner } from "@/components/layout/collection-health-banner";
-import { EXTENSION_LATEST } from "@/lib/extension-version";
+import { EXTENSION_LATEST, APP_VERSION as APP_RELEASE } from "@/lib/extension-version";
+import { SocialMark } from "@/components/brand/social-mark";
 import { ApiRetry } from "@/components/layout/api-retry";
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
@@ -71,10 +72,20 @@ export default async function DashboardLayout({
       <ExtensionSeenReporter />
       {/* Retries transient Cloudflare 5xx on GET /api/* (v4.33.0). */}
       <ApiRetry />
-      <div className="flex h-screen overflow-hidden bg-[#F5F4F0]">
+      <div className="flex h-screen overflow-hidden bg-[#FAFAFA]">
         <Sidebar />
-        <main className="flex-1 overflow-y-auto">
-          <div className="max-w-[1400px] mx-auto px-9 pt-7 pb-10">
+        <main className="gx-main flex-1 min-w-0 overflow-y-auto">
+          {/* v4.66.0 white top bar (Linalysis). On phones its left gutter holds
+              the fixed ☰ menu button, so the button never sits on a title. */}
+          <div className="gx-topbar sticky top-0 z-20 h-14 bg-white border-b border-gray-200 flex items-center gap-3 pl-[60px] pr-4 sm:pr-6 lg:px-9">
+            <a href="/dashboard" className="lg:hidden flex items-center gap-2 min-w-0" aria-label="Social dashboard">
+              <SocialMark size={26} className="flex-shrink-0" />
+              <span className="text-[15px] font-bold tracking-tight text-gray-900">Social</span>
+            </a>
+            <span className="hidden lg:inline text-[13px] font-medium text-gray-500">Social by Gershon.AI</span>
+            <span className="ml-auto text-[11px] font-mono text-gray-500 whitespace-nowrap">v{APP_RELEASE}</span>
+          </div>
+          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-9 pt-6 lg:pt-7 pb-10">
             {/* Red strip when the extension is missing or out of date here. */}
             <ExtensionInstallBanner latest={EXTENSION_LATEST} />
             {/* Red strip when LinkedIn collection returns nothing for every company. */}
