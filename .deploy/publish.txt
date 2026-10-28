@@ -1,0 +1,1 @@
+Last deploy trigger: publish@main v0.9.0 (PR #5: Dashboard, Intelligence, Settings) — 2026-10-28
