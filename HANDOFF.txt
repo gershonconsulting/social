@@ -169,3 +169,17 @@ UPDATE 2026-10-26  -  POST /api/matrix-stats (Client Platform Matrix)
        whitelist MACHINE_EXACT in middleware). Matches people to primary-org Clients by
        company name / email domain vs website; note "campaign" or "N posts (30d)";
        "others" = unmatched ACTIVE CAMPAIGN clients. Contract shared with 3 other apps.
+
+----------------------------------------------------------------
+UPDATE 2026-10-28  -  v4.67.1  GET /api/digest/daily needs auth (nightly)
+----------------------------------------------------------------
+Branch nightly/2026-10-28-digest-auth (PR into claude/social-campaign-verification-jiG5E, NOT merged).
+Before: GET https://social.gershon.ai/api/digest/daily answered 200 + the full digest HTML
+(Gershon's tracked companies, posts, sync errors) to anyone. /api/digest/ is a MACHINE path in
+middleware (route checks its own secret) and only POST had a check.
+Now: GET needs Bearer CRON_SECRET/DIGEST_SECRET or a signed-in user of the primary (Gershon)
+workspace; otherwise 401. POST (the 13:00 UTC Daily Digest workflow) is unchanged.
+✅ ready to test after merge: signed-out curl of /api/digest/daily -> 401; signed in as a Gershon
+   user in the browser -> digest page; next morning's Daily Digest workflow still HTTP 200.
+❌ still to do: POST treats an UNSET CRON_SECRET+DIGEST_SECRET as "no check" on POST - confirm
+   one of them is set in Cloudflare (Charles), then tighten.
