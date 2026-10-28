@@ -22,7 +22,7 @@ import { primaryOrgId } from "@/lib/reports/monthly/data";
  * Auth (POST only): Bearer CRON_SECRET or DIGEST_SECRET.
  * Recipients: report@gershonconsulting.com + aina.rama@gershonconsulting.com
  *             (override with DIGEST_TO, comma-separated). See lib/email/sender.
- * Sender:     Social GershonCRM <social@gershon.ai> — the only VERIFIED Resend
+ * Sender:     GC Social <social@gershon.ai> — the only VERIFIED Resend
  *             domain; anything else 403s for non-owner recipients.
  * Provider:  Resend — needs RESEND_API_KEY in env.
  */
@@ -206,7 +206,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 function renderHtml(d: DigestData): string {
   const fmtDate = (iso: string) => {
-    try { return new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }); }
+    try { return new Date(iso).toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" }); }
     catch { return iso; }
   };
   const day = new Date(d.generatedAt).toLocaleDateString("en-US", { dateStyle: "full" });
@@ -217,7 +217,7 @@ function renderHtml(d: DigestData): string {
     const header = c.category !== lastCategory ? `
     <tr>
       <td colspan="3" style="padding:10px 12px 6px;background:${c.category === "CAMPAIGN" ? "#fff8f7" : "#f9fafb"};border-bottom:1px solid #e5e7eb;">
-        <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:${c.category === "CAMPAIGN" ? "#FE1B04" : "#374151"};">${CATEGORY_LABELS[c.category] ?? c.category}</span>
+        <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:${c.category === "CAMPAIGN" ? "#CC3333" : "#374151"};">${CATEGORY_LABELS[c.category] ?? c.category}</span>
         <span style="font-size:11px;color:#9ca3af;margin-left:8px;">${catTotal} ${catTotal === 1 ? "post" : "posts"}</span>
       </td>
     </tr>` : "";
@@ -225,7 +225,7 @@ function renderHtml(d: DigestData): string {
     return `${header}
     <tr>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;font-weight:600;">
-        <a href="https://social.gershon.ai/clients/${c.id}" style="color:#111;text-decoration:none;">${c.name}</a>
+        <a href="https://social.gershon.ai/clients/${c.id}" style="color:#12211d;text-decoration:none;">${c.name}</a>
       </td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:700;font-size:18px;">${c.newPosts}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;color:#555;">
@@ -239,7 +239,7 @@ function renderHtml(d: DigestData): string {
       <td style="padding:8px 12px;border-bottom:1px solid #eee;vertical-align:top;">
         <div style="font-weight:600;font-size:13px;">${p.clientName} <span style="color:#999;font-weight:400;">· ${PLATFORM_LABELS[p.platform] ?? p.platform}</span></div>
         <div style="font-size:13px;color:#444;margin-top:4px;">${p.snippet.replace(/</g, "&lt;")}</div>
-        <div style="font-size:11px;color:#999;margin-top:6px;">${fmtDate(p.publishedAt)} · ${p.engagement} engagements · <a href="${p.postUrl}" style="color:#3b82f6;">View</a></div>
+        <div style="font-size:11px;color:#999;margin-top:6px;">${fmtDate(p.publishedAt)} · ${p.engagement} engagements · <a href="${p.postUrl}" style="color:#1f6f5c;">View</a></div>
       </td>
     </tr>
   `).join("");
@@ -257,14 +257,15 @@ function renderHtml(d: DigestData): string {
 
   return `
 <!doctype html>
-<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:24px;background:#f9fafb;color:#111;">
-<div style="max-width:680px;margin:0 auto;background:white;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
-  <div style="background:#FE1B04;color:white;padding:20px 24px;">
-    <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;opacity:0.85;">social.gershon.ai</div>
-    <div style="font-size:22px;font-weight:700;margin-top:4px;">Daily digest — ${day}</div>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:0;background:#ffffff;color:#12211d;">
+<div style="max-width:680px;margin:0 auto;background:#ffffff;">
+  <div style="height:4px;background:#CC3333;line-height:4px;font-size:0;">&nbsp;</div>
+  <div style="padding:20px 24px 16px;border-bottom:1px solid #e5e7eb;">
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#CC3333;font-weight:700;">GC Social · daily digest</div>
+    <div style="font-size:22px;font-weight:700;margin-top:4px;color:#12211d;">Daily digest — ${day}</div>
   </div>
-  <div style="padding:20px 24px;background:#fff8f7;border-bottom:1px solid #fee2dd;">
-    <div style="font-size:32px;font-weight:800;color:#FE1B04;line-height:1;">${d.totals.newPosts}</div>
+  <div style="padding:20px 24px;background:#fdf2f2;border-bottom:1px solid #f3caca;">
+    <div style="font-size:32px;font-weight:800;color:#CC3333;line-height:1;">${d.totals.newPosts}</div>
     <div style="font-size:13px;color:#666;margin-top:4px;">new posts ingested in the last 24 hours across ${d.totals.clientsWithActivity} ${d.totals.clientsWithActivity === 1 ? "client" : "clients"}</div>
   </div>
   <div style="padding:18px 24px;">
@@ -298,11 +299,11 @@ function renderHtml(d: DigestData): string {
       </tr>
     </table>
     <div style="margin-top:12px;text-align:center;">
-      <a href="https://social.gershon.ai/networks" style="display:inline-block;padding:10px 18px;background:#FE1B04;color:white;font-weight:600;font-size:13px;text-decoration:none;border-radius:8px;">Open Networks page →</a>
+      <a href="https://social.gershon.ai/networks" style="display:inline-block;padding:10px 18px;background:#CC3333;color:#ffffff;font-weight:600;font-size:13px;text-decoration:none;border-radius:8px;">Open Networks page →</a>
     </div>
   </div>
-  <div style="padding:14px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:11px;color:#999;">
-    Generated ${fmtDate(d.generatedAt)} · <a href="https://social.gershon.ai" style="color:#6b7280;">social.gershon.ai</a> · v${(process.env.NEXT_PUBLIC_APP_VERSION || "dev").slice(0, 7)}
+  <div style="padding:14px 24px;border-top:1px solid #e5e7eb;font-size:11px;line-height:1.5;color:#6b7280;">
+    Source: <a href="https://social.gershon.ai" style="color:#1f6f5c;">social.gershon.ai</a> (Social app database, last 24 hours) · Data as of ${fmtDate(d.generatedAt)} ET · v${(process.env.NEXT_PUBLIC_APP_VERSION || "dev").slice(0, 7)}
   </div>
 </div>
 </body></html>

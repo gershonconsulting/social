@@ -20,8 +20,12 @@ import { siteUrl } from "@/lib/site";
 import { APP_VERSION } from "@/lib/extension-version";
 import { BUSINESS_TZ } from "../et-days";
 import { withAuditBcc } from "@/lib/mail-bcc";
+import { withGcName } from "@/lib/email/sender";
 
-export const RED = "#FE1B04";
+/** Report e-mail house style (2026-10-23): white page, dark text, brand red accents only. */
+export const RED = "#CC3333";
+export const INK = "#12211d";
+export const LINK = "#1f6f5c";
 export const GREEN = "#047857";
 export const AMBER = "#b45309";
 export const DARK_RED = "#b91c1c";
@@ -63,10 +67,12 @@ export function pill(text: string, level: Level): string {
 }
 
 export function banner(level: Level, headline: string, detail: string): string {
-  const bg = level === "critical" ? "#7f1d1d" : level === "warn" ? "#fffbeb" : "#ecfdf5";
-  const fg = level === "critical" ? "#fff" : level === "warn" ? "#78350f" : "#064e3b";
+  // House style: never light text on a dark band — critical is a pale red tint with a red edge.
+  const bg = level === "critical" ? "#fdf2f2" : level === "warn" ? "#fffbeb" : "#ecfdf5";
+  const fg = level === "critical" ? "#7f1d1d" : level === "warn" ? "#78350f" : "#064e3b";
+  const edge = level === "critical" ? RED : level === "warn" ? "#f59e0b" : "#10b981";
   const icon = level === "critical" ? "⛔" : level === "warn" ? "⚠️" : "✅";
-  return `<div style="background:${bg};color:${fg};padding:18px 24px;border-bottom:1px solid #e5e7eb;">
+  return `<div style="background:${bg};color:${fg};padding:18px 24px;border-bottom:1px solid #e5e7eb;border-left:4px solid ${edge};">
     <div style="font-size:18px;font-weight:800;">${icon} ${esc(headline)}</div>
     ${detail ? `<div style="font-size:13px;margin-top:6px;line-height:1.5;">${detail}</div>` : ""}
   </div>`;
@@ -76,8 +82,8 @@ export function kpis(items: Array<{ label: string; value: string; hint?: string;
   const cells = items
     .map(
       (k) => `<td style="padding:14px 10px;text-align:center;border-right:1px solid #eee;vertical-align:top;">
-      <div style="font-size:26px;font-weight:800;color:${k.level ? LEVEL_COLOR[k.level] : "#111"};">${esc(k.value)}</div>
-      <div style="font-size:12px;font-weight:600;color:#111;margin-top:2px;">${esc(k.label)}</div>
+      <div style="font-size:26px;font-weight:800;color:${k.level ? LEVEL_COLOR[k.level] : INK};">${esc(k.value)}</div>
+      <div style="font-size:12px;font-weight:600;color:${INK};margin-top:2px;">${esc(k.label)}</div>
       ${k.hint ? `<div style="font-size:11px;color:#9ca3af;margin-top:2px;">${esc(k.hint)}</div>` : ""}
     </td>`,
     )
@@ -98,8 +104,9 @@ export const THR = `style="padding:7px 8px;text-align:right;font-size:11px;color
 export const TD = `style="padding:7px 8px;font-size:13px;border-bottom:1px solid #f1f1f1;vertical-align:top;"`;
 export const TDR = `style="padding:7px 8px;font-size:13px;border-bottom:1px solid #f1f1f1;text-align:right;vertical-align:top;white-space:nowrap;"`;
 
+/** Wide tables scroll inside their own box on a phone, so the page never scrolls sideways. */
 export function table(head: string, rows: string): string {
-  return `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${head}${rows}</table>`;
+  return `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${head}${rows}</table></div>`;
 }
 
 export type OpsKind = "posting" | "competitive" | "intelligence";
@@ -121,35 +128,59 @@ function siblings(current: OpsKind | "collection"): string {
   return links
     .map(([k, href]) =>
       k === current
-        ? `<b style="color:#fff;">${OPS_LABEL[k]}</b>`
-        : `<a href="${href}" style="color:#d1d5db;text-decoration:none;">${OPS_LABEL[k]}</a>`,
+        ? `<b style="color:${INK};">${OPS_LABEL[k]}</b>`
+        : `<a href="${href}" style="color:${LINK};text-decoration:none;">${OPS_LABEL[k]}</a>`,
     )
-    .join(` <span style="color:#6b7280;">·</span> `);
+    .join(` <span style="color:#9ca3af;">·</span> `);
 }
 
+/** "Oct 22, 2026, 4:12 PM" in the business time zone. */
+export function asOf(d: Date = new Date()): string {
+  return d.toLocaleString("en-US", { timeZone: BUSINESS_TZ, dateStyle: "medium", timeStyle: "short" });
+}
+
+/**
+ * One-line provenance footer every report e-mail carries (house style, 2026-10-23):
+ * "Source: … · Data as of <time>".
+ */
+export function sourceLine(source: string, dataAsOf: Date = new Date(), extra = ""): string {
+  return `<div style="padding:14px 24px;border-top:1px solid #e5e7eb;font-size:11px;line-height:1.5;color:#6b7280;">
+    Source: ${esc(source)} · Data as of ${esc(asOf(dataAsOf))} ET${extra ? ` · ${extra}` : ""}
+  </div>`;
+}
+
+/**
+ * Report e-mail house style (Olivier, 2026-10-23): white background, single
+ * column, max-width 680px, dark text #12211d, links #1f6f5c, brand red #CC3333
+ * only as an accent (top line, section titles, buttons). Never light text on a
+ * dark band — the header used to be a black block with white text.
+ */
 export function page(opts: {
   kind: OpsKind;
   title: string;
   subtitle: string;
   body: string;
   cta: { href: string; label: string };
+  source?: string;
 }): string {
+  const host = SITE.replace(/^https?:\/\//, "");
+  // Legacy old-red literals left in report bodies (bars, links) → brand red.
+  const body = opts.body.replace(/#FE1B04/gi, RED);
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(opts.title)}</title></head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:#111;">
-<div style="max-width:720px;margin:0 auto;background:#fff;">
-  <div style="background:#111;padding:20px 24px;border-bottom:4px solid ${RED};">
-    <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9ca3af;">GC Social · daily report</div>
-    <div style="font-size:22px;font-weight:800;color:#fff;margin-top:4px;">${esc(opts.title)}</div>
-    <div style="font-size:13px;color:#d1d5db;margin-top:4px;">${esc(opts.subtitle)}</div>
-    <div style="font-size:12px;margin-top:10px;">${siblings(opts.kind)}</div>
+<body style="margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:${INK};">
+<div style="max-width:680px;margin:0 auto;background:#ffffff;">
+  <div style="height:4px;background:${RED};line-height:4px;font-size:0;">&nbsp;</div>
+  <div style="padding:20px 24px 16px;border-bottom:1px solid #e5e7eb;">
+    <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:${RED};font-weight:700;">GC Social · daily report</div>
+    <div style="font-size:22px;font-weight:800;color:${INK};margin-top:4px;line-height:1.25;">${esc(opts.title)}</div>
+    <div style="font-size:13px;color:#4b5563;margin-top:4px;">${esc(opts.subtitle)}</div>
+    <div style="font-size:12px;margin-top:10px;line-height:1.7;">${siblings(opts.kind)}</div>
   </div>
-  ${opts.body}
-  <div style="padding:16px 24px;background:#111;text-align:center;">
-    <a href="${opts.cta.href}" style="display:inline-block;padding:11px 22px;background:${RED};color:#fff;font-weight:700;font-size:13px;text-decoration:none;border-radius:8px;">${esc(opts.cta.label)} →</a>
+  ${body}
+  <div style="padding:18px 24px;text-align:center;">
+    <a href="${opts.cta.href}" style="display:inline-block;padding:11px 22px;background:${RED};color:#ffffff;font-weight:700;font-size:13px;text-decoration:none;border-radius:8px;">${esc(opts.cta.label)} →</a>
   </div>
-  <div style="padding:14px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;">
-    Built and sent by ${esc(SITE.replace(/^https?:\/\//, ""))} on ${esc(new Date().toLocaleString("en-US", { timeZone: BUSINESS_TZ, dateStyle: "medium", timeStyle: "short" }))} ET · app v${APP_VERSION}
-  </div>
+  ${sourceLine(opts.source || `${host} (Social app database)`, new Date(), `app v${esc(APP_VERSION)}`)}
 </div></body></html>`;
 }
 
@@ -197,7 +228,7 @@ export async function deliver(
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(withAuditBcc({ from: process.env.OPS_REPORT_FROM || OPS_FROM, to: [to], subject, html })),
+      body: JSON.stringify(withAuditBcc({ from: withGcName(process.env.OPS_REPORT_FROM || OPS_FROM), to: [to], subject, html })),
     });
     if (!r.ok) {
       const body = await r.text().catch(() => "");
