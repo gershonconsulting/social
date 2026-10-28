@@ -7,6 +7,7 @@ import { sendPostingAlert, dueAlerts } from "@/lib/alerts/send";
 import { sendDailyReport } from "@/lib/reports/daily-report-send";
 import { resolveFrom, resolveDigestTo } from "@/lib/email/sender";
 import { withAuditBcc } from "@/lib/mail-bcc";
+import { primaryOrgId } from "@/lib/reports/monthly/data";
 
 /**
  * GET  /api/digest/daily            — render the digest as JSON (preview).
@@ -42,9 +43,17 @@ async function buildDigest(): Promise<DigestData> {
   const to = now;
   const from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
+  // v4.65.2: scope EVERYTHING to Gershon's own workspace (the primary
+  // organization). Before this, the digest read every workspace in the
+  // database, so client workspaces (VALOS, Altavia, PhiTech, Enzymicals,
+  // Flying Secoya…) leaked in: their own company showed up a second time as
+  // "Internal" and THEIR competitors (Cytel, Phastar, VML…) showed up as
+  // Gershon's "Competition".
+  const orgId = await primaryOrgId();
+
   // 1. Posts created/ingested in the last 24h
   const recentPosts = await prisma.socialPost.findMany({
-    where: { createdAt: { gte: from } },
+    where: { createdAt: { gte: from }, client: { organizationId: orgId } },
     select: {
       id: true,
       clientId: true,
@@ -62,7 +71,7 @@ async function buildDigest(): Promise<DigestData> {
 
   // 2. Active clients (for name lookup)
   const clients = await prisma.client.findMany({
-    where: { status: ClientStatus.ACTIVE },
+    where: { status: ClientStatus.ACTIVE, organizationId: orgId },
     select: { id: true, name: true, slug: true, clientType: true },
   });
   const clientName = new Map<string, string>();
@@ -113,7 +122,7 @@ async function buildDigest(): Promise<DigestData> {
 
   // 5. Recent sync errors
   const errorConns = await prisma.platformConnection.findMany({
-    where: { isEnabled: true, lastSyncError: { not: null }, lastSyncAt: { gte: from } },
+    where: { isEnabled: true, lastSyncError: { not: null }, lastSyncAt: { gte: from }, client: { organizationId: orgId } },
     select: { clientId: true, platform: true, lastSyncError: true, lastSyncAt: true },
     take: 30,
   });
@@ -132,17 +141,18 @@ async function buildDigest(): Promise<DigestData> {
       where: {
         isEnabled: true,
         platform: { in: COVERAGE_PLATFORMS },
-        client: { status: ClientStatus.ACTIVE },
+        client: { status: ClientStatus.ACTIVE, organizationId: orgId },
       },
       select: { clientId: true, platform: true, externalAccountUrl: true },
     }),
     prisma.socialPost.groupBy({
       by: ["clientId", "platform"],
+      where: { client: { organizationId: orgId } },
       _count: { _all: true },
     }),
     prisma.socialPost.groupBy({
       by: ["clientId", "platform"],
-      where: { publishedAtUtc: { gte: fourteenDaysAgo } },
+      where: { publishedAtUtc: { gte: fourteenDaysAgo }, client: { organizationId: orgId } },
       _count: { _all: true },
     }),
   ]);
