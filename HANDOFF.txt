@@ -169,3 +169,15 @@ UPDATE 2026-10-26  -  POST /api/matrix-stats (Client Platform Matrix)
        whitelist MACHINE_EXACT in middleware). Matches people to primary-org Clients by
        company name / email domain vs website; note "campaign" or "N posts (30d)";
        "others" = unmatched ACTIVE CAMPAIGN clients. Contract shared with 3 other apps.
+
+----------------------------------------------------------------
+UPDATE 2026-10-28  -  v4.68.0  unified Gershon design, rebased on v4.67.0
+----------------------------------------------------------------
+[2026-10-28] ✅ ready to test - branch nightly/2026-10-28-social-unified-rebase (replaces PR #9):
+       #9's design (white sidebar + phone drawer, white top bar, Gershon red #CC3333,
+       light sign-in, light landing) re-applied on top of v4.67.0 (client frames + v4.65.2
+       digest fix kept). Only change vs #9: unified-theme.css also excludes .w-8 so the
+       v4.67.0 collection-frame initials stay neutral grey. Version 4.68.0 (package.json +
+       APP_VERSION); extension stays 0.26.0. No data, API or schema change [skip-db-push].
+       ❌ not built in the nightly run (no clone): tsc --noEmit + next build + a look at the
+       Dashboard frames, sidebar drawer at 390px and /login before merging.
