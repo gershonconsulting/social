@@ -1,1 +1,2 @@
-Last deploy trigger: publish@main v0.9.0 (PR #5: Dashboard, Intelligence, Settings) — 2026-10-28
+Last deploy request for publish.gershon.ai (gershonconsulting/publish@main)
+2026-10-28 21:40 ET - v0.10.0 Knowledge Base House Style - publish@e4e552a - by Claude
