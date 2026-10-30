@@ -1,0 +1,168 @@
+/* =====================================================================
+   Social - unified Gershon design (v4.66.0, 2026-10-27; rebuilt from PR #2 on v4.65.0;
+   v4.68.0, 2026-10-28: re-applied on v4.67.0 - client-frame initials stay neutral)
+   Decision 2026-10-13: every Gershon app looks like Linalysis (the master
+   layout) and the main colour everywhere is the Gershon.ai red #CC3333.
+   Same approach as Radar (radar/app/unified-theme.css, PR #4) and Pulse
+   (pulse/app/unified-theme.css): one override layer, imported LAST in
+   src/app/layout.tsx, plus minimal markup tweaks (sidebar, filter panel,
+   dashboard layout top bar, sign-in page). tailwind.config.ts carries the
+   neutral greys + Gershon red scale, so Tailwind utilities match.
+
+   Functional colours are KEPT: green / amber / red verdicts (On track,
+   Slowing, Silent, Not collected), platform colours (LinkedIn blue, X
+   black), chart series. Neutral totals stay #1d1d1f, never brand red.
+
+   Scoping: dashboard rules use Tailwind hooks or .gx-* classes; landing
+   rules sit under "html body .rdpage" so they beat the landing's own
+   injected <style> block (src/components/home/landing-styles.ts), which
+   is rendered after this stylesheet in the DOM.
+   ===================================================================== */
+
+/* ---------- Tokens ---------- */
+html:root{
+  --gx-red:#CC3333; --gx-red-dark:#a8281f; --gx-red-light:#fdf2f2; --gx-red-line:#f3caca;
+  --gx-text:#1d1d1f; --gx-muted:#6e6e73; --gx-border:#e5e7eb; --gx-bg:#fafafa; --gx-radius:12px;
+  --gx-ring:0 0 0 3px rgba(204,51,51,.15);
+
+  /* shadcn/ui HSL tokens used by src/components/ui/* */
+  --background:0 0% 98%;          /* #fafafa */
+  --foreground:240 3% 12%;        /* #1d1d1f */
+  --card:0 0% 100%;
+  --card-foreground:240 3% 12%;
+  --popover:0 0% 100%;
+  --popover-foreground:240 3% 12%;
+  --primary:0 60% 50%;            /* #CC3333 */
+  --primary-foreground:0 0% 100%;
+  --secondary:220 14% 96%;
+  --secondary-foreground:240 3% 12%;
+  --muted:220 14% 96%;
+  --muted-foreground:240 2% 44%;  /* #6e6e73 */
+  --accent:0 71% 97%;             /* #fdf2f2 */
+  --accent-foreground:4 69% 39%;  /* #a8281f */
+  --border:220 13% 91%;           /* #e5e7eb */
+  --input:220 13% 91%;
+  --ring:0 60% 50%;
+  /* --radius stays 0.5rem (buttons/inputs); cards already use rounded-xl = 12px */
+}
+html body{ background:var(--gx-bg); color:var(--gx-text); }
+::selection{ background:var(--gx-red-line); color:var(--gx-text); }
+
+/* ---------- Legacy brand literals (#FE1B04 / #D92D20 / #d11200) -> Gershon red ---------- */
+html .bg-\[\#FE1B04\], html .bg-\[\#D92D20\]{ background-color:var(--gx-red) !important; }
+html .text-\[\#FE1B04\], html .text-\[\#D92D20\]{ color:var(--gx-red) !important; }
+html .border-\[\#FE1B04\], html .border-\[\#D92D20\]{ border-color:var(--gx-red) !important; }
+html .bg-\[\#d11200\], html .hover\:bg-\[\#d11200\]:hover,
+html .bg-\[\#B42318\], html .hover\:bg-\[\#B42318\]:hover{ background-color:var(--gx-red-dark) !important; }
+html .bg-\[\#F5F4F0\]{ background-color:var(--gx-bg) !important; }
+
+/* ---------- Cards / buttons helpers ---------- */
+.gx-card{ border-color:var(--gx-border); border-radius:var(--gx-radius); }
+.gx-btn-primary{ background:var(--gx-red); }
+.gx-btn-primary:hover:not(:disabled){ background:var(--gx-red-dark); }
+.gx-btn-secondary:hover:not(:disabled){ border-color:var(--gx-red); color:var(--gx-red); background:#fff; }
+
+/* ---------- Primary buttons, active tabs and switches: charcoal -> Gershon red ----------
+   Pages built in v4.9-v4.60 use "bg-gray-900 text-white" for primary actions
+   (Save, New post, Retry, Schedule...) and for the ACTIVE state of tabs and
+   switches (company content tabs, Competitor Watch window, Networks filter,
+   Knowledge Base views, Companies category tabs). All of those become red.
+   Excluded on purpose (neutral, not actions): round "x" remove buttons and
+   rank badges (.rounded-full), keyword pills (.gx-pill), dashboard logo
+   initials (.w-7) and the v4.67.0 collection-frame initials
+   (src/components/ui/client-frames.tsx, .w-8). Platform colours (X = black)
+   never carry text-white here. */
+main .bg-gray-900.text-white:not(.rounded-full):not(.gx-pill):not(.w-7):not(.w-8){
+  background-color:var(--gx-red); border-color:var(--gx-red); }
+main .bg-gray-900.text-white:not(.rounded-full):not(.gx-pill):not(.w-7):not(.w-8):hover:not(:disabled){
+  background-color:var(--gx-red-dark); border-color:var(--gx-red-dark); }
+
+/* ---------- Focus: red ring everywhere ---------- */
+main input:focus, main select:focus, main textarea:focus,
+.gx-auth input:focus{
+  outline:none; border-color:var(--gx-red) !important; box-shadow:var(--gx-ring) !important; }
+main input[type="checkbox"], main input[type="radio"]{ accent-color:var(--gx-red); }
+main button:focus-visible, main a:focus-visible, .gx-sidebar a:focus-visible, .gx-sidebar button:focus-visible{
+  outline:2px solid var(--gx-red); outline-offset:2px; }
+
+/* ---------- App shell (src/app/(dashboard)/layout.tsx + sidebar.tsx) ---------- */
+.gx-topbar{ background:#fff; border-bottom:1px solid var(--gx-border); }
+.gx-sidebar{ background:#fff; border-right:1px solid var(--gx-border); }
+/* Phones: main is a flex child - min-width:0 stops wide tables pushing the page sideways */
+.gx-main{ min-width:0; }
+@media (max-width:1023px){
+  .gx-sidebar.is-open{ box-shadow:0 10px 40px rgba(29,29,31,.14); }
+}
+
+/* =====================================================================
+   PUBLIC HOME PAGE (src/components/home/landing.tsx) - light hero, red
+   accents, solid red closing band, like linalysis.ai. Same rules as
+   Radar's landing (Social's landing is Radar's design system).
+   ===================================================================== */
+html body .rdpage{
+  --brand:var(--gx-red); --brand2:#f08a8a; --brand-ink:var(--gx-red-dark);
+  --grad:linear-gradient(120deg,#CC3333 0%,#a8281f 100%);
+  --line:var(--gx-border); --soft:var(--gx-bg); --muted:var(--gx-muted);
+  --shadow:0 18px 50px rgba(29,29,31,.08); --radius:12px;
+  color:var(--gx-text); overflow-x:hidden;
+}
+html body .rdpage header{ background:rgba(255,255,255,.92); border-bottom-color:var(--gx-border); }
+html body .rdpage .nav-links a.link{ color:var(--gx-text); }
+html body .rdpage .nav-links a.link:hover{ color:var(--gx-red); }
+html body .rdpage .btn-primary{ background:var(--gx-red); box-shadow:none; color:#fff; border-radius:999px; }
+html body .rdpage .btn-primary:hover{ background:var(--gx-red-dark); box-shadow:0 8px 22px rgba(204,51,51,.28); transform:none; }
+html body .rdpage .btn-ghost{ border-radius:999px; }
+
+html body .rdpage .hero{ background:linear-gradient(180deg,#ffffff 0%,var(--gx-bg) 60%,var(--gx-red-light) 100%); color:var(--gx-text); }
+html body .rdpage .hero h1{ color:var(--gx-text); }
+html body .rdpage .hero h1 .g{ background:none; -webkit-background-clip:border-box; background-clip:border-box; color:var(--gx-red); }
+html body .rdpage .hero p.sub{ color:var(--gx-muted); }
+html body .rdpage .kicker{ color:var(--gx-red); background:var(--gx-red-light); border-color:var(--gx-red-line); font-weight:700; }
+html body .rdpage .trust{ color:var(--gx-muted); }
+html body .rdpage .trust a{ color:var(--gx-red) !important; }   /* inline style in landing.tsx */
+html body .rdpage .hero .btn-lite{ background:#fff; border-color:var(--gx-border); color:var(--gx-text); border-radius:999px; }
+html body .rdpage .hero .btn-lite:hover{ border-color:var(--gx-red); color:var(--gx-red); background:#fff; }
+html body .rdpage .rings{ opacity:.35; }
+html body .rdpage .rings span{ border-color:rgba(204,51,51,.22); }
+html body .rdpage .sweep{ background:conic-gradient(from 0deg,rgba(204,51,51,.16),transparent 30%); }
+html body .rdpage .mock{ background:#fff; border-color:var(--gx-border); box-shadow:0 30px 80px rgba(29,29,31,.10); }
+html body .rdpage .mock .bar{ background:var(--gx-bg); border-bottom-color:var(--gx-border); }
+html body .rdpage .mock .bar i{ background:#d9d9de; }
+html body .rdpage .mock .bar .u{ color:var(--gx-muted); }
+html body .rdpage .stage{ background:#fff; border-color:var(--gx-border); border-radius:var(--gx-radius); }
+html body .rdpage .stage h4{ color:var(--gx-red); }
+html body .rdpage .stage .big{ color:var(--gx-text); }
+html body .rdpage .stage .lbl, html body .rdpage .stage ul{ color:var(--gx-muted); }
+html body .rdpage .stage ul li::before{ background:var(--gx-red); }
+html body .rdpage .arrow{ color:#c7c7cc; }
+
+html body .rdpage .stats{ border-radius:var(--gx-radius); box-shadow:0 18px 50px rgba(29,29,31,.06); }
+html body .rdpage .stat b{ color:var(--gx-text); }
+html body .rdpage .eyebrow, html body .rdpage .extbox-steptitle, html body .rdpage .pricecard .tag{ color:var(--gx-red); }
+html body .rdpage .card{ border-radius:var(--gx-radius); }
+html body .rdpage .card:hover{ border-color:var(--gx-red-line); box-shadow:0 12px 30px rgba(29,29,31,.07); }
+html body .rdpage .card .ic, html body .rdpage .extbox-ic{ background:var(--gx-red-light); border-color:var(--gx-red-line); color:var(--gx-red); }
+html body .rdpage .step{ background:#fff; border-radius:var(--gx-radius); }
+html body .rdpage .step .n{ background:var(--gx-red); box-shadow:none; border-radius:999px; }
+html body .rdpage .band{ background:var(--gx-bg); }
+html body .rdpage .why p{ color:#3a3a3f; }
+html body .rdpage .extbox, html body .rdpage .pricecard{ border-radius:var(--gx-radius); }
+html body .rdpage .extbox-note a{ color:var(--gx-red); }
+html body .rdpage .extbox-steps ol{ color:#3a3a3f; }
+html body .rdpage .extbox-steps code{ background:var(--gx-red-light); color:var(--gx-red-dark); }
+html body .rdpage .pricecard ul li{ color:#3a3a3f; }
+
+/* Final call-to-action: solid red band like Linalysis' cta-section */
+html body .rdpage .final{ background:linear-gradient(135deg,var(--gx-red) 0%,var(--gx-red-dark) 100%); }
+html body .rdpage .final p{ color:rgba(255,255,255,.9); }
+html body .rdpage .final .btn-primary{ background:#fff; color:var(--gx-red); }
+html body .rdpage .final .btn-primary:hover{ background:var(--gx-red-light); color:var(--gx-red-dark); }
+html body .rdpage .final .btn-lite{ border-radius:999px; border-color:rgba(255,255,255,.5); }
+
+html body .rdpage footer{ background:#1d1d1f; color:#a1a1a6; }
+html body .rdpage footer .brand small{ color:#a1a1a6; }
+html body .rdpage .copy{ color:#86868b; }
+@media (max-width:720px){
+  html body .rdpage .rings{ display:none; }   /* 620px rings caused sideways scroll on phones */
+  html body .rdpage .nav-links .btn-primary{ padding:.6rem .9rem; font-size:.9rem; }
+}
