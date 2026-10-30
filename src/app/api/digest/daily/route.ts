@@ -8,6 +8,7 @@ import { sendDailyReport } from "@/lib/reports/daily-report-send";
 import { resolveFrom, resolveDigestTo } from "@/lib/email/sender";
 import { withAuditBcc } from "@/lib/mail-bcc";
 import { primaryOrgId } from "@/lib/reports/monthly/data";
+import { getSession } from "@/lib/auth";
 
 /**
  * GET  /api/digest/daily            — render the digest as JSON (preview).
@@ -19,7 +20,11 @@ import { primaryOrgId } from "@/lib/reports/monthly/data";
  *   - any sync errors in last 24h
  *   - coverage snapshot
  *
- * Auth (POST only): Bearer CRON_SECRET or DIGEST_SECRET.
+ * Auth (POST): Bearer CRON_SECRET or DIGEST_SECRET.
+ * Auth (GET, v4.67.1): Bearer CRON_SECRET / DIGEST_SECRET, or a signed-in user
+ *   of the primary (Gershon) workspace. Before v4.67.1 the preview answered
+ *   anyone on the internet (middleware lists /api/digest/ as a machine path
+ *   and leaves the check to the route; GET had none).
  * Recipients: report@gershonconsulting.com + aina.rama@gershonconsulting.com
  *             (override with DIGEST_TO, comma-separated). See lib/email/sender.
  * Sender:     Social GershonCRM <social@gershon.ai> — the only VERIFIED Resend
@@ -330,7 +335,20 @@ async function sendViaResend(html: string, subject: string): Promise<{ ok: boole
   }
 }
 
-export async function GET() {
+function secretOk(req: NextRequest) {
+  const secret = process.env.CRON_SECRET || process.env.DIGEST_SECRET;
+  return !!secret && (req.headers.get("authorization") || "") === `Bearer ${secret}`;
+}
+async function primaryUserOk() {
+  const s = await getSession();
+  if (!s?.user?.id) return false;
+  return s.user.organizationId === (await primaryOrgId());
+}
+
+export async function GET(req: NextRequest) {
+  if (!secretOk(req) && !(await primaryUserOk())) {
+    return NextResponse.json({ success: false, error: "Not signed in" }, { status: 401 });
+  }
   try {
     const d = await buildDigest();
     const html = renderHtml(d);
