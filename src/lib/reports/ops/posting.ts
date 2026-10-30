@@ -24,6 +24,7 @@ import {
   banner, esc, isWeekend, kpis, LEVEL_COLOR, page, pill, section, shortDay, SITE, table, TD, TDR, TH, THR,
   type Level,
 } from "./shell";
+import { postingSummary, yesterdayCounts, type PostingYesterdayCounts } from "./posting-summary";
 
 const NET: Record<string, string> = { LINKEDIN: "LinkedIn", TWITTER: "X" };
 
@@ -53,7 +54,20 @@ export type PostingReport = {
   dayShort: string;
   keys: string[];
   rows: PostingRow[];
-  totals: { companies: number; postedYesterday: number; expectedYesterday: number; missedYesterday: number; onTarget: number; postsWeek: number };
+  totals: {
+    companies: number;
+    /** Every company that posted yesterday (due or not). */
+    postedYesterday: number;
+    /** Companies a post was due from yesterday — THE denominator for every "yesterday" figure. */
+    expectedYesterday: number;
+    /** Due companies that posted (postedDue + missedYesterday === expectedYesterday). */
+    postedDue: number;
+    missedYesterday: number;
+    /** Posted although not due — shown as a hint, never in the ratio. */
+    postedNotDue: number;
+    onTarget: number;
+    postsWeek: number;
+  };
   collection: { lastAt: string | null; stale: boolean };
   level: Level;
 };
@@ -139,14 +153,16 @@ export async function buildPostingReport(orgId: string, now = new Date()): Promi
   const rank = { critical: 0, warn: 1, ok: 2 } as const;
   rows.sort((a, b) => rank[a.level] - rank[b.level] || a.daysPosted - b.daysPosted || a.name.localeCompare(b.name));
 
-  const expectedY = rows.filter((r) => r.yesterday.expected);
+  const y: PostingYesterdayCounts = yesterdayCounts(rows);
   const lastAt = hb.lastAt;
   const stale = !lastAt || Date.now() - Date.parse(lastAt) > 30 * 3600000;
   const totals = {
     companies: rows.length,
-    postedYesterday: rows.filter((r) => r.yesterday.count > 0).length,
-    expectedYesterday: expectedY.length,
-    missedYesterday: expectedY.filter((r) => r.yesterday.count === 0).length,
+    postedYesterday: y.posted,
+    expectedYesterday: y.due,
+    postedDue: y.postedDue,
+    missedYesterday: y.missed,
+    postedNotDue: y.postedNotDue,
     onTarget: rows.filter((r) => r.daysPosted >= r.expectedDays).length,
     postsWeek: rows.reduce((s, r) => s + r.postsWeek, 0),
   };
@@ -164,15 +180,20 @@ function dayCell(d: PostingRow["days"][number]): string {
   return `<td style="padding:6px 4px;text-align:center;border-bottom:1px solid #f1f1f1;color:#d1d5db;font-size:12px;">·</td>`;
 }
 
+function summaryOf(r: PostingReport) {
+  const t = r.totals;
+  return postingSummary(
+    { companies: t.companies, due: t.expectedYesterday, postedDue: t.postedDue, missed: t.missedYesterday, postedNotDue: t.postedNotDue, posted: t.postedYesterday },
+    r.dayShort,
+  );
+}
+
 export function renderPosting(r: PostingReport): string {
   const t = r.totals;
+  const s = summaryOf(r);
   const head = banner(
     r.level,
-    t.missedYesterday
-      ? `${t.missedYesterday} of ${t.expectedYesterday} companies did NOT post on ${r.dayShort}`
-      : t.expectedYesterday
-        ? `All ${t.expectedYesterday} companies due on ${r.dayShort} posted`
-        : `${r.dayShort} was not a posting day — ${t.postedYesterday} companies posted anyway`,
+    s.headline,
     `${t.onTarget} of ${t.companies} companies are on their weekly target over the last 7 days.` +
       (r.collection.stale
         ? ` <b>Careful:</b> the Chrome extension has not collected since ${r.collection.lastAt ? esc(new Date(r.collection.lastAt).toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" })) + " ET" : "— never"}, so posts made since then are not seen yet.`
@@ -184,7 +205,7 @@ export function renderPosting(r: PostingReport): string {
     r.rows
       .map(
         (row) => `<tr>
-      <td ${TD}><a href="${SITE}/clients/${row.id}" style="color:#111;font-weight:700;text-decoration:none;">${esc(row.name)}</a>
+      <td ${TD}><a href="${SITE}/clients/${row.id}" style="color:#1d1d1f;font-weight:700;text-decoration:none;">${esc(row.name)}</a>
         <div style="font-size:11px;color:#9ca3af;">${row.clientType === "INTERNAL" ? "Internal" : "Campaign"} · target ${row.perWeek}/week</div></td>
       ${row.days.map(dayCell).join("")}
       <td ${TDR}>${pill(`${row.daysPosted}/${row.expectedDays} days`, row.level)}</td>
@@ -216,8 +237,9 @@ export function renderPosting(r: PostingReport): string {
   const body =
     head +
     kpis([
-      { label: `Posted ${r.dayShort.replace(/, \d{4}$/, "")}`, value: `${t.postedYesterday}/${t.companies}`, level: t.missedYesterday ? "critical" : "ok" },
-      { label: "Missed (due)", value: String(t.missedYesterday), level: t.missedYesterday ? "critical" : "ok" },
+      // Same denominator as the headline: the companies that were due.
+      { ...s.posted, level: t.missedYesterday ? "critical" : "ok" },
+      { ...s.missed, level: t.missedYesterday ? "critical" : "ok" },
       { label: "On weekly target", value: `${t.onTarget}/${t.companies}`, level: t.onTarget === t.companies ? "ok" : "warn" },
       { label: "Posts, last 7 days", value: String(t.postsWeek) },
     ]) +
@@ -239,7 +261,8 @@ export function renderPosting(r: PostingReport): string {
 
 export function postingSubject(r: PostingReport): string {
   const t = r.totals;
+  const s = summaryOf(r);
   const base = `Social Posting Report — ${r.dayShort}`;
-  if (t.missedYesterday) return `⛔ ${base} — ${t.missedYesterday} ${t.missedYesterday === 1 ? "company" : "companies"} did not post`;
-  return `${base} — ${t.postedYesterday}/${t.companies} posted, ${t.onTarget}/${t.companies} on weekly target`;
+  if (t.missedYesterday) return `⛔ ${base} — ${s.subjectTail}`;
+  return `${base} — ${s.subjectTail}, ${t.onTarget}/${t.companies} on weekly target`;
 }
