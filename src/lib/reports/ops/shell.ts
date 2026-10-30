@@ -21,7 +21,12 @@ import { APP_VERSION } from "@/lib/extension-version";
 import { BUSINESS_TZ } from "../et-days";
 import { withAuditBcc } from "@/lib/mail-bcc";
 
-export const RED = "#FE1B04";
+/** House style (v4.67.2): white header, dark #1d1d1f text, brand red #CC3333 accents only. */
+export const RED = "#CC3333";
+export const RED_DARK = "#a8281f";
+export const RED_TINT = "#fdf2f2";
+export const INK = "#1d1d1f";
+export const BORDER = "#e5e7eb";
 export const GREEN = "#047857";
 export const AMBER = "#b45309";
 export const DARK_RED = "#b91c1c";
@@ -63,10 +68,12 @@ export function pill(text: string, level: Level): string {
 }
 
 export function banner(level: Level, headline: string, detail: string): string {
-  const bg = level === "critical" ? "#7f1d1d" : level === "warn" ? "#fffbeb" : "#ecfdf5";
-  const fg = level === "critical" ? "#fff" : level === "warn" ? "#78350f" : "#064e3b";
+  // Never light text on a dark band: critical is the red tint with dark-red text and a red edge.
+  const bg = level === "critical" ? RED_TINT : level === "warn" ? "#fffbeb" : "#ecfdf5";
+  const fg = level === "critical" ? RED_DARK : level === "warn" ? "#78350f" : "#064e3b";
+  const edge = level === "critical" ? RED : level === "warn" ? "#f59e0b" : "#10b981";
   const icon = level === "critical" ? "⛔" : level === "warn" ? "⚠️" : "✅";
-  return `<div style="background:${bg};color:${fg};padding:18px 24px;border-bottom:1px solid #e5e7eb;">
+  return `<div style="background:${bg};color:${fg};padding:18px 24px;border-bottom:1px solid ${BORDER};border-left:4px solid ${edge};">
     <div style="font-size:18px;font-weight:800;">${icon} ${esc(headline)}</div>
     ${detail ? `<div style="font-size:13px;margin-top:6px;line-height:1.5;">${detail}</div>` : ""}
   </div>`;
@@ -76,8 +83,8 @@ export function kpis(items: Array<{ label: string; value: string; hint?: string;
   const cells = items
     .map(
       (k) => `<td style="padding:14px 10px;text-align:center;border-right:1px solid #eee;vertical-align:top;">
-      <div style="font-size:26px;font-weight:800;color:${k.level ? LEVEL_COLOR[k.level] : "#111"};">${esc(k.value)}</div>
-      <div style="font-size:12px;font-weight:600;color:#111;margin-top:2px;">${esc(k.label)}</div>
+      <div style="font-size:26px;font-weight:800;color:${k.level ? LEVEL_COLOR[k.level] : INK};">${esc(k.value)}</div>
+      <div style="font-size:12px;font-weight:600;color:${INK};margin-top:2px;">${esc(k.label)}</div>
       ${k.hint ? `<div style="font-size:11px;color:#9ca3af;margin-top:2px;">${esc(k.hint)}</div>` : ""}
     </td>`,
     )
@@ -121,10 +128,10 @@ function siblings(current: OpsKind | "collection"): string {
   return links
     .map(([k, href]) =>
       k === current
-        ? `<b style="color:#fff;">${OPS_LABEL[k]}</b>`
-        : `<a href="${href}" style="color:#d1d5db;text-decoration:none;">${OPS_LABEL[k]}</a>`,
+        ? `<b style="color:${INK};">${OPS_LABEL[k]}</b>`
+        : `<a href="${href}" style="color:${RED};text-decoration:none;">${OPS_LABEL[k]}</a>`,
     )
-    .join(` <span style="color:#6b7280;">·</span> `);
+    .join(` <span style="color:#9ca3af;">·</span> `);
 }
 
 export function page(opts: {
@@ -135,19 +142,20 @@ export function page(opts: {
   cta: { href: string; label: string };
 }): string {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(opts.title)}</title></head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:#111;">
-<div style="max-width:720px;margin:0 auto;background:#fff;">
-  <div style="background:#111;padding:20px 24px;border-bottom:4px solid ${RED};">
-    <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9ca3af;">GC Social · daily report</div>
-    <div style="font-size:22px;font-weight:800;color:#fff;margin-top:4px;">${esc(opts.title)}</div>
-    <div style="font-size:13px;color:#d1d5db;margin-top:4px;">${esc(opts.subtitle)}</div>
+<body style="margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:${INK};">
+<div style="max-width:720px;margin:0 auto;background:#ffffff;">
+  <div style="height:4px;background:${RED};line-height:4px;font-size:0;">&nbsp;</div>
+  <div style="background:#ffffff;padding:20px 24px 16px;border-bottom:1px solid ${BORDER};">
+    <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:${RED};font-weight:700;">GC Social · daily report</div>
+    <div style="font-size:22px;font-weight:800;color:${INK};margin-top:4px;">${esc(opts.title)}</div>
+    <div style="font-size:13px;color:#4b5563;margin-top:4px;">${esc(opts.subtitle)}</div>
     <div style="font-size:12px;margin-top:10px;">${siblings(opts.kind)}</div>
   </div>
-  ${opts.body}
-  <div style="padding:16px 24px;background:#111;text-align:center;">
-    <a href="${opts.cta.href}" style="display:inline-block;padding:11px 22px;background:${RED};color:#fff;font-weight:700;font-size:13px;text-decoration:none;border-radius:8px;">${esc(opts.cta.label)} →</a>
+  ${opts.body.replace(/#FE1B04/gi, RED)}
+  <div style="padding:18px 24px;background:#ffffff;text-align:center;border-top:1px solid ${BORDER};">
+    <a href="${opts.cta.href}" style="display:inline-block;padding:11px 22px;background:${RED};color:#ffffff;font-weight:700;font-size:13px;text-decoration:none;border-radius:8px;">${esc(opts.cta.label)} →</a>
   </div>
-  <div style="padding:14px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;">
+  <div style="padding:14px 24px;background:#ffffff;border-top:1px solid ${BORDER};font-size:11px;color:#6b7280;">
     Built and sent by ${esc(SITE.replace(/^https?:\/\//, ""))} on ${esc(new Date().toLocaleString("en-US", { timeZone: BUSINESS_TZ, dateStyle: "medium", timeStyle: "short" }))} ET · app v${APP_VERSION}
   </div>
 </div></body></html>`;
