@@ -12,7 +12,10 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "jobs:run": "tsx src/jobs/runner.ts"
+    "jobs:run": "tsx src/jobs/runner.ts",
+    "test": "node tests/background-window.test.mjs && tsx tests/posting-summary.test.mts",
+    "test:db": "tsx tests/remote-collect.test.mts && tsx tests/remote-collect-e2e.test.mts",
+    "test:all": "npm test && npm run test:db"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",

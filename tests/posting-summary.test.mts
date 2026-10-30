@@ -1,5 +1,9 @@
-// Pure unit test, no DB:  npx tsx tests/posting-summary.test.mts
-import { postingSummary, yesterdayCounts } from "../src/lib/reports/ops/posting-summary";
+// Pure unit test, no DB:  npm test   (or: npx tsx tests/posting-summary.test.mts)
+// The repo is CommonJS (no "type": "module"), so a .ts module imported from .mts only
+// exposes `default` — same interop pattern as the other tests.
+import * as PSM from "../src/lib/reports/ops/posting-summary.ts";
+const PS = ((PSM as any).default ?? PSM) as typeof PSM;
+const { postingSummary, yesterdayCounts } = PS;
 let pass = 0, fail = 0;
 const ok = (c: any, m: string) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗", m); } };
 
