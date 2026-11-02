@@ -13,6 +13,7 @@
  */
 import prisma from "@/lib/db";
 import { etDayKey, etDayShort, etMidnight } from "../et-days";
+import type { Intel } from "./intelligence";
 import { banner, esc, etKeyOf, fmt, kpis, page, pill, section, shortDay, SITE, table, TD, TDR, TH, THR, type Level } from "./shell";
 
 /** Generic topics — fits any industry (the VALOS-specific set lives in lib/competitors/analyze.ts). */
@@ -284,7 +285,7 @@ function chips(items: Array<{ term: string; count: number }>, prefix = ""): stri
     .join("");
 }
 
-export function renderCompetitive(r: CompetitiveReport): string {
+export function renderCompetitive(r: CompetitiveReport, extra: { actions?: Intel["actions"] } = {}): string {
   const y = r.daily[r.daily.length - 1];
   const w0 = r.weekly[0];
   const w1 = r.weekly[1];
@@ -344,22 +345,49 @@ export function renderCompetitive(r: CompetitiveReport): string {
         .join("")
     : `<span style="color:#9ca3af;font-size:13px;">No posts this week.</span>`;
 
-  const companyTable = table(
-    `<tr><th ${TH}>Company</th><th ${THR}>Published<br>this week</th><th ${THR}>Collected<br>this week</th><th ${THR}>Collected<br>last week</th><th ${TH}>Main topic</th><th ${TH}>Last post</th></tr>`,
-    r.rows
-      .map(
-        (c) => `<tr>
+  // v4.68.0: grouped by the company each one is tracked FOR (Competitor Watch),
+  // so a client's competitors (e.g. Altavia's) are never read as Gershon's own.
+  const OWN = "Gershon Consulting — our own market";
+  const groups = new Map<string, CompanyRow[]>();
+  for (const c of r.rows) {
+    const keys = c.watchedFor.length ? c.watchedFor : [OWN];
+    for (const k of keys) groups.set(k, [...(groups.get(k) || []), c]);
+  }
+  const groupOrder = Array.from(groups.keys()).sort((a, b) => (a === OWN ? -1 : b === OWN ? 1 : a.localeCompare(b)));
+  const rowHtml = (c: CompanyRow) => `<tr>
       <td ${TD}><a href="${SITE}/clients/${c.id}" style="color:#111;font-weight:700;text-decoration:none;">${esc(c.name)}</a>
-        <div style="font-size:11px;color:#9ca3af;">${c.kind === "PARTNER" ? "Partner" : "Competitor"}${c.watchedFor.length ? ` of ${esc(c.watchedFor.join(", "))}` : ""}</div></td>
+        <div style="font-size:11px;color:#9ca3af;">${c.kind === "PARTNER" ? "Partner" : "Competitor"}</div></td>
       <td ${TDR}><b>${c.publishedWeek}</b></td>
       <td ${TDR}>${c.collectedWeek}</td>
       <td ${TDR}>${c.collectedPrevWeek}</td>
       <td ${TD}>${c.mainTopic ? esc(c.mainTopic) : `<span style="color:#9ca3af;">—</span>`}</td>
       <td ${TD}>${c.lastPostKey ? esc(c.lastPostKey) : `<span style="color:#9ca3af;">never</span>`}${c.collectedWeek === 0 && c.collectedPrevWeek === 0 ? ` ${pill("silent 2 wks", "warn")}` : ""}</td>
-    </tr>`,
+    </tr>`;
+  const companyTable = table(
+    `<tr><th ${TH}>Company</th><th ${THR}>Published<br>this week</th><th ${THR}>Collected<br>this week</th><th ${THR}>Collected<br>last week</th><th ${TH}>Main topic</th><th ${TH}>Last post</th></tr>`,
+    groupOrder
+      .map(
+        (g) => `<tr><td colspan="6" style="padding:12px 8px 6px;font-size:12px;font-weight:700;color:#FE1B04;border-bottom:2px solid #eee;">${g === OWN ? esc(OWN) : `Tracked for ${esc(g)}`} · ${groups.get(g)!.length}</td></tr>` +
+          groups.get(g)!.map(rowHtml).join(""),
       )
       .join(""),
   );
+
+  const acts = extra.actions || [];
+  const actionsHtml = acts.length
+    ? acts
+        .slice(0, 6)
+        .map(
+          (a, n) => `<div style="padding:10px 0;border-bottom:1px solid #f1f1f1;">
+        <div style="font-size:12px;color:#6b7280;">${pill(a.priority.toUpperCase(), a.priority === "high" ? "critical" : a.priority === "medium" ? "warn" : "ok")} &nbsp;<b style="color:#111;">For ${esc(a.forCompany || "Gershon Consulting")}</b></div>
+        <div style="font-size:14px;font-weight:700;margin-top:5px;line-height:1.4;">${n + 1}. ${esc(a.action)}</div>
+        ${a.basedOn ? `<div style="font-size:12px;color:#9ca3af;margin-top:3px;">Based on: ${esc(a.basedOn)}</div>` : ""}
+        ${a.links?.length ? `<div style="font-size:12px;margin-top:6px;">${a.links.map((l) => `<a href="${esc(l.href)}" style="color:#FE1B04;margin-right:12px;white-space:nowrap;">${esc(l.label)} →</a>`).join("")}</div>` : ""}
+      </div>`,
+        )
+        .join("") +
+      `<div style="margin-top:10px;font-size:13px;"><a href="${SITE}/api/report/ops?kind=intelligence" style="color:#FE1B04;font-weight:700;">See every action in the Intelligence report →</a></div>`
+    : "";
 
   const body =
     head +
@@ -369,6 +397,7 @@ export function renderCompetitive(r: CompetitiveReport): string {
       { label: "Published this week", value: String(wk.published), hint: "by competitors & partners" },
       { label: "Silent 2 weeks", value: String(r.silent.length), level: r.silent.length ? "warn" : "ok" },
     ]) +
+    (actionsHtml ? section("Suggested actions", actionsHtml, "What to do this week from what competitors and partners posted — click through to the post or the company.") : "") +
     section("Collected every day — last 7 days", dailyTable, "When the Chrome extension brought the posts in.") +
     section("Collected every week — last 4 weeks", weeklyTable) +
     section("What they post about — this week", topicTable, `${wk.published} posts published by competitors and partners in the last 7 days.`) +
@@ -386,9 +415,9 @@ export function renderCompetitive(r: CompetitiveReport): string {
   });
 }
 
-export function competitiveSubject(r: CompetitiveReport): string {
+export function competitiveSubject(r: CompetitiveReport, workspace?: string): string {
   const y = r.daily[r.daily.length - 1];
-  const base = `Social Competitive Report — ${r.dayShort}`;
+  const base = `Social Competitive Report${workspace ? ` — ${workspace}` : ""} — ${r.dayShort}`;
   if (r.level === "critical") return `⛔ ${base} — nothing collected from competitors or partners`;
   const top = r.week.topics.find((t) => t.label !== "Other");
   return `${base} — ${y.total} collected yesterday, ${r.weekly[0].total} this week${top ? ` · top topic: ${top.label}` : ""}`;
