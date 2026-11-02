@@ -28,10 +28,13 @@ const INTEL_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
 type Priority = "high" | "medium" | "low";
 
+/** A click-through next to an action (v4.68.0): the post it is based on, the competitor, our company. */
+export type ActionLink = { label: string; href: string };
+
 export type Intel = {
   headline: string;
   insights: Array<{ title: string; detail: string; companies: string[] }>;
-  actions: Array<{ action: string; forCompany: string; why: string; basedOn: string; priority: Priority }>;
+  actions: Array<{ action: string; forCompany: string; why: string; basedOn: string; priority: Priority; links?: ActionLink[] }>;
   engage: Array<{ company: string; post: string; how: string; url: string | null }>;
   postIdeas: Array<{ forCompany: string; hook: string; angle: string }>;
   watch: Array<{ company: string; signal: string }>;
@@ -62,6 +65,7 @@ const ABOUT: Array<{ re: RegExp; about: string }> = [
   { re: /enzymicals/i, about: "Biocatalysis / green-chemistry CDMO for US pharma process and development chemists" },
   { re: /flying secoya/i, about: "Sustainable (eco) production consultancy + SaaS for film and TV productions — carbon measurement and ESG reporting" },
   { re: /linalysis/i, about: "LinkedIn analytics SaaS (Gershon venture)" },
+  { re: /altavia/i, about: "Altavia North America — retail marketing agency (Montréal): retail intelligence / tracking, modular retail design, in-store retail media, marketing execution; also sells a 'Retail Media 101' training to CPG brands and mid-size retailers" },
   { re: /american ?abroad/i, about: "AmericanAbroad.net — hub for Americans living abroad (expats): practical resources, local representatives and partner services" },
 ];
 
@@ -201,7 +205,7 @@ export async function buildIntelligenceReport(orgId: string, opts: { refresh?: b
   const [oursRows, posts] = await Promise.all([
     prisma.client.findMany({
       where: { organizationId: orgId, archivedAt: null, status: { not: "ARCHIVED" }, clientType: { in: PUBLISHING_CLIENT_TYPES } },
-      select: { name: true, clientType: true, industry: true },
+      select: { id: true, name: true, clientType: true, industry: true },
       orderBy: { name: "asc" },
     }),
     ids.length
@@ -294,6 +298,9 @@ export async function buildIntelligenceReport(orgId: string, opts: { refresh?: b
   }
 
   const final = intel || fallbackIntel(competitive, samples);
+  // Links are resolved on every build (never cached), so cached actions get them too.
+  const ourId = new Map(oursRows.map((c) => [c.name.trim().toLowerCase(), c.id]));
+  final.actions = final.actions.map((a) => ({ ...a, links: actionLinks(a, samples, competitive, ourId) }));
   const level: Level = !intel ? "warn" : final.actions.some((a) => a.priority === "high") ? "critical" : "ok";
   return {
     dayKey: competitive.dayKey,
@@ -304,6 +311,38 @@ export async function buildIntelligenceReport(orgId: string, opts: { refresh?: b
     source: { ai: !!intel, model, note },
     level,
   };
+}
+
+/** Post + competitor page + our company page for one action. */
+export function actionLinks(
+  a: { action: string; forCompany: string; basedOn: string },
+  samples: Array<{ id: number; company: string; url: string | null }>,
+  competitive: CompetitiveReport,
+  ourId: Map<string, string>,
+): ActionLink[] {
+  const out: ActionLink[] = [];
+  const text = `${a.basedOn} ${a.action}`;
+  const seen = new Set<string>();
+  for (const m of a.basedOn.matchAll(/#(\d+)/g)) {
+    const s = samples.find((x) => x.id === Number(m[1]));
+    if (s?.url && !seen.has(s.url)) {
+      seen.add(s.url);
+      out.push({ label: `Open ${s.company}'s post`, href: s.url });
+    }
+  }
+  const lower = text.toLowerCase();
+  const comp = competitive.rows.filter((r) => lower.includes(r.name.toLowerCase().split(/\s[|·-]\s/)[0].trim())).slice(0, 2);
+  for (const c of comp) out.push({ label: `${c.name} on Social`, href: `${SITE}/clients/${c.id}` });
+  const mine = ourId.get((a.forCompany || "").trim().toLowerCase());
+  if (mine) out.push({ label: `${a.forCompany} on Social`, href: `${SITE}/clients/${mine}` });
+  return out.slice(0, 4);
+}
+
+export function linksHtml(links: ActionLink[] | undefined): string {
+  if (!links?.length) return "";
+  return `<div style="font-size:12px;margin-top:6px;">${links
+    .map((l) => `<a href="${esc(l.href)}" style="color:#FE1B04;margin-right:12px;white-space:nowrap;">${esc(l.label)} →</a>`)
+    .join("")}</div>`;
 }
 
 const PRIO_LEVEL: Record<Priority, Level> = { high: "critical", medium: "warn", low: "ok" };
@@ -329,6 +368,7 @@ export function renderIntelligence(r: IntelligenceReport): string {
         <div style="font-size:15px;font-weight:700;margin-top:6px;line-height:1.4;">${n + 1}. ${esc(a.action)}</div>
         ${a.why ? `<div style="font-size:13px;color:#374151;margin-top:4px;line-height:1.45;">${esc(a.why)}</div>` : ""}
         ${a.basedOn ? `<div style="font-size:12px;color:#9ca3af;margin-top:4px;">Based on: ${esc(a.basedOn)}</div>` : ""}
+        ${linksHtml(a.links)}
       </div>`,
         )
         .join("")
@@ -398,8 +438,8 @@ export function renderIntelligence(r: IntelligenceReport): string {
   });
 }
 
-export function intelligenceSubject(r: IntelligenceReport): string {
+export function intelligenceSubject(r: IntelligenceReport, workspace?: string): string {
   const high = r.intel.actions.filter((a) => a.priority === "high").length;
-  const base = `Social Intelligence Report — ${r.dayShort}`;
+  const base = `Social Intelligence Report${workspace ? ` — ${workspace}` : ""} — ${r.dayShort}`;
   return `${base} — ${r.intel.actions.length} actions${high ? ` (${high} high priority)` : ""}`;
 }
