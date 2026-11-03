@@ -1,0 +1,32 @@
+SOCIAL — EMAIL SENDER HANDOFF (nightly 2026-10-22, branch nightly/2026-10-22-gc-sender)
+
+WHAT CHANGED (one constant)
+- src/lib/email/sender.ts: SOCIAL_FROM "Social GershonCRM <social@gershon.ai>" -> "GC Social <social@gershon.ai>".
+- Olivier's rule: every automated Gershon email shows a display name starting with "GC ".
+  Address (social@gershon.ai), recipients and subjects are unchanged.
+- Every caller of resolveFrom() now sends as "GC Social": daily digest "Report social.gershonCRM.com ...",
+  health-check alerts, weekly/monthly posting checks ("N companies off plan"), team alerts
+  (Content inventory, Autopilot rewrote, X/LinkedIn post failed, asked for changes/commented),
+  "Ready for publishing", LinkedIn signed-out alert, and the client-reviewer emails
+  (New post to review / reminders / N posts to validate). The ops reports
+  (Collection/Posting/Content Ready/Competitive/Intelligence) were already "GC Social".
+- An explicit non-legacy DIGEST_FROM or HEALTH_ALERT_FROM env value still wins, as before.
+
+IF OLIVIER WANTS CLIENT REVIEWERS TO KEEP THE OLD NAME
+- Add a second constant for reviewer mail in sender.ts and pass it from sendMail() in
+  src/lib/publishing.ts for the reviewer call sites (publishing-review.ts, publishing-inventory.ts,
+  autopilot.ts, api/publishing/content/[id]/comments). ~10 lines, Ariel.
+
+HOW TO TEST
+- No branch preview exists for Social and emails cannot be previewed. Verified by code reading
+  (SOCIAL_FROM is only referenced inside sender.ts) and a unit-style test of sender.ts run with
+  node --experimental-strip-types: resolveFrom() returns "GC Social <social@gershon.ai>" with
+  DIGEST_FROM unset and with both legacy values deploy.yml injects; digest recipients unchanged.
+- After merge + deploy: the next daily digest (~17:45 UTC) arrives from "GC Social".
+
+STILL OPEN (not code)
+- admin@gershonconsulting.com is on the Resend suppression list (hard bounce 2026-10-12): every
+  team alert addressed to it is dropped. Set Publishing settings alertEmail to a live address,
+  or have Charles repair the admin@ mailbox and remove the suppression in Resend.
+- No version bump: package.json and root HANDOFF.txt are changed by PR #2 tonight; this branch
+  touches neither so both merge cleanly in any order.
