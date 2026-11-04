@@ -64,6 +64,8 @@ const ABOUT: Array<{ re: RegExp; about: string }> = [
   { re: /phi-?tech/i, about: "AI + RNA/genomics diagnostics for geneticists, molecular pathologists and pharma R&D" },
   { re: /enzymicals/i, about: "Biocatalysis / green-chemistry CDMO for US pharma process and development chemists" },
   { re: /flying secoya/i, about: "Sustainable (eco) production consultancy + SaaS for film and TV productions — carbon measurement and ESG reporting" },
+  { re: /amphasys/i, about: "Impedance flow cytometry instruments for pollen/seed quality (plant breeders), yeast analysis (breweries) and cell analysis in biopharma bioprocessing" },
+  { re: /mab ?silico/i, about: "In-silico (AI/computational) antibody design and engineering for biotech and pharma biologics R&D" },
   { re: /linalysis/i, about: "LinkedIn analytics SaaS (Gershon venture)" },
   { re: /altavia/i, about: "Altavia North America — retail marketing agency (Montréal): retail intelligence / tracking, modular retail design, in-store retail media, marketing execution; also sells a 'Retail Media 101' training to CPG brands and mid-size retailers" },
   { re: /american ?abroad/i, about: "AmericanAbroad.net — hub for Americans living abroad (expats): practical resources, local representatives and partner services" },

@@ -27,6 +27,7 @@ import { subDays } from "date-fns";
 import { isolateDmitri } from "@/lib/workspaces/empty-workspace";
 import { seedValosWorkspace } from "@/lib/workspaces/seed-valos";
 import { linkAltaviaCompetitors } from "@/lib/workspaces/link-altavia-competitors";
+import { importRadarCompetitorsOnce } from "@/lib/workspaces/import-radar-competitors";
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (secret) {
@@ -42,6 +43,8 @@ export async function GET(req: NextRequest) {
   await isolateDmitri();
   await seedValosWorkspace();
   await linkAltaviaCompetitors();
+  // v4.69.0: every client's competitors from Radar (one-shot, marker-guarded).
+  await importRadarCompetitorsOnce();
 
   const report: {
     success: boolean;
