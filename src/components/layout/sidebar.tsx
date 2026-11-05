@@ -28,6 +28,7 @@ import {
   StopCircle,
   Rocket,
   Puzzle,
+  Zap,
 } from "lucide-react";
 import { useDemoMode, setDemoMode } from "@/lib/use-demo-mode";
 import { FilterPanel } from "./filter-panel";
@@ -46,6 +47,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     items: [
       { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
       { href: "/summary", icon: LayoutList, label: "Summary" },
+      { href: "/actions", icon: Zap, label: "Actions" },
     ],
   },
   {

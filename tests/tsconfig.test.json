@@ -1,0 +1,7 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "..",
+    "paths": { "@/*": ["./src/*"], "@cloudflare/next-on-pages": ["./tests/stubs/next-on-pages.ts"] }
+  }
+}
