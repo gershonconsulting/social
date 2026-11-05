@@ -115,9 +115,16 @@ export async function recordCards(orgId: string, fresh: NewCard[]): Promise<Acti
     byId.set(id, card);
     if (!out.some((c) => c.id === id)) out.push(card);
   }
-  const ids = new Set(out.map((c) => c.id));
-  await writeCards(orgId, [...out, ...existing.filter((c) => !ids.has(c.id))]);
-  return out;
+  // Re-read just before writing: a click made while this run was building must not be lost.
+  const latest = await readCards(orgId);
+  const latestById = new Map(latest.map((c) => [c.id, c]));
+  const merged = out.map((c) => {
+    const l = latestById.get(c.id);
+    return l ? { ...c, status: l.status, doneAt: l.doneAt, dismissedAt: l.dismissedAt, draft: l.draft || c.draft, publishItemId: l.publishItemId } : c;
+  });
+  const ids = new Set(merged.map((c) => c.id));
+  await writeCards(orgId, [...merged, ...latest.filter((c) => !ids.has(c.id))]);
+  return merged;
 }
 
 export async function updateCard(orgId: string, id: string, patch: Partial<Pick<ActionCard, "status" | "draft" | "publishItemId">>): Promise<ActionCard | null> {

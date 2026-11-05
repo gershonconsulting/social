@@ -7,7 +7,8 @@ export const runtime = "edge";
  * No sign-in: the signature (lib/actions/token.ts) proves the link came from
  * our email and only allows the one status change it names, on the one card.
  * Lives under /api/report/ so the middleware lets it through (machine path).
- * Answers with a small page, since it is opened from an email in a browser.
+ * GET shows a confirm button (mail link scanners open every link); the button POSTs
+ * the same signed URL, which makes the change. Answers with a small page.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { updateCard, PILLAR_LABEL, type ActionStatus } from "@/lib/actions/store";
@@ -25,7 +26,7 @@ function pageHtml(title: string, detail: string, ok: boolean): string {
 </div></body></html>`;
 }
 
-export async function GET(req: NextRequest) {
+async function handle(req: NextRequest) {
   const u = new URL(req.url);
   const orgId = u.searchParams.get("o") || "";
   const id = u.searchParams.get("a") || "";
@@ -37,6 +38,15 @@ export async function GET(req: NextRequest) {
   if (!orgId || !id || (s !== "done" && s !== "dismissed")) return html("This link is incomplete", "Open the action from the report again.", false, 400);
   const status = s as ActionStatus;
   if (!(await verifyAction(orgId, id, status, t))) return html("This link is not valid", "It may have been changed. Open the action from the report again.", false, 403);
+  // v4.70.0 review: email link scanners open every link, so GET only asks; the button POSTs.
+  if (req.method === "GET") {
+    const label = status === "done" ? "✓ Mark as done" : "Dismiss this action";
+    return html(
+      status === "done" ? "Mark this action as done?" : "Dismiss this action?",
+      `<form method="post" action="${esc(u.pathname + u.search)}" style="margin:0;"><button type="submit" style="margin-top:6px;padding:10px 16px;border:0;border-radius:8px;background:${status === "done" ? "#047857" : "#6b7280"};color:#fff;font-weight:700;font-size:14px;cursor:pointer;">${label}</button></form>`,
+      true,
+    );
+  }
   try {
     const c = await updateCard(orgId, id, { status });
     if (!c) return html("Action not found", "It is older than the actions Social keeps.", false, 404);
@@ -49,4 +59,11 @@ export async function GET(req: NextRequest) {
   } catch {
     return html("Could not save", "Please try again in a minute.", false, 500);
   }
+}
+
+export async function GET(req: NextRequest) {
+  return handle(req);
+}
+export async function POST(req: NextRequest) {
+  return handle(req);
 }

@@ -34,7 +34,9 @@ async function workspaceName(orgId: string): Promise<string | undefined> {
   }
 }
 
-export async function buildOps(kind: OpsKind, orgId?: string, opts: { refresh?: boolean } = {}): Promise<Built> {
+export async function buildOps(kind: OpsKind, orgId?: string, opts: { refresh?: boolean; actionLinks?: boolean } = {}): Promise<Built> {
+  // v4.70.0 review: the public (no-session) preview must never carry signed Done/Dismiss links.
+  const withLinks = opts.actionLinks !== false;
   const org = orgId || (await primaryOrgId());
   await linkAltaviaCompetitors();
   const ws = await workspaceName(org);
@@ -48,7 +50,7 @@ export async function buildOps(kind: OpsKind, orgId?: string, opts: { refresh?: 
     const buttons = await Promise.all(
       r.intel.actions.map(async (a) => {
         const c = r.cards.find((x) => x.id === cardId(r.dayKey, pillarOf(a.action), a.action));
-        return c ? cardButtonsHtml(org, c).catch(() => "") : "";
+        return c && withLinks ? cardButtonsHtml(org, c).catch(() => "") : "";
       }),
     );
     return { kind, dayKey: r.dayKey, subject: intelligenceSubject(r, ws), html: renderIntelligence(r, { buttons }), data: r };
@@ -57,7 +59,7 @@ export async function buildOps(kind: OpsKind, orgId?: string, opts: { refresh?: 
   // as cards with one-click buttons (v4.70.0) and what happened with last week's.
   const intel = await buildIntelligenceReport(org, opts).catch(() => null);
   const r = intel?.competitive || (await buildCompetitiveReport(org));
-  const cardsHtml = intel?.cards.length ? await cardsEmailHtml(org, intel.cards).catch(() => "") : "";
+  const cardsHtml = intel?.cards.length && withLinks ? await cardsEmailHtml(org, intel.cards).catch(() => "") : "";
   const resultsHtml = await buildResults(org).then(resultsEmailHtml).catch(() => "");
   const html = renderCompetitive(r, {
     actions: intel?.intel.actions,
@@ -90,7 +92,7 @@ export async function competitiveWorkspaces(primaryId: string): Promise<Array<{ 
   return out;
 }
 
-type SendResult = DeliveryResult | { kind: OpsKind; sent: false; error: string; workspace?: string };
+type SendResult = (DeliveryResult & { workspace?: string }) | { kind: OpsKind; sent: false; error: string; workspace?: string };
 
 /** Build and send the given reports (all three by default). One failure never stops the others. */
 export async function sendOps(opts: { kinds?: OpsKind[]; force?: boolean; to?: string; workspaces?: boolean } = {}): Promise<SendResult[]> {
