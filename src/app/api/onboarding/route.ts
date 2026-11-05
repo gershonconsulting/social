@@ -27,6 +27,8 @@ import { getCurrentOrgId } from "@/lib/scoped-db";
 import { getOrCreateExtensionToken } from "@/lib/extension-auth";
 
 const DISMISS_KEY = "onboarding_dismissed";
+/** v4.70.0 — without competitors there is nothing for the Competitive report to turn into actions. */
+const MIN_COMPETITORS = 3;
 /** Written by extension-auth the first time a tokened request arrives. */
 const EXTENSION_SEEN_KEY = "extension_token_enforced";
 
@@ -62,7 +64,7 @@ export async function GET(_req: NextRequest) {
     });
 
     // Everything below is scoped to this workspace by @/lib/db.
-    const [companyCount, ownCompany, linkedinLinks, xLinks, postCount, dismissed, extensionSeen] =
+    const [companyCount, ownCompany, linkedinLinks, xLinks, postCount, dismissed, extensionSeen, competitorCount] =
       await Promise.all([
         prisma.client.count({ where: { status: { not: "ARCHIVED" } } }),
         prisma.client.findFirst({
@@ -84,6 +86,8 @@ export async function GET(_req: NextRequest) {
           where: { organizationId_key: { organizationId: orgId, key: EXTENSION_SEEN_KEY } },
           select: { updatedAt: true },
         }),
+        // v4.70.0: the actions come from what competitors post — at least 3 are required.
+        prisma.client.count({ where: { clientType: "COMPETITION", status: { not: "ARCHIVED" } } }),
       ]);
 
     // Minting on read is deliberate: the extension step is useless without a
@@ -98,7 +102,7 @@ export async function GET(_req: NextRequest) {
     const steps = {
       nameWorkspace: named,
       addYourCompany: !!ownCompany,
-      addCompaniesToWatch: companyCount > 1,
+      addCompaniesToWatch: competitorCount >= MIN_COMPETITORS,
       installExtension: !!extensionSeen,
       firstCollection: postCount > 0,
     };
@@ -123,7 +127,7 @@ export async function GET(_req: NextRequest) {
         next,
         complete: next === "done",
         dismissed: !!dismissed,
-        counts: { companies: companyCount, linkedinLinks, xLinks, posts: postCount },
+        counts: { companies: companyCount, competitors: competitorCount, minCompetitors: MIN_COMPETITORS, linkedinLinks, xLinks, posts: postCount },
         ownCompany,
         extensionToken: token,
         extensionLastSeen: extensionSeen?.updatedAt?.toISOString() ?? null,
