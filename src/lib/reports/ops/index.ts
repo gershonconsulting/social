@@ -9,6 +9,7 @@ import { buildPostingReport, renderPosting, postingSubject } from "./posting";
 import { buildCompetitiveReport, renderCompetitive, competitiveSubject } from "./competitive";
 import { buildIntelligenceReport, renderIntelligence, intelligenceSubject, INTEL_TO } from "./intelligence";
 import { deliver, type DeliveryResult, type OpsKind } from "./shell";
+import { workspaceLabel } from "../report-subject";
 
 // v4.65.0: "content" (Content Ready — approved posts waiting to publish) left
 // with publishing; Publish's own daily inventory email covers it.
@@ -34,7 +35,9 @@ async function workspaceName(orgId: string): Promise<string | undefined> {
 export async function buildOps(kind: OpsKind, orgId?: string, opts: { refresh?: boolean } = {}): Promise<Built> {
   const org = orgId || (await primaryOrgId());
   await linkAltaviaCompetitors();
-  const ws = await workspaceName(org);
+  // Never drop the workspace from the subject: a failed name lookup used to
+  // send "Social Intelligence Report — <date>" without "Gershon Consulting".
+  const ws = workspaceLabel(await workspaceName(org));
   if (kind === "posting") {
     const r = await buildPostingReport(org);
     return { kind, dayKey: r.dayKey, subject: postingSubject(r, ws), html: renderPosting(r), data: r };
