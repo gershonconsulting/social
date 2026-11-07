@@ -12,7 +12,7 @@
 
 import type { DailyReport, Metric } from "./daily-report";
 import { siteUrl } from "@/lib/site";
-import { BUSINESS_TZ } from "./et-days";
+import { postsFromCompanies, reportSubject, sourceFreshnessLine } from "./report-subject";
 
 const RED = "#CC3333";
 const INK = "#12211d";
@@ -297,23 +297,21 @@ export function renderDailyReportHtml(r: DailyReport): string {
   </div>
 
   <div style="padding:14px 24px;border-top:1px solid #e5e7eb;font-size:11px;line-height:1.5;color:#6b7280;">
-    Source: ${esc(SITE.replace(/^https?:\/\//, ""))} (Social app database, Chrome extension collection) · Data as of ${esc(new Date(r.generatedAt).toLocaleString("en-US", { timeZone: BUSINESS_TZ, dateStyle: "medium", timeStyle: "short" }))} ET ·
-    app v${esc((process.env.NEXT_PUBLIC_APP_VERSION || "dev").slice(0, 7))} ·
-    extension v${esc(r.extension.installed ?? "?")} of v${esc(r.extension.latest)}
+    ${esc(sourceFreshnessLine({ site: SITE, dayKey: r.day.key, generatedAt: r.generatedAt, extra: `app v${(process.env.NEXT_PUBLIC_APP_VERSION || "dev").slice(0, 7)} · extension v${r.extension.installed ?? "?"} of v${r.extension.latest}` }))}
   </div>
 </div>
 </body></html>`;
 }
 
-/** platform-report-email convention: "<Platform> Report — <Date range>". */
+/** One subject format with the daily digest: "<Title> — <Workspace> — <ET day> — <tail>". */
 export function dailyReportSubject(r: DailyReport): string {
   const n = r.pagesToFix?.length ?? 0;
   const fix = n > 0 ? ` · ${n} LinkedIn ${n === 1 ? "link" : "links"} to fix` : "";
-  const base = `Social Collection Report — ${r.day.short}`;
+  const base = reportSubject("Social Collection Report", undefined, r.day.short);
   if (r.status.level === "critical") return `⛔ NO COLLECTION — ${base}${fix}`;
   if (r.extension.level === "critical") return `⚠️ Extension out of date — ${base}${fix}`;
   if (r.status.level === "warn") return `⚠️ ${base} — collection ran short${fix}`;
   const posts = r.metrics.find((m) => m.key === "posts")?.yesterday ?? 0;
   const companies = r.metrics.find((m) => m.key === "companies")?.yesterday ?? 0;
-  return `${base} — ${posts} posts from ${companies} ${companies === 1 ? "company" : "companies"}${fix}`;
+  return `${base} — ${postsFromCompanies(posts, companies)}${fix}`;
 }
