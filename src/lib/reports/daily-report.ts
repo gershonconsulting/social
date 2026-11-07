@@ -18,6 +18,10 @@
  * Day boundaries are America/New_York calendar days (see ./et-days), because
  * "yesterday" means yesterday as the business lived it.
  *
+ * Posts / companies collected use the ONE shared definition in
+ * ./collection-counts (same as the daily digest): ET day, posts stored in the
+ * app that day, Gershon workspace only (nightly 2026-11-07).
+ *
  * Recipient follows the platform-report-email convention: every platform
  * report goes to report@gershonconsulting.com with the platform name and the
  * date range in the subject.
@@ -29,6 +33,8 @@ import { EXTENSION_LATEST, EXTENSION_ZIP_URL } from "@/lib/extension-version";
 import { readExtSeen, semverLt, type ExtSeen } from "@/lib/extension/seen";
 import { readHeartbeat } from "@/lib/extension/heartbeat";
 import { etDayKey, etDayLabel, etDayShort, etMidnight } from "./et-days";
+import { collectionByDay as sharedCollectionByDay, collectionPerCompany, emptyCollectionDay, type CollectionDay } from "./collection-counts";
+import { primaryOrgId } from "./monthly/data";
 import { siteUrl } from "@/lib/site";
 
 export const REPORT_SENT_KEY = "daily_report_sent";
@@ -96,53 +102,15 @@ export interface DailyReport {
   activeCompanies: number;
 }
 
-interface DayRow {
-  day: string;
-  posts: number;
-  companies: number;
-  engagement: number;
-  linkedin: number;
-  twitter: number;
-}
+type DayRow = CollectionDay;
 
-/** Per-ET-day collection stats for the last `days` days (today excluded). */
-async function collectionByDay(now: Date, days: number): Promise<Map<string, DayRow>> {
-  const from = etMidnight(days, now);
-  const to = etMidnight(0, now);
-  const rows = await prisma.$queryRaw<Array<{
-    day: string;
-    posts: number;
-    companies: number;
-    engagement: number;
-    linkedin: number;
-    twitter: number;
-  }>>`
-    SELECT to_char(("createdAt" AT TIME ZONE 'America/New_York')::date, 'YYYY-MM-DD') AS day,
-           count(*)::int AS posts,
-           count(DISTINCT "clientId")::int AS companies,
-           coalesce(sum("likeCount" + "commentCount" + "shareCount"), 0)::int AS engagement,
-           count(*) FILTER (WHERE platform::text = 'LINKEDIN')::int AS linkedin,
-           count(*) FILTER (WHERE platform::text = 'TWITTER')::int AS twitter
-      FROM social_posts
-     WHERE "createdAt" >= ${from} AND "createdAt" < ${to}
-     GROUP BY 1
-  `;
-  const map = new Map<string, DayRow>();
-  for (const r of rows) {
-    map.set(r.day, {
-      day: r.day,
-      posts: Number(r.posts),
-      companies: Number(r.companies),
-      engagement: Number(r.engagement),
-      linkedin: Number(r.linkedin),
-      twitter: Number(r.twitter),
-    });
-  }
-  return map;
+/** Per-ET-day collection stats for the last `days` days (today excluded) — shared definition. */
+async function collectionByDay(orgId: string, now: Date, days: number): Promise<Map<string, DayRow>> {
+  return sharedCollectionByDay(orgId, etMidnight(days, now), etMidnight(0, now));
 }
 
 /** Companies added per ET day. */
-async function companiesAddedByDay(now: Date, days: number): Promise<Map<string, number>> {
+async function companiesAddedByDay(orgId: string, now: Date, days: number): Promise<Map<string, number>> {
   const from = etMidnight(days, now);
   const to = etMidnight(0, now);
   const rows = await prisma.$queryRaw<Array<{ day: string; added: number }>>`
@@ -150,6 +118,7 @@ async function companiesAddedByDay(now: Date, days: number): Promise<Map<string,
            count(*)::int AS added
       FROM clients
      WHERE "createdAt" >= ${from} AND "createdAt" < ${to}
+       AND "organizationId" = ${orgId}
      GROUP BY 1
   `;
   const map = new Map<string, number>();
@@ -162,29 +131,23 @@ async function companiesAddedByDay(now: Date, days: number): Promise<Map<string,
  * `boundary` — the freshness/coverage measure, evaluated at a point in time so
  * it can be compared day over day.
  */
-async function freshCompaniesAt(boundary: Date): Promise<number> {
+async function freshCompaniesAt(orgId: string, boundary: Date): Promise<number> {
   const windowStart = new Date(boundary.getTime() - 14 * 86400000);
   const rows = await prisma.$queryRaw<Array<{ n: number }>>`
     SELECT count(DISTINCT p."clientId")::int AS n
       FROM social_posts p
       JOIN clients c ON c.id = p."clientId"
      WHERE c.status::text = 'ACTIVE'
+       AND c."organizationId" = ${orgId}
        AND p."publishedAtUtc" >= ${windowStart}
        AND p."publishedAtUtc" < ${boundary}
   `;
   return Number(rows[0]?.n ?? 0);
 }
 
-/** Per-company post counts for one ET day. */
-async function perCompany(from: Date, to: Date) {
-  const rows = await prisma.$queryRaw<Array<{ id: string; name: string; category: string; n: number }>>`
-    SELECT c.id AS id, c.name AS name, c."clientType"::text AS category, count(*)::int AS n
-      FROM social_posts p
-      JOIN clients c ON c.id = p."clientId"
-     WHERE p."createdAt" >= ${from} AND p."createdAt" < ${to}
-     GROUP BY 1, 2, 3
-  `;
-  return rows.map((r) => ({ id: r.id, name: r.name, category: r.category, n: Number(r.n) }));
+/** Per-company post counts for one ET day — shared definition. */
+async function perCompany(orgId: string, from: Date, to: Date) {
+  return collectionPerCompany(orgId, from, to);
 }
 
 function avg(values: number[]): number | null {
@@ -200,18 +163,19 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
   const yFrom = etMidnight(1, now);
   const yTo = etMidnight(0, now);
   const dFrom = etMidnight(2, now);
+  const orgId = await primaryOrgId();
 
   const [byDay, added, hb, extSeen, activeCompanies, freshY, freshD, compY, compD, errConns, pageConns] =
     await Promise.all([
-      collectionByDay(now, 8),
-      companiesAddedByDay(now, 8),
+      collectionByDay(orgId, now, 8),
+      companiesAddedByDay(orgId, now, 8),
       readHeartbeat(),
       readExtSeen(),
-      prisma.client.count({ where: { status: "ACTIVE" } }),
-      freshCompaniesAt(yTo),
-      freshCompaniesAt(yFrom),
-      perCompany(yFrom, yTo),
-      perCompany(dFrom, yFrom),
+      prisma.client.count({ where: { status: "ACTIVE", organizationId: orgId } }),
+      freshCompaniesAt(orgId, yTo),
+      freshCompaniesAt(orgId, yFrom),
+      perCompany(orgId, yFrom, yTo),
+      perCompany(orgId, dFrom, yFrom),
       prisma.platformConnection.findMany({
         where: { isEnabled: true, lastSyncError: { not: null } },
         select: {
@@ -244,7 +208,7 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
     ]);
 
   const dayRow = (k: string): DayRow =>
-    byDay.get(k) ?? { day: k, posts: 0, companies: 0, engagement: 0, linkedin: 0, twitter: 0 };
+    byDay.get(k) ?? emptyCollectionDay(k);
 
   const y = dayRow(yKey);
   const d = dayRow(dKey);
@@ -316,7 +280,7 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
     },
   ];
 
-  // ── Run status ────────────────────────────────────────────────────────────────────────────
+  // ── Run status ────────────────────────────────────────────────────────────────────────────────────────
   const hbY = hbDay(yKey);
   const ranYesterday = hbY ? hbY.runs > 0 : null; // null = heartbeat has no record for that day
   const avgPosts = avg(week.map((w) => w.posts)) ?? 0;
@@ -361,7 +325,7 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
     };
   }
 
-  // ── Progress verdict ──────────────────────────────────────────────────────────────────────
+  // ── Progress verdict ────────────────────────────────────────────────────────────────────────────────
   let improved = 0;
   let declined = 0;
   let flat = 0;
@@ -385,10 +349,10 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
     flat,
   };
 
-  // ── Extension version ───────────────────────────────────────────────────────────────────
+  // ── Extension version ─────────────────────────────────────────────────────────────────────────────
   const extension = buildExtensionBlock(extSeen, now);
 
-  // ── Movers / went quiet ─────────────────────────────────────────────────────────────────
+  // ── Movers / went quiet ───────────────────────────────────────────────────────────────────────────
   const dMap = new Map(compD.map((c) => [c.id, c.n]));
   const yMap = new Map(compY.map((c) => [c.id, c.n]));
   const movers = compY
