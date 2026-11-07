@@ -34,7 +34,9 @@ export type PostingRow = {
   clientType: string;
   perWeek: number;
   /** Posts seen per day, oldest → yesterday. */
-  days: Array<{ key: string; count: number; expected: boolean; nets: string[] }>;
+  days: Array<{ key: string; count: number; expected: boolean; nets: string[]; url: string | null }>;
+  /** The posts seen in the window, newest first — linked in the email (v4.68.0). */
+  posts: Array<{ key: string; net: string; text: string; url: string | null }>;
   yesterday: { count: number; expected: boolean; ok: boolean | null };
   postsWeek: number;
   daysPosted: number;
@@ -94,7 +96,8 @@ export async function buildPostingReport(orgId: string, now = new Date()): Promi
     ids.length
       ? prisma.socialPost.findMany({
           where: { clientId: { in: ids }, publishedDateLocal: { in: keys } },
-          select: { clientId: true, platform: true, publishedDateLocal: true },
+          select: { clientId: true, platform: true, publishedDateLocal: true, postUrl: true, postTextSnippet: true, publishedAtUtc: true },
+          orderBy: { publishedAtUtc: "desc" },
         })
       : Promise.resolve([]),
     prisma.scheduledPost.findMany({
@@ -117,7 +120,11 @@ export async function buildPostingReport(orgId: string, now = new Date()): Promi
     const mine = posts.filter((p) => p.clientId === c.id);
     const days = keys.map((key) => {
       const onDay = mine.filter((p) => p.publishedDateLocal === key);
-      return { key, count: onDay.length, expected: expectedOn(key, pw), nets: Array.from(new Set(onDay.map((p) => NET[p.platform] || p.platform))) };
+      return {
+        key, count: onDay.length, expected: expectedOn(key, pw),
+        nets: Array.from(new Set(onDay.map((p) => NET[p.platform] || p.platform))),
+        url: onDay.find((p) => p.postUrl)?.postUrl ?? null,
+      };
     });
     const y = days[days.length - 1];
     const daysPosted = days.filter((d) => d.count > 0).length;
@@ -136,6 +143,7 @@ export async function buildPostingReport(orgId: string, now = new Date()): Promi
       clientType: c.clientType,
       perWeek: pw,
       days,
+      posts: mine.map((p) => ({ key: p.publishedDateLocal, net: NET[p.platform] || p.platform, text: (p.postTextSnippet || "").replace(/\s+/g, " ").trim().slice(0, 140), url: p.postUrl })),
       yesterday: { count: y.count, expected: y.expected, ok: yOk },
       postsWeek: mine.length,
       daysPosted,
@@ -172,12 +180,31 @@ export async function buildPostingReport(orgId: string, now = new Date()): Promi
 
 function dayCell(d: PostingRow["days"][number]): string {
   if (d.count > 0) {
-    return `<td style="padding:6px 4px;text-align:center;border-bottom:1px solid #f1f1f1;"><span title="${esc(d.nets.join(" + "))}" style="display:inline-block;min-width:22px;padding:3px 0;border-radius:4px;background:${LEVEL_COLOR.ok};color:#fff;font-size:12px;font-weight:700;">${d.count}</span></td>`;
+    const chip = `<span title="${esc(d.nets.join(" + "))}" style="display:inline-block;min-width:22px;padding:3px 0;border-radius:4px;background:${LEVEL_COLOR.ok};color:#fff;font-size:12px;font-weight:700;">${d.count}</span>`;
+    return `<td style="padding:6px 4px;text-align:center;border-bottom:1px solid #f1f1f1;">${d.url ? `<a href="${esc(d.url)}" style="text-decoration:none;">${chip}</a>` : chip}</td>`;
   }
   if (d.expected) {
     return `<td style="padding:6px 4px;text-align:center;border-bottom:1px solid #f1f1f1;"><span style="display:inline-block;min-width:22px;padding:3px 0;border-radius:4px;background:#fee2e2;color:${LEVEL_COLOR.critical};font-size:12px;font-weight:700;">✕</span></td>`;
   }
   return `<td style="padding:6px 4px;text-align:center;border-bottom:1px solid #f1f1f1;color:#d1d5db;font-size:12px;">·</td>`;
+}
+
+function contentList(r: PostingReport): string {
+  const withPosts = [...r.rows].filter((x) => x.posts.length).sort((a, b) => a.name.localeCompare(b.name));
+  if (!withPosts.length) return `<span style="color:#9ca3af;font-size:13px;">No post seen in the last 7 days.</span>`;
+  return withPosts
+    .map(
+      (x) => `<div style="padding:10px 0;border-bottom:1px solid #f1f1f1;">
+      <div style="font-size:13px;font-weight:700;"><a href="${SITE}/clients/${x.id}" style="color:#1d1d1f;text-decoration:none;">${esc(x.name)}</a> <span style="font-weight:400;color:#9ca3af;">· ${x.posts.length} post${x.posts.length === 1 ? "" : "s"}</span></div>
+      ${x.posts
+        .map(
+          (p) => `<div style="font-size:12px;margin-top:5px;line-height:1.4;"><span style="color:#6b7280;">${esc(shortDay(p.key))} · ${esc(p.net)}</span> — ${esc(p.text || "(no text)")}${p.text.length >= 140 ? "…" : ""}
+          ${p.url ? ` <a href="${esc(p.url)}" style="color:#FE1B04;white-space:nowrap;">Open the post →</a>` : ""}</div>`,
+        )
+        .join("")}
+    </div>`,
+    )
+    .join("");
 }
 
 function summaryOf(r: PostingReport) {
@@ -248,7 +275,8 @@ export function renderPosting(r: PostingReport): string {
       grid,
       "Number = posts seen on the company's LinkedIn / X page that day · <span style=\"color:#b91c1c;font-weight:700;\">✕</span> = a post was due and none appeared · · = not a posting day.",
     ) +
-    section("What needs fixing", why);
+    section("What needs fixing", why) +
+    section("The content, company by company", contentList(r), "Every post seen on the company's LinkedIn / X page in the last 7 days — click to open it.");
 
   return page({
     kind: "posting",
@@ -259,10 +287,10 @@ export function renderPosting(r: PostingReport): string {
   });
 }
 
-export function postingSubject(r: PostingReport): string {
+export function postingSubject(r: PostingReport, workspace?: string): string {
   const t = r.totals;
   const s = summaryOf(r);
-  const base = `Social Posting Report — ${r.dayShort}`;
+  const base = `Social Posting Report${workspace ? ` — ${workspace}` : ""} — ${r.dayShort}`;
   if (t.missedYesterday) return `⛔ ${base} — ${s.subjectTail}`;
   return `${base} — ${s.subjectTail}, ${t.onTarget}/${t.companies} on weekly target`;
 }

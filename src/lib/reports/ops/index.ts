@@ -2,7 +2,9 @@
  * The three operations reports next to the daily Collection report.
  * One entry point to build, render and send each of them.
  */
+import rawDb from "@/lib/db-raw";
 import { primaryOrgId } from "../monthly/data";
+import { linkAltaviaCompetitors } from "@/lib/workspaces/link-altavia-competitors";
 import { buildPostingReport, renderPosting, postingSubject } from "./posting";
 import { buildCompetitiveReport, renderCompetitive, competitiveSubject } from "./competitive";
 import { buildIntelligenceReport, renderIntelligence, intelligenceSubject, INTEL_TO } from "./intelligence";
@@ -19,18 +21,32 @@ export function defaultTo(kind: OpsKind): string | undefined {
 
 export type Built = { kind: OpsKind; dayKey: string; subject: string; html: string; data: unknown };
 
+/** The workspace's name for the subject line (v4.68.0 — social.gershon.ai now has several users). */
+async function workspaceName(orgId: string): Promise<string | undefined> {
+  try {
+    const o = await rawDb.organization.findUnique({ where: { id: orgId }, select: { name: true } });
+    return o?.name?.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function buildOps(kind: OpsKind, orgId?: string, opts: { refresh?: boolean } = {}): Promise<Built> {
   const org = orgId || (await primaryOrgId());
+  await linkAltaviaCompetitors();
+  const ws = await workspaceName(org);
   if (kind === "posting") {
     const r = await buildPostingReport(org);
-    return { kind, dayKey: r.dayKey, subject: postingSubject(r), html: renderPosting(r), data: r };
+    return { kind, dayKey: r.dayKey, subject: postingSubject(r, ws), html: renderPosting(r), data: r };
   }
   if (kind === "intelligence") {
     const r = await buildIntelligenceReport(org, opts);
-    return { kind, dayKey: r.dayKey, subject: intelligenceSubject(r), html: renderIntelligence(r), data: r };
+    return { kind, dayKey: r.dayKey, subject: intelligenceSubject(r, ws), html: renderIntelligence(r), data: r };
   }
-  const r = await buildCompetitiveReport(org);
-  return { kind, dayKey: r.dayKey, subject: competitiveSubject(r), html: renderCompetitive(r), data: r };
+  // Competitive carries the week's suggested actions (same daily-cached Intelligence run).
+  const intel = await buildIntelligenceReport(org, opts).catch(() => null);
+  const r = intel?.competitive || (await buildCompetitiveReport(org));
+  return { kind, dayKey: r.dayKey, subject: competitiveSubject(r, ws), html: renderCompetitive(r, { actions: intel?.intel.actions }), data: r };
 }
 
 /** Build and send the given reports (all three by default). One failure never stops the others. */
