@@ -20,6 +20,7 @@ import { siteUrl } from "@/lib/site";
 import { APP_VERSION } from "@/lib/extension-version";
 import { BUSINESS_TZ } from "../et-days";
 import { withAuditBcc } from "@/lib/mail-bcc";
+import { withGcName } from "@/lib/email/sender";
 
 /** House style (v4.67.2): white header, dark #1d1d1f text, brand red #CC3333 accents only. */
 export const RED = "#CC3333";
@@ -105,8 +106,9 @@ export const THR = `style="padding:7px 8px;text-align:right;font-size:11px;color
 export const TD = `style="padding:7px 8px;font-size:13px;border-bottom:1px solid #f1f1f1;vertical-align:top;"`;
 export const TDR = `style="padding:7px 8px;font-size:13px;border-bottom:1px solid #f1f1f1;text-align:right;vertical-align:top;white-space:nowrap;"`;
 
+/** Wide tables scroll inside their own box on a phone, so the page never scrolls sideways. */
 export function table(head: string, rows: string): string {
-  return `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${head}${rows}</table>`;
+  return `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${head}${rows}</table></div>`;
 }
 
 export type OpsKind = "posting" | "competitive" | "intelligence";
@@ -134,30 +136,45 @@ function siblings(current: OpsKind | "collection"): string {
     .join(` <span style="color:#9ca3af;">·</span> `);
 }
 
+/** "Oct 22, 2026, 4:12 PM" in the business time zone. */
+export function asOf(d: Date = new Date()): string {
+  return d.toLocaleString("en-US", { timeZone: BUSINESS_TZ, dateStyle: "medium", timeStyle: "short" });
+}
+
+/**
+ * One-line provenance footer every report e-mail carries (house style, 2026-10-23):
+ * "Source: … · Data as of <time> ET".
+ */
+export function sourceLine(source: string, dataAsOf: Date = new Date(), extra = ""): string {
+  return `<div style="padding:14px 24px;background:#ffffff;border-top:1px solid ${BORDER};font-size:11px;line-height:1.5;color:${GREY};">
+    Source: ${esc(source)} · Data as of ${esc(asOf(dataAsOf))} ET${extra ? ` · ${extra}` : ""}
+  </div>`;
+}
+
 export function page(opts: {
   kind: OpsKind;
   title: string;
   subtitle: string;
   body: string;
   cta: { href: string; label: string };
+  source?: string;
 }): string {
+  const host = SITE.replace(/^https?:\/\//, "");
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(opts.title)}</title></head>
 <body style="margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:${INK};">
-<div style="max-width:720px;margin:0 auto;background:#ffffff;">
+<div style="max-width:680px;margin:0 auto;background:#ffffff;">
   <div style="height:4px;background:${RED};line-height:4px;font-size:0;">&nbsp;</div>
   <div style="background:#ffffff;padding:20px 24px 16px;border-bottom:1px solid ${BORDER};">
     <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:${RED};font-weight:700;">GC Social · daily report</div>
     <div style="font-size:22px;font-weight:800;color:${INK};margin-top:4px;">${esc(opts.title)}</div>
     <div style="font-size:13px;color:#4b5563;margin-top:4px;">${esc(opts.subtitle)}</div>
-    <div style="font-size:12px;margin-top:10px;">${siblings(opts.kind)}</div>
+    <div style="font-size:12px;margin-top:10px;line-height:1.7;">${siblings(opts.kind)}</div>
   </div>
   ${opts.body.replace(/#FE1B04/gi, RED)}
   <div style="padding:18px 24px;background:#ffffff;text-align:center;border-top:1px solid ${BORDER};">
     <a href="${opts.cta.href}" style="display:inline-block;padding:11px 22px;background:${RED};color:#ffffff;font-weight:700;font-size:13px;text-decoration:none;border-radius:8px;">${esc(opts.cta.label)} →</a>
   </div>
-  <div style="padding:14px 24px;background:#ffffff;border-top:1px solid ${BORDER};font-size:11px;color:#6b7280;">
-    Built and sent by ${esc(SITE.replace(/^https?:\/\//, ""))} on ${esc(new Date().toLocaleString("en-US", { timeZone: BUSINESS_TZ, dateStyle: "medium", timeStyle: "short" }))} ET · app v${APP_VERSION}
-  </div>
+  ${sourceLine(opts.source || `${host} (Social app database)`, new Date(), `app v${esc(APP_VERSION)}`)}
 </div></body></html>`;
 }
 
@@ -205,7 +222,7 @@ export async function deliver(
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(withAuditBcc({ from: process.env.OPS_REPORT_FROM || OPS_FROM, to: [to], subject, html })),
+      body: JSON.stringify(withAuditBcc({ from: withGcName(process.env.OPS_REPORT_FROM || OPS_FROM), to: [to], subject, html })),
     });
     if (!r.ok) {
       const body = await r.text().catch(() => "");
