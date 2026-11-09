@@ -25,6 +25,7 @@ import {
   type Level,
 } from "./shell";
 import { postingSummary, yesterdayCounts, type PostingYesterdayCounts } from "./posting-summary";
+import { socialSubject } from "@/lib/email/subject";
 
 const NET: Record<string, string> = { LINKEDIN: "LinkedIn", TWITTER: "X" };
 
@@ -287,10 +288,6 @@ export function renderPosting(r: PostingReport): string {
   });
 }
 
-export function postingSubject(r: PostingReport, workspace?: string): string {
-  const t = r.totals;
-  const s = summaryOf(r);
-  const base = `Social Posting Report${workspace ? ` — ${workspace}` : ""} — ${r.dayShort}`;
-  if (t.missedYesterday) return `⛔ ${base} — ${s.subjectTail}`;
-  return `${base} — ${s.subjectTail}, ${t.onTarget}/${t.companies} on weekly target`;
+export function postingSubject(_r: PostingReport, workspace?: string): string {
+  return socialSubject(workspace, "Posting report");
 }
