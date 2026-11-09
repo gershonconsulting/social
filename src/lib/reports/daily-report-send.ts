@@ -14,6 +14,7 @@
  */
 
 import { reportPlan } from "./settings";
+import { withGcName } from "@/lib/email/sender";
 import prisma from "@/lib/db";
 import { buildDailyReport, REPORT_SENT_KEY, DEFAULT_REPORT_TO, type DailyReport } from "./daily-report";
 import { renderDailyReportHtml, dailyReportSubject } from "./daily-report-render";
@@ -72,7 +73,7 @@ async function sendViaResend(
   // exactly the case here, since this report goes to
   // report@gershonconsulting.com. gershon.ai is verified and sending-enabled,
   // so the report uses it and leaves the digest's sender untouched.
-  const from = process.env.REPORT_FROM || "GC Social <reports@gershon.ai>";
+  const from = withGcName(process.env.REPORT_FROM || "GC Social <reports@gershon.ai>");
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
