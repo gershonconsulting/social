@@ -1,13 +1,18 @@
 /**
  * HTML for the posting alert emails. Inline styles only — every mail client
- * that matters strips <style> blocks. Brand: bold red on charcoal.
+ * that matters strips <style> blocks.
+ *
+ * Report e-mail house style (2026-10-23): white page, single column,
+ * max-width 680px, dark text #12211d, brand red #CC3333 as the accent only.
+ * Never light text on a dark band (the header used to be white on charcoal).
+ * One-line "Source: … · Data as of …" footer.
  */
 
 import { fmtDate, type AlertCompany, type PostingAlert } from "./posting-alerts";
 import { siteUrl } from "@/lib/site";
 
-const RED = "#FE1B04";
-const INK = "#111827";
+const RED = "#CC3333";
+const INK = "#12211d";
 const MUTED = "#6b7280";
 const LINE = "#e5e7eb";
 
@@ -62,12 +67,14 @@ export function renderAlertBody(a: PostingAlert): string {
     : "";
 
   return `
-<div style="background:${INK};padding:22px 24px;">
-  <div style="color:#ffffff;font-size:19px;font-weight:800;letter-spacing:-.2px;">${kindLabel}</div>
-  <div style="color:#9ca3af;font-size:13px;margin-top:4px;">${esc(a.periodLabel)} · ${esc(a.from)} → ${esc(a.to)} · campaign companies</div>
+<div style="height:4px;background:${RED};line-height:4px;font-size:0;">&nbsp;</div>
+<div style="padding:20px 24px 16px;border-bottom:1px solid ${LINE};">
+  <div style="color:${RED};font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;">GC Social · posting alert</div>
+  <div style="color:${INK};font-size:21px;font-weight:800;letter-spacing:-.2px;margin-top:4px;">${kindLabel}</div>
+  <div style="color:#4b5563;font-size:13px;margin-top:4px;">${esc(a.periodLabel)} · ${esc(a.from)} → ${esc(a.to)} · campaign companies</div>
 </div>
 
-<div style="padding:20px 24px;background:#fff5f5;border-bottom:1px solid ${LINE};">
+<div style="padding:20px 24px;background:#fdf2f2;border-bottom:1px solid #f3caca;border-left:4px solid ${RED};">
   <div style="color:${RED};font-size:15px;font-weight:800;">
     ${a.totals.companiesOffTarget} of ${a.totals.companies} companies did not post on every planned day.
   </div>
@@ -78,6 +85,7 @@ export function renderAlertBody(a: PostingAlert): string {
   </div>
 </div>
 
+<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
 <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">
   <thead>
     <tr style="background:#f9fafb;">
@@ -91,6 +99,7 @@ export function renderAlertBody(a: PostingAlert): string {
     ${a.offTarget.map((c) => companyRow(c, appUrl)).join("")}
   </tbody>
 </table>
+</div>
 
 <div style="padding:18px 24px;border-top:1px solid ${LINE};">
   ${onTargetLine}
@@ -101,15 +110,17 @@ export function renderAlertBody(a: PostingAlert): string {
   <p style="margin:14px 0 0;color:#9ca3af;font-size:11px;line-height:1.5;">
     Objective is one post per planned day, measured at company-day level: a day counts as met when at
     least one tracked platform published. Sent only when a day was missed — a clean ${a.kind} is silent.
-    Generated ${esc(new Date(a.generatedAt).toUTCString())} by social.gershonCRM.com.
   </p>
+</div>
+<div style="padding:14px 24px;border-top:1px solid ${LINE};font-size:11px;line-height:1.5;color:${MUTED};">
+  Source: <a href="${appUrl}" style="color:#1f6f5c;">${esc(appUrl.replace(/^https?:\/\//, ""))}</a> (Social app database: daily posting compliance) · Data as of ${esc(new Date(a.generatedAt).toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" }))} ET
 </div>`;
 }
 
 export function wrapAlertEmail(body: string): string {
   return `<!doctype html>
-<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:0;padding:24px;background:#f3f4f6;color:${INK};">
-<div style="max-width:760px;margin:0 auto;background:#ffffff;border:1px solid ${LINE};border-radius:12px;overflow:hidden;">
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:0;padding:0;background:#ffffff;color:${INK};">
+<div style="max-width:680px;margin:0 auto;background:#ffffff;">
 ${body}
 </div>
 </body></html>`;

@@ -59,6 +59,10 @@ const MACHINE_PATHS = [
  */
 const MACHINE_EXACT = [
   "/api/matrix-stats",
+  // Public liveness check for health.gershon.ai. Status only — product name,
+  // host and build. No session, no tenant data, nothing from the database.
+  // Matches /api/ping on Publish and Social Tracking so one checker fits all.
+  "/api/ping",
   // talkingpoints.gershon.ai email relay — the route reads the queued email back
   // from Talking Points itself (one-time id), so it needs no session.
   "/api/relay/talkingpoints",

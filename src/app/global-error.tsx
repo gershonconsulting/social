@@ -7,7 +7,7 @@ import { AutoRecover } from "@/components/layout/auto-recover";
 export default function GlobalError({ error }: { error: Error & { digest?: string } }) {
   return (
     <html lang="en">
-      <body className="font-sans antialiased bg-[#F5F4F0]">
+      <body className="font-sans antialiased bg-[#FAFAFA]">
         <AutoRecover error={error} />
       </body>
     </html>

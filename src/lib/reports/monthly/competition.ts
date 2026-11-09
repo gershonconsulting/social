@@ -234,7 +234,7 @@ export function competitionPdf(win: MonthWindow, m: CompetitionModel, build: str
 }
 
 // ─────────────────────────────── EMAIL ───────────────────────────────
-const K = { red: "#D92D20", ink: "#111317", mut: "#6B7280", rule: "#E4E2DC", tint: "#F5F4F0", li: "#0A66C2", lib: "#E8F1FB" };
+const K = { red: "#CC3333", ink: "#12211d", mut: "#6B7280", rule: "#E4E2DC", tint: "#F5F4F0", li: "#0A66C2", lib: "#E8F1FB" };
 const F = "font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif";
 const e = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const sec = (t: string) => `<tr><td style="padding:22px 28px 8px"><div style="font-size:11px;font-weight:700;letter-spacing:.8px;color:${K.mut};border-bottom:1px solid ${K.rule};padding-bottom:6px">${e(t.toUpperCase())}</div></td></tr>`;
@@ -247,37 +247,38 @@ export function competitionSubject(win: MonthWindow, m: CompetitionModel): strin
 
 export function competitionHtml(win: MonthWindow, m: CompetitionModel, build: string): string {
   const app = siteUrl();
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:0;background:${K.tint}">
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:0;background:#ffffff;color:${K.ink}">
 <div style="display:none;max-height:0;overflow:hidden">${e(m.lead)}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${K.tint};${F}"><tr><td align="center" style="padding:24px 12px">
-<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="width:640px;max-width:100%;background:#fff;border:1px solid ${K.rule}">
-<tr><td style="background:#111317;padding:20px 28px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-<td style="border-left:4px solid ${K.red};padding-left:12px;${F}"><div style="font-size:20px;font-weight:700;color:#fff">SOCIAL <span style="font-size:11px;color:${K.red}">GERSHON.AI</span></div>
-<div style="font-size:13px;color:#A8ABB2;margin-top:2px">Competition report · what we can learn</div></td>
-<td align="right" style="${F}"><div style="font-size:20px;font-weight:700;color:${K.red}">${e(win.name.toUpperCase())} ${win.y}</div><div style="font-size:11px;color:#A8ABB2;margin-top:2px">monthly report</div></td></tr></table></td></tr>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;${F}"><tr><td align="center" style="padding:0">
+<table role="presentation" width="680" cellpadding="0" cellspacing="0" style="width:100%;max-width:680px;table-layout:fixed;background:#ffffff">
+<tr><td style="height:4px;background:${K.red};line-height:4px;font-size:0">&nbsp;</td></tr>
+<tr><td style="padding:20px 28px 16px;border-bottom:1px solid ${K.rule};${F}">
+<div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:${K.red}">GC Social · monthly report</div>
+<div style="font-size:22px;font-weight:800;color:${K.ink};margin-top:4px;line-height:1.25">Competition report · what we can learn</div>
+<div style="font-size:13px;color:#4b5563;margin-top:4px"><b style="color:${K.red}">${e(win.name.toUpperCase())} ${win.y}</b> · monthly report</div></td></tr>
 <tr><td style="padding:22px 28px 6px"><div style="background:${K.tint};border-left:3px solid ${K.li};padding:14px 16px">
 <div style="font-size:17px;font-weight:700;color:${K.ink}">${e(m.head)}</div><div style="font-size:13px;color:${K.ink};margin-top:4px;line-height:1.5">${e(m.lead)}</div></div></td></tr>
 ${sec("The month at a glance")}
-<tr><td style="padding:4px 22px 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="6"><tr>
-${m.tiles.map((t) => `<td width="25%" valign="top" style="border:1px solid ${K.rule};border-top:3px solid ${K.li};padding:10px 12px"><div style="font-size:10px;font-weight:700;letter-spacing:.6px;color:${K.mut}">${e(t.label)}</div><div style="font-size:22px;font-weight:700;color:${K.ink};margin:4px 0 2px">${e(t.value)}</div><div style="font-size:11px;color:${K.mut}">${e(t.sub)}</div></td>`).join("")}
-</tr></table></td></tr>
+<tr><td style="padding:4px 25px 0;font-size:0">
+${m.tiles.map((t) => `<div style="display:inline-block;vertical-align:top;width:25%;min-width:150px;box-sizing:border-box;padding:3px"><div style="border:1px solid ${K.rule};border-top:3px solid ${K.li};padding:10px 12px;${F}"><div style="font-size:10px;font-weight:700;letter-spacing:.6px;color:${K.mut}">${e(t.label)}</div><div style="font-size:22px;font-weight:700;color:${K.ink};margin:4px 0 2px">${e(t.value)}</div><div style="font-size:11px;color:${K.mut}">${e(t.sub)}</div></div></div>`).join("")}
+</td></tr>
 ${sec("Who posts, how often, and who is most followed")}
-<tr><td style="padding:0 22px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<tr><td style="padding:0 22px"><div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">
 <tr>${th("COMPETITOR")}${th("POSTS", "right")}${th("PER WEEK", "right")}${th("ENG./POST", "right")}${th("COMMENTS/POST", "right")}${th("FOLLOWERS", "right")}${th("TOP #")}</tr>
 ${m.rows.map((r) => `<tr>${td(`<b>${e(r.name)}</b>`)}${td(fmt(r.posts), "", "right")}${td(`<b>${one(r.perWeek)}</b>`, "", "right")}${td(fmt(r.engPerPost), "", "right")}${td(one(r.commentsPerPost), "", "right")}${td(r.followers != null ? `<b>${fmt(r.followers)}</b>` : "", "", "right")}${td(r.topTag ? "#" + e(r.topTag) : "", `color:${K.li};font-size:11px`)}</tr>`).join("")}
-</table></td></tr>
+</table></div></td></tr>
 ${sec("Subjects that bring interest")}
-<tr><td style="padding:0 22px">${m.subjects.length ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<tr><td style="padding:0 22px">${m.subjects.length ? `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">
 <tr>${th("SUBJECT")}${th("ENGAGEMENT / POST", "right")}${th("COMMENTS / POST", "right")}${th("POSTS", "right")}</tr>
 ${m.subjects.map((s) => `<tr>${td(`<b>${e(s.theme)}</b>`)}${td(`<b>${fmt(s.engPerPost)}</b>`, "", "right")}${td(one(s.commentsPerPost), "", "right")}${td(s.posts, `color:${K.mut}`, "right")}</tr>`).join("")}
-</table>` : `<div style="font-size:12px;color:${K.mut};padding:0 6px">Not enough posts to compare subjects this month.</div>`}</td></tr>
+</table></div>` : `<div style="font-size:12px;color:${K.mut};padding:0 6px">Not enough posts to compare subjects this month.</div>`}</td></tr>
 ${sec("Hashtags they use")}
-<tr><td style="padding:0 28px">${m.hashtags.map((h) => `<span style="display:inline-block;background:${K.lib};color:${K.li};font-size:12px;font-weight:700;padding:4px 9px;margin:0 4px 6px 0">#${e(h.tag)} <span style="font-weight:400">${h.posts} posts · ${h.competitors} ${h.competitors === 1 ? "competitor" : "competitors"}</span></span>`).join("") || `<span style="font-size:12px;color:${K.mut}">No hashtags used this month.</span>`}</td></tr>
+<tr><td style="padding:0 28px">${m.hashtags.map((h) => `<span style="display:inline-block;max-width:100%;box-sizing:border-box;background:${K.lib};color:${K.li};font-size:12px;font-weight:700;padding:4px 9px;margin:0 4px 6px 0">#${e(h.tag)} <span style="font-weight:400">${h.posts} posts · ${h.competitors} ${h.competitors === 1 ? "competitor" : "competitors"}</span></span>`).join("") || `<span style="font-size:12px;color:${K.mut}">No hashtags used this month.</span>`}</td></tr>
 ${m.conversations.length ? `${sec("Posts that started conversations")}
 <tr><td style="padding:0 28px">${m.conversations.map((t) => `<div style="margin:8px 0"><div style="font-size:13px;font-weight:700;color:${K.ink}">${t.url ? `<a href="${e(t.url)}" style="color:${K.ink};text-decoration:none">${e(t.text)}</a>` : e(t.text)}</div><div style="font-size:11px;color:${K.mut};margin-top:2px"><b style="color:${K.ink}">${fmt(t.comments)} comments · ${fmt(t.likes)} likes</b> · ${e(t.company)} · ${e(t.net)} · ${e(t.date)}</div></div>`).join("")}</td></tr>` : ""}
 ${sec("What we can learn")}
 <tr><td style="padding:0 28px">${m.lessons.map((n) => `<div style="border-left:3px solid ${K.li};padding:2px 0 2px 12px;margin:10px 0"><div style="font-size:13px;font-weight:700;color:${K.ink}">${e(n[0])}</div><div style="font-size:12px;color:${K.mut};margin-top:2px">${e(n[1])}</div></div>`).join("")}</td></tr>
 <tr><td style="padding:16px 28px 0"><a href="${app}/dashboard" style="display:inline-block;background:${K.red};color:#fff;text-decoration:none;font-weight:700;font-size:13px;padding:10px 18px">Open the dashboard</a></td></tr>
-<tr><td style="padding:24px 28px 22px"><div style="border-top:1px solid ${K.rule};padding-top:10px;font-size:11px;color:${K.mut}">Social · Gershon.AI · Competition · The same report is attached as a one-page PDF.<span style="float:right">${e(build)}</span></div></td></tr>
+<tr><td style="padding:24px 28px 22px"><div style="border-top:1px solid ${K.rule};padding-top:10px;font-size:11px;line-height:1.5;color:${K.mut}">Source: the competitors' public LinkedIn and X pages, collected daily by social.gershon.ai (Social app database) · Data as of ${e(new Date().toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" }))} ET · ${e(build)}<div style="margin-top:4px">GC Social · Competition · The same report is attached as a one-page PDF.</div></div></td></tr>
 </table></td></tr></table></body></html>`;
 }
