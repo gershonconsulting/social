@@ -8,48 +8,51 @@ const config: Config = {
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
-    // v4.9.0 — "Charcoal & Signal Red". Geist for text, Geist Mono for numbers.
+    // Geist for text, Geist Mono for numbers (kept from v4.9.0).
     fontFamily: {
       sans: ["Geist", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Helvetica Neue", "Arial", "sans-serif"],
       mono: ["Geist Mono", "ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
     },
     extend: {
       colors: {
-        // Warm neutrals replace Tailwind's cool grays everywhere at once, and
-        // "red" becomes the Gershon signal red. Every page picks this up
-        // without being edited.
+        // v4.66.0 — unified Gershon design (Linalysis layout, Gershon.ai red).
+        // Neutral greys (text #1d1d1f, borders #e5e7eb) and "red" = Gershon red
+        // #CC3333 (600) / #a8281f (700) / tint #fdf2f2 (50). Every page picks
+        // this up without being edited. Status colours (green / amber) are
+        // untouched; status red stays a clearly-red red.
         gray: {
-          50: "#FAF9F6",
-          100: "#F3F1EC",
-          200: "#E6E3DC",
-          300: "#D4D0C7",
-          400: "#9A9DA5",
-          500: "#6B7079",
-          600: "#50545D",
-          700: "#3D414A",
-          800: "#2A2D34",
-          900: "#15171C",
-          950: "#0E0F12",
+          50: "#FAFAFA",
+          100: "#F3F4F6",
+          200: "#E5E7EB",
+          300: "#D1D5DB",
+          400: "#9CA3AF",
+          500: "#6E6E73",
+          600: "#4B5563",
+          700: "#374151",
+          800: "#2A2A2E",
+          900: "#1D1D1F",
+          950: "#111113",
         },
         red: {
-          50: "#FDF0EE",
-          100: "#FBDCD8",
-          200: "#F6BBB3",
-          300: "#EF8E82",
-          400: "#E65A4B",
-          500: "#DF3B2B",
-          600: "#D92D20",
-          700: "#B42318",
-          800: "#8A1C12",
-          900: "#6B170F",
+          50: "#FDF2F2",
+          100: "#FBE1E1",
+          200: "#F3CACA",
+          300: "#EC9F9F",
+          400: "#E06B6B",
+          500: "#D64545",
+          600: "#CC3333",
+          700: "#A8281F",
+          800: "#86201A",
+          900: "#6B1A15",
         },
         brand: {
-          DEFAULT: "#D92D20",
-          hover: "#B42318",
-          charcoal: "#111317",
-          ink: "#15171C",
-          paper: "#F5F4F0",
-          stone: "#E3E0D8",
+          DEFAULT: "#CC3333",
+          hover: "#A8281F",
+          tint: "#FDF2F2",
+          charcoal: "#1D1D1F",
+          ink: "#1D1D1F",
+          paper: "#FAFAFA",
+          stone: "#E5E7EB",
         },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

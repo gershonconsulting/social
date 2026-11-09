@@ -1,6 +1,8 @@
 export const runtime = 'edge';
 import type { Metadata } from "next";
 import "./globals.css";
+// v4.66.0 unified Gershon design — override layer, must stay the LAST stylesheet import.
+import "./unified-theme.css";
 import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {

@@ -33,13 +33,13 @@ function Check({ on, label, count, onClick }: { on: boolean; label: string; coun
       aria-checked={on}
       className={
         "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] text-left transition-colors " +
-        (on ? "bg-[#23262D] text-white font-semibold" : "text-[#C9CDD4] hover:bg-[#1A1D23] hover:text-white")
+        (on ? "bg-red-50 text-red-700 font-semibold" : "text-gray-700 hover:bg-gray-50 hover:text-red-600")
       }
     >
       <span
         className={
           "w-3.5 h-3.5 rounded-[4px] border flex-shrink-0 flex items-center justify-center " +
-          (on ? "bg-red-600 border-red-600" : "border-[#4A4F59] bg-transparent")
+          (on ? "bg-red-600 border-red-600" : "border-gray-300 bg-white")
         }
       >
         {on && (
@@ -49,7 +49,7 @@ function Check({ on, label, count, onClick }: { on: boolean; label: string; coun
         )}
       </span>
       <span className="flex-1 truncate">{label}</span>
-      {count !== undefined && <span className="text-[11px] text-[#8E949F]">{count}</span>}
+      {count !== undefined && <span className="text-[11px] text-gray-500">{count}</span>}
     </button>
   );
 }
@@ -71,11 +71,11 @@ function Group({
     <div className="mb-1">
       <button
         onClick={onToggle}
-        className="w-full flex items-center gap-1 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8E949F] hover:text-white"
+        className="w-full flex items-center gap-1 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500 hover:text-red-600"
       >
         {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         {title}
-        {hint && <span className="ml-auto text-[10px] font-medium normal-case tracking-normal text-[#7D838E]">{hint}</span>}
+        {hint && <span className="ml-auto text-[10px] font-medium normal-case tracking-normal text-gray-400">{hint}</span>}
       </button>
       {open && <div className="space-y-0.5 pb-1">{children}</div>}
     </div>
@@ -95,15 +95,15 @@ export function FilterPanel() {
   const months = recentMonths(12);
 
   return (
-    <div className="pt-4 border-t border-[#1F2229]">
+    <div className="pt-4 border-t border-gray-200">
       <div className="flex items-center gap-2 px-2 mb-1">
-        <SlidersHorizontal size={13} className="text-[#7D838E]" />
-        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#7D838E]">Filter view</span>
+        <SlidersHorizontal size={13} className="text-gray-500" />
+        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500">Filter view</span>
         {!isDefault && (
           <button
             onClick={reset}
             title="Back to the default view: Campaign, this month, all networks"
-            className="ml-auto inline-flex items-center gap-1 text-[10px] font-semibold text-[#FF8A7E] hover:underline"
+            className="ml-auto inline-flex items-center gap-1 text-[10px] font-semibold text-red-600 hover:underline"
           >
             <RotateCcw size={10} /> Reset
           </button>
