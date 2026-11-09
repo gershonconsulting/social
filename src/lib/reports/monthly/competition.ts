@@ -19,6 +19,7 @@
 import { MrPdf, strWidth as W, type RGB } from "./pdf-writer";
 import type { CategoryData, CompanyMonth, MonthWindow, ReportPost } from "./model";
 import { siteUrl } from "@/lib/site";
+import { socialSubject } from "@/lib/email/subject";
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
 const one = (n: number) => (Math.round(n * 10) / 10).toFixed(1).replace(/\.0$/, "");
@@ -241,8 +242,8 @@ const sec = (t: string) => `<tr><td style="padding:22px 28px 8px"><div style="fo
 const th = (t: string, a = "left") => `<td align="${a}" style="font-size:10px;font-weight:700;letter-spacing:.5px;color:${K.mut};padding:7px 6px;background:${K.tint}">${t}</td>`;
 const td = (t: string | number, s = "", a = "left") => `<td align="${a}" style="font-size:12px;color:${K.ink};padding:7px 6px;border-top:1px solid ${K.rule};${s}">${t}</td>`;
 
-export function competitionSubject(win: MonthWindow, m: CompetitionModel): string {
-  return `Social Report — Competition — ${win.name} ${win.y} · what we can learn · ${fmt(m.totals.posts)} competitor posts`;
+export function competitionSubject(_win: MonthWindow, _m: CompetitionModel, workspace?: string): string {
+  return socialSubject(workspace, "Competitive report");
 }
 
 export function competitionHtml(win: MonthWindow, m: CompetitionModel, build: string): string {

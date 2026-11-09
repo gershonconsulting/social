@@ -11,6 +11,7 @@
  */
 import type { CategoryModel, CompanyModel, MonthWindow, Tile } from "./model";
 import { siteUrl } from "@/lib/site";
+import { socialSubject, categoryReportType } from "@/lib/email/subject";
 
 const APP = siteUrl();
 const F = "font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif";
@@ -83,8 +84,8 @@ const link = (t: { text: string; url: string | null }) => (t.url ? `<a href="${e
 /** Wide tables scroll inside their own box on a phone, so the page never scrolls sideways. */
 const scroll = (html: string) => `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch">${html}</div>`;
 
-export function categorySubject(win: MonthWindow, m: CategoryModel): string {
-  return `Social Report — ${m.label} — ${win.name} ${win.y} · ${m.totals.pct != null ? `${m.totals.pct}% of posting objective · ` : ""}${fmt(m.totals.posts)} posts · ${fmt(m.totals.eng)} engagements`;
+export function categorySubject(_win: MonthWindow, m: CategoryModel, workspace?: string): string {
+  return socialSubject(workspace, categoryReportType(m.key, m.label));
 }
 
 export function categoryHtml(win: MonthWindow, m: CategoryModel, build: string): string {
@@ -121,8 +122,8 @@ ${footer(`GC Social · ${e(m.label)} · The same report is attached as a one-pag
 `, m.lead);
 }
 
-export function companySubject(win: MonthWindow, m: CompanyModel): string {
-  return `Your ${win.name} on social — ${m.name}${m.pct != null ? ` · ${m.pct}% of your posting objective` : ""} · ${m.tiles.find((t) => t.label === "POSTS PUBLISHED")?.value ?? ""} posts`;
+export function companySubject(_win: MonthWindow, m: CompanyModel): string {
+  return socialSubject(m.name, "Company report");
 }
 
 export function companyHtml(win: MonthWindow, m: CompanyModel, build: string, to: string): string {

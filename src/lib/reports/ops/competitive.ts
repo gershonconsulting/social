@@ -15,6 +15,7 @@ import prisma from "@/lib/db";
 import { etDayKey, etDayShort, etMidnight } from "../et-days";
 import type { Intel } from "./intelligence";
 import { banner, esc, etKeyOf, fmt, kpis, page, pill, section, shortDay, SITE, table, TD, TDR, TH, THR, type Level } from "./shell";
+import { socialSubject } from "@/lib/email/subject";
 
 /** Generic topics — fits any industry (the VALOS-specific set lives in lib/competitors/analyze.ts). */
 export const TOPICS: Array<{ key: string; label: string; re: RegExp }> = [
@@ -415,10 +416,6 @@ export function renderCompetitive(r: CompetitiveReport, extra: { actions?: Intel
   });
 }
 
-export function competitiveSubject(r: CompetitiveReport, workspace?: string): string {
-  const y = r.daily[r.daily.length - 1];
-  const base = `Social Competitive Report${workspace ? ` — ${workspace}` : ""} — ${r.dayShort}`;
-  if (r.level === "critical") return `⛔ ${base} — nothing collected from competitors or partners`;
-  const top = r.week.topics.find((t) => t.label !== "Other");
-  return `${base} — ${y.total} collected yesterday, ${r.weekly[0].total} this week${top ? ` · top topic: ${top.label}` : ""}`;
+export function competitiveSubject(_r: CompetitiveReport, workspace?: string): string {
+  return socialSubject(workspace, "Competitive report");
 }

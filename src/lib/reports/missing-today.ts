@@ -24,7 +24,7 @@ import { withAuditBcc } from "@/lib/mail-bcc";
 
 export const MISSING_SENT_KEY = "missing_today_sent";
 export const MISSING_DEFAULT_TO = "social@gershonconsulting.com";
-export const MISSING_DEFAULT_FROM = "GC Social <reports@gershon.ai>";
+export const MISSING_DEFAULT_FROM = "Social.gershon.ai <reports@gershon.ai>";
 const PLATFORMS: Platform[] = [Platform.LINKEDIN, Platform.TWITTER];
 const KEEP_KEYS = 30;
 
