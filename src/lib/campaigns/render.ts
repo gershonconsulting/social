@@ -11,13 +11,19 @@
  * the standalone page (wrapDocument), which is how a PDF gets produced —
  * Cloudflare Workers have no headless browser, so Cmd/Ctrl-P → Save as
  * PDF from the share link is the PDF path.
+ *
+ * Report e-mail house style (2026-10-23): white page, single column,
+ * max-width 680px, dark text #12211d, brand red #CC3333 as the accent only.
+ * Never light text on a dark band (the header used to be white on solid red).
+ * One-line "Source: … · Data as of …" footer.
  */
 
 import type { CampaignMonth, CampaignMonthlyReport } from "./monthly";
 import { APP_URL } from "./monthly";
 
-const RED = "#FE1B04";
-const INK = "#111827";
+const RED = "#CC3333";
+const INK = "#12211d";
+const LINK = "#1f6f5c";
 const MUTED = "#6b7280";
 const LINE = "#e5e7eb";
 
@@ -69,7 +75,7 @@ function trend(current: number | null, previous: number | null): string {
 
 function kpi(value: string, label: string, accent = false): string {
   return `
-  <td style="padding:12px 10px;text-align:center;border-right:1px solid ${LINE};">
+  <td style="padding:12px 8px;text-align:center;border-right:1px solid ${LINE};">
     <div style="font-size:26px;font-weight:800;line-height:1;color:${accent ? RED : INK};">${value}</div>
     <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.8px;color:${MUTED};margin-top:6px;">${label}</div>
   </td>`;
@@ -77,26 +83,28 @@ function kpi(value: string, label: string, accent = false): string {
 
 function header(title: string, subtitle: string): string {
   return `
-  <div style="background:${RED};color:#ffffff;padding:20px 24px;">
-    <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.6px;opacity:0.85;">social.gershonCRM.com · Campaign report</div>
-    <div style="font-size:22px;font-weight:800;margin-top:5px;line-height:1.2;">${esc(title)}</div>
-    <div style="font-size:13px;margin-top:3px;opacity:0.9;">${esc(subtitle)}</div>
+  <div style="height:4px;background:${RED};line-height:4px;font-size:0;">&nbsp;</div>
+  <div style="padding:20px 24px 16px;border-bottom:1px solid ${LINE};">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:${RED};">GC Social · Campaign report</div>
+    <div style="font-size:22px;font-weight:800;margin-top:5px;line-height:1.2;color:${INK};">${esc(title)}</div>
+    <div style="font-size:13px;margin-top:3px;color:#4b5563;">${esc(subtitle)}</div>
   </div>`;
 }
 
 function footer(r: CampaignMonthlyReport, shareUrl: string): string {
-  const when = new Date(r.generatedAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+  const when = new Date(r.generatedAt).toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" });
+  const host = APP_URL.replace(/^https?:\/\//, "").replace(/\/$/, "");
   const v = (process.env.NEXT_PUBLIC_APP_VERSION || "dev").slice(0, 7);
   return `
-  <div style="padding:14px 24px;background:#f9fafb;border-top:1px solid ${LINE};font-size:11px;color:${MUTED};line-height:1.6;">
+  <div style="padding:14px 24px;border-top:1px solid ${LINE};font-size:11px;color:${MUTED};line-height:1.6;">
     Objective: <strong style="color:${INK};">one post per day</strong>. A day counts as met when at least one tracked platform published that day.<br>
-    Generated ${when} · <a href="${shareUrl}" style="color:${MUTED};">permanent link</a> · <a href="${APP_URL}" style="color:${MUTED};">social.gershonCRM.com</a> · v${v}
+    Source: <a href="${APP_URL}" style="color:${LINK};">${host}</a> (Social app database: daily posting compliance) · Data as of ${when} ET · <a href="${shareUrl}" style="color:${LINK};">permanent link</a> · v${v}
   </div>`;
 }
 
 function shareBanner(url: string): string {
   return `
-  <div style="padding:14px 24px;background:#fff8f7;border-bottom:1px solid #fee2dd;text-align:center;">
+  <div style="padding:14px 24px;background:#fdf2f2;border-bottom:1px solid #f3caca;text-align:center;">
     <a href="${url}" style="display:inline-block;padding:10px 20px;background:${RED};color:#ffffff;font-weight:700;font-size:13px;text-decoration:none;border-radius:8px;">Open the live report →</a>
     <div style="font-size:11px;color:${MUTED};margin-top:8px;word-break:break-all;">${url}</div>
   </div>`;
@@ -137,7 +145,8 @@ export function renderSummaryBody(r: CampaignMonthlyReport): string {
 
   return `
   ${header(`Campaign performance — ${r.monthLabel}`, `${r.totals.companies} campaign ${r.totals.companies === 1 ? "company" : "companies"} · objective: one post per day`)}
-  <table style="width:100%;border-collapse:collapse;background:#fff8f7;border-bottom:1px solid #fee2dd;">
+  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;background:#fdf2f2;border-bottom:1px solid #f3caca;">
+  <table style="width:100%;border-collapse:collapse;">
     <tr>
       ${kpi(pctText(r.totals.attainmentPct), "Objective met", true)}
       ${kpi(String(r.totals.postsPublished), "Posts published")}
@@ -146,10 +155,11 @@ export function renderSummaryBody(r: CampaignMonthlyReport): string {
       ${kpi(r.totals.totalEngagement.toLocaleString("en-US"), "Engagements")}
     </tr>
   </table>
+  </div>
   <div style="padding:10px 24px 4px;font-size:12px;color:${MUTED};">
     Across all campaigns: ${trend(r.totals.attainmentPct, r.totals.previousAttainmentPct)} (${r.previousMonthLabel})
   </div>
-  <div style="padding:8px 16px 16px;">
+  <div style="padding:8px 16px 16px;overflow-x:auto;-webkit-overflow-scrolling:touch;">
     <table style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead>
         <tr style="background:#f3f4f6;">
@@ -209,7 +219,7 @@ export function renderCompanyBody(r: CampaignMonthlyReport, c: CampaignMonth): s
         <div style="border:1px solid ${LINE};border-radius:8px;padding:12px;">
           <div style="font-size:11px;color:${MUTED};">${PLATFORM_LABELS[c.bestPost.platform] ?? c.bestPost.platform} · ${c.bestPost.engagement.toLocaleString("en-US")} engagements</div>
           <div style="font-size:13px;color:${INK};margin-top:5px;line-height:1.5;">${esc(c.bestPost.snippet)}</div>
-          <a href="${c.bestPost.url}" style="font-size:12px;color:${RED};font-weight:600;text-decoration:none;">View post →</a>
+          <a href="${c.bestPost.url}" style="font-size:12px;color:${LINK};font-weight:600;text-decoration:none;">View post →</a>
         </div>
       </div>`
     : "";
@@ -227,7 +237,8 @@ export function renderCompanyBody(r: CampaignMonthlyReport, c: CampaignMonth): s
 
   return `
   ${header(esc(c.name), `${r.monthLabel} · objective: one post per day`)}
-  <table style="width:100%;border-collapse:collapse;background:#fff8f7;border-bottom:1px solid #fee2dd;">
+  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;background:#fdf2f2;border-bottom:1px solid #f3caca;">
+  <table style="width:100%;border-collapse:collapse;">
     <tr>
       ${kpi(pctText(c.attainmentPct), "Objective met", true)}
       ${kpi(String(c.postsPublished), "Posts published")}
@@ -236,6 +247,7 @@ export function renderCompanyBody(r: CampaignMonthlyReport, c: CampaignMonth): s
       ${kpi(c.totalEngagement.toLocaleString("en-US"), "Engagements")}
     </tr>
   </table>
+  </div>
   <div style="padding:14px 24px;border-bottom:1px solid ${LINE};">
     <span style="display:inline-block;padding:5px 12px;border-radius:99px;background:${st.bg};color:${st.fg};font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;">${st.label}</span>
     <span style="margin-left:10px;">${trend(c.attainmentPct, c.previous?.attainmentPct ?? null)}</span>
@@ -245,7 +257,7 @@ export function renderCompanyBody(r: CampaignMonthlyReport, c: CampaignMonth): s
         : ""
     }
   </div>
-  <div style="padding:16px 24px 6px;">
+  <div style="padding:16px 24px 6px;overflow-x:auto;-webkit-overflow-scrolling:touch;">
     <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.8px;color:${MUTED};margin-bottom:8px;">Month vs previous month</div>
     <table style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead>
@@ -269,7 +281,7 @@ export function renderCompanyBody(r: CampaignMonthlyReport, c: CampaignMonth): s
       </tbody>
     </table>
   </div>
-  <div style="padding:16px 24px 6px;">
+  <div style="padding:16px 24px 6px;overflow-x:auto;-webkit-overflow-scrolling:touch;">
     <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.8px;color:${MUTED};margin-bottom:8px;">By platform</div>
     <table style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead>
@@ -294,8 +306,8 @@ export function renderCompanyBody(r: CampaignMonthlyReport, c: CampaignMonth): s
 /** Email-safe full document: no scripts, no print controls. */
 export function wrapEmail(body: string): string {
   return `<!doctype html>
-<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:0;padding:24px;background:#f3f4f6;color:${INK};">
-<div style="max-width:760px;margin:0 auto;background:#ffffff;border:1px solid ${LINE};border-radius:12px;overflow:hidden;">
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin:0;padding:0;background:#ffffff;color:${INK};">
+<div style="max-width:680px;margin:0 auto;background:#ffffff;">
 ${body}
 </div>
 </body></html>`;
