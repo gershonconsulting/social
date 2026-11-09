@@ -51,15 +51,9 @@ const navGroups: { label: string; items: NavItem[] }[] = [
   {
     label: "Portfolio",
     items: [
-      {
-        href: "/clients",
-        icon: Building2,
-        label: "Companies",
-        children: [
-          { href: "/clients/by-cloudcampaign", label: "By Cloud Campaign" },
-          { href: "/clients/by-heropost", label: "By HeroPost" },
-        ],
-      },
+      // v4.70.0: "By Cloud Campaign" / "By HeroPost" removed (both tools retired);
+      // their views live on in Publish → Content funnel.
+      { href: "/clients", icon: Building2, label: "Companies" },
       { href: "/networks", icon: Network, label: "Networks" },
       { href: "/analytics", icon: BarChart3, label: "Analytics" },
     ],
