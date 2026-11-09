@@ -18,6 +18,7 @@
  * Idempotent per New York day (Setting "missing_today_sent").
  */
 import prisma from "@/lib/db";
+import { reportPlan } from "./settings";
 import { ClientStatus, Platform } from "@prisma/client";
 import { PAGE_MISMATCH, PAGE_UNAVAILABLE } from "@/lib/linkedin-page-check";
 import { withAuditBcc } from "@/lib/mail-bcc";
@@ -210,8 +211,10 @@ export interface MissingSendResult {
 export async function sendMissingToday(opts: { force?: boolean; to?: string } = {}): Promise<MissingSendResult> {
   const r = await buildMissingToday();
   const subject = missingSubject(r);
-  const to = opts.to || process.env.MISSING_REPORT_TO || MISSING_DEFAULT_TO;
+  const plan = await reportPlan("missing-today", process.env.MISSING_REPORT_TO || MISSING_DEFAULT_TO);
+  const to = opts.to || plan.to.join(", ");
   const base = { day: r.day, subject, count: r.missing.length, to };
+  if (!opts.force && !plan.due) return { ...base, sent: false, skipped: plan.skipReason };
   if (r.missing.length === 0) return { ...base, sent: false, skipped: "nothing missing — no email (N = 0)" };
   if (!opts.force) {
     const sent = await readSent();
@@ -223,7 +226,7 @@ export async function sendMissingToday(opts: { force?: boolean; to?: string } = 
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(withAuditBcc({ from: MISSING_DEFAULT_FROM, to, subject, html: renderMissingHtml(r) })),
+      body: JSON.stringify(withAuditBcc({ from: MISSING_DEFAULT_FROM, to: to.split(/\s*,\s*/).filter(Boolean), subject, html: renderMissingHtml(r) })),
     });
     const body = await res.text().catch(() => "");
     if (!res.ok) return { ...base, sent: false, skipped: null, status: res.status, error: body.slice(0, 400) };

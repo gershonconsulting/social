@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { CheckCircle2, AlertCircle, XCircle, Download, RefreshCw, Loader2, Sparkles } from "lucide-react";
 import { CollectingSessionCard } from "@/components/settings/collecting-session-card";
+import { ReportsCard } from "@/components/settings/reports-card";
 import { useCollectingMode } from "@/lib/collecting-mode";
 
 interface Probe {
@@ -115,7 +116,7 @@ export function SettingsPageClient() {
     <div>
       <Header
         title="Settings"
-        subtitle="GershonAI Chrome extension status — sessions are captured locally and sent here for server-side scraping."
+        subtitle="Reports (who gets them, how often) and the GershonAI Chrome extension status."
         actions={
           <button onClick={refresh} disabled={loading} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
@@ -123,6 +124,8 @@ export function SettingsPageClient() {
           </button>
         }
       />
+
+      <ReportsCard />
 
       <CollectingSessionCard />
 

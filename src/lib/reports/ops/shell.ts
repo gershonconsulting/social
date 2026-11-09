@@ -16,6 +16,7 @@
  */
 
 import prisma from "@/lib/db";
+import { reportPlan } from "../settings";
 import { siteUrl } from "@/lib/site";
 import { APP_VERSION } from "@/lib/extension-version";
 import { BUSINESS_TZ } from "../et-days";
@@ -193,8 +194,12 @@ export async function deliver(
   html: string,
   opts: { force?: boolean; to?: string; defaultTo?: string } = {},
 ): Promise<DeliveryResult> {
-  const to = opts.to || opts.defaultTo || process.env.REPORT_TO || OPS_TO;
+  // Settings → Reports decides who and how often (v4.71.0); an explicit `to`
+  // (manual send, other workspace) still wins.
+  const plan = await reportPlan(kind, opts.defaultTo || process.env.REPORT_TO || OPS_TO);
+  const to = opts.to || plan.to.join(", ");
   const id = `${kind}:${dayKey}`;
+  if (!opts.force && !opts.to && !plan.due) return { kind, subject, to, sent: false, skipped: plan.skipReason };
   if (!opts.force) {
     const sent = await readSent();
     if (sent[id]) return { kind, subject, to, sent: false, skipped: `already sent (${sent[id]})` };
@@ -205,7 +210,7 @@ export async function deliver(
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(withAuditBcc({ from: process.env.OPS_REPORT_FROM || OPS_FROM, to: [to], subject, html })),
+      body: JSON.stringify(withAuditBcc({ from: process.env.OPS_REPORT_FROM || OPS_FROM, to: to.split(/\s*,\s*/).filter(Boolean), subject, html })),
     });
     if (!r.ok) {
       const body = await r.text().catch(() => "");
