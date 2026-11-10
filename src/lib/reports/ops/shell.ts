@@ -16,6 +16,7 @@
  */
 
 import prisma from "@/lib/db";
+import { reportPlan } from "../settings";
 import { siteUrl } from "@/lib/site";
 import { APP_VERSION } from "@/lib/extension-version";
 import { BUSINESS_TZ } from "../et-days";
@@ -186,7 +187,7 @@ export function page(opts: {
 </div></body></html>`;
 }
 
-// ── Delivery ────────────────────────────────────────────────────────────────────────────
+// ── Delivery ────────────────────────────────────────────────────────────────
 
 async function readSent(): Promise<Record<string, string>> {
   const row = await prisma.setting.findUnique({ where: { key: SENT_KEY } });
@@ -218,9 +219,13 @@ export async function deliver(
   html: string,
   opts: { force?: boolean; to?: string; defaultTo?: string; sentKey?: string; from?: string } = {},
 ): Promise<DeliveryResult> {
-  const to = opts.to || opts.defaultTo || process.env.REPORT_TO || OPS_TO;
+  // Settings → Reports decides who and how often (v4.71.0); an explicit `to`
+  // (manual send, other workspace) still wins.
+  const plan = await reportPlan(kind, opts.defaultTo || process.env.REPORT_TO || OPS_TO);
+  const to = opts.to || plan.to.join(", ");
   // v4.70.0: a workspace other than Gershon's gets its own key, so each one is sent once a day.
   const id = opts.sentKey || `${kind}:${dayKey}`;
+  if (!opts.force && !opts.to && !plan.due) return { kind, subject, to, sent: false, skipped: plan.skipReason };
   const toList = to.split(",").map((x) => x.trim()).filter(Boolean);
   if (!opts.force) {
     const sent = await readSent();
