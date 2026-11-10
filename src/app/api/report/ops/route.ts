@@ -1,6 +1,7 @@
 export const runtime = "edge";
 import { NextRequest, NextResponse } from "next/server";
-import { buildOps, isOpsKind, OPS_KINDS, sendOps } from "@/lib/reports/ops";
+import { buildOps, isOpsKind, OPS_KINDS, sendOps, sendWorkspaceCompetitive } from "@/lib/reports/ops";
+import { orgFromSession } from "@/lib/session-org";
 
 /**
  * The daily operations reports (v4.49.0) — each one its own email to
@@ -26,7 +27,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, error: `kind must be one of: ${OPS_KINDS.join(", ")}` }, { status: 400 });
   }
   try {
-    const b = await buildOps(kind, undefined, { refresh: url.searchParams.get("refresh") === "1" });
+    // v4.70.0: a signed-in user previews their OWN workspace's report; no session = Gershon's, as before.
+    const own = await orgFromSession().catch(() => null);
+    // Without a session: no signed action links and no AI re-run (v4.70.0 review).
+    const b = await buildOps(kind, own || undefined, { refresh: !!own && url.searchParams.get("refresh") === "1", actionLinks: !!own });
     if (url.searchParams.get("format") === "json") {
       return NextResponse.json({ success: true, data: { subject: b.subject, day: b.dayKey, report: b.data } });
     }
@@ -44,12 +48,20 @@ export async function POST(req: NextRequest) {
   const url = new URL(req.url);
   const kind = url.searchParams.get("kind");
   try {
+    // v4.70.0: one client workspace's Competitive report (called by sendOps for each workspace).
+    const workspace = url.searchParams.get("workspace");
+    if (workspace) {
+      const results = await sendWorkspaceCompetitive(workspace, { force: url.searchParams.get("force") === "1", to: url.searchParams.get("to") || undefined });
+      const ok = results.every((r) => r.sent || ("skipped" in r && r.skipped));
+      return NextResponse.json({ success: ok, data: results }, { status: ok ? 200 : 502 });
+    }
     const results = await sendOps({
       kinds: isOpsKind(kind) ? [kind] : undefined,
       force: url.searchParams.get("force") === "1",
       to: url.searchParams.get("to") || undefined,
     });
-    const ok = results.every((r) => r.sent || ("skipped" in r && r.skipped));
+    // Gershon's own reports decide the status; a client workspace's failure is reported, not fatal (v4.70.0 review).
+    const ok = results.filter((r) => !("workspace" in r && r.workspace)).every((r) => r.sent || ("skipped" in r && r.skipped));
     return NextResponse.json({ success: ok, data: results }, { status: ok ? 200 : 502 });
   } catch (e) {
     return NextResponse.json({ success: false, error: e instanceof Error ? e.message : "report send failed" }, { status: 500 });

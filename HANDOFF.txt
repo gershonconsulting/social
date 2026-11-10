@@ -102,6 +102,10 @@ Reporting     : the daily Phantombuster digest goes to
           for BOTH platforms (0 rows) — PB API key / phantom ids in Setting "phantombuster"
           are invalid or the PB account/agents are gone. Fix in Social -> Settings ->
           Phantombuster (or the PB dashboard). Not a scheduler problem.
+  [19] REMOVED 2026-11-09 (PR #23, at Olivier's request) and its dead module
+       src/lib/reports/missing-today.ts deleted 2026-11-10 (nothing imported it; the
+       dashboard / daily-collection-grid compute their own "missing today" counts).
+       Historical entry below:
   [19] missing-today.yml + POST /api/report/missing-today — 09:00 New York daily (UTC
        13:00 EDT / 14:00 EST): emails social@gershonconsulting.com from
        "GC Social <reports@gershon.ai>", subject "[19] Social — still missing today: N — date";
