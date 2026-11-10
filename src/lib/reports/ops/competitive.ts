@@ -15,6 +15,7 @@ import prisma from "@/lib/db";
 import { etDayKey, etDayShort, etMidnight } from "../et-days";
 import type { Intel } from "./intelligence";
 import { banner, esc, etKeyOf, fmt, kpis, page, pill, section, shortDay, SITE, table, TD, TDR, TH, THR, type Level } from "./shell";
+import { socialSubject } from "@/lib/email/subject";
 
 /** Generic topics — fits any industry (the VALOS-specific set lives in lib/competitors/analyze.ts). */
 export const TOPICS: Array<{ key: string; label: string; re: RegExp }> = [
@@ -285,7 +286,20 @@ function chips(items: Array<{ term: string; count: number }>, prefix = ""): stri
     .join("");
 }
 
-export function renderCompetitive(r: CompetitiveReport, extra: { actions?: Intel["actions"] } = {}): string {
+export type CompetitiveExtra = {
+  actions?: Intel["actions"];
+  /** v4.70.0: the day's action cards (Promote / Network / Engage) with one-click buttons — replaces the plain list. */
+  cardsHtml?: string;
+  /** v4.70.0: what happened with last week's actions. */
+  resultsHtml?: string;
+  /** The workspace's own company ("Gershon Consulting" on the primary workspace). */
+  ownName?: string;
+  /** Only the primary workspace's Intelligence report has a public preview to link to. */
+  isPrimary?: boolean;
+};
+
+export function renderCompetitive(r: CompetitiveReport, extra: CompetitiveExtra = {}): string {
+  const ownName = extra.ownName || "Gershon Consulting";
   const y = r.daily[r.daily.length - 1];
   const w0 = r.weekly[0];
   const w1 = r.weekly[1];
@@ -347,7 +361,7 @@ export function renderCompetitive(r: CompetitiveReport, extra: { actions?: Intel
 
   // v4.68.0: grouped by the company each one is tracked FOR (Competitor Watch),
   // so a client's competitors (e.g. Altavia's) are never read as Gershon's own.
-  const OWN = "Gershon Consulting — our own market";
+  const OWN = `${ownName} — our own market`;
   const groups = new Map<string, CompanyRow[]>();
   for (const c of r.rows) {
     const keys = c.watchedFor.length ? c.watchedFor : [OWN];
@@ -374,19 +388,23 @@ export function renderCompetitive(r: CompetitiveReport, extra: { actions?: Intel
   );
 
   const acts = extra.actions || [];
-  const actionsHtml = acts.length
+  const actionsHtml = extra.cardsHtml
+    ? extra.cardsHtml
+    : acts.length
     ? acts
         .slice(0, 6)
         .map(
           (a, n) => `<div style="padding:10px 0;border-bottom:1px solid #f1f1f1;">
-        <div style="font-size:12px;color:#6b7280;">${pill(a.priority.toUpperCase(), a.priority === "high" ? "critical" : a.priority === "medium" ? "warn" : "ok")} &nbsp;<b style="color:#111;">For ${esc(a.forCompany || "Gershon Consulting")}</b></div>
+        <div style="font-size:12px;color:#6b7280;">${pill(a.priority.toUpperCase(), a.priority === "high" ? "critical" : a.priority === "medium" ? "warn" : "ok")} &nbsp;<b style="color:#111;">For ${esc(a.forCompany || ownName)}</b></div>
         <div style="font-size:14px;font-weight:700;margin-top:5px;line-height:1.4;">${n + 1}. ${esc(a.action)}</div>
         ${a.basedOn ? `<div style="font-size:12px;color:#9ca3af;margin-top:3px;">Based on: ${esc(a.basedOn)}</div>` : ""}
         ${a.links?.length ? `<div style="font-size:12px;margin-top:6px;">${a.links.map((l) => `<a href="${esc(l.href)}" style="color:#FE1B04;margin-right:12px;white-space:nowrap;">${esc(l.label)} →</a>`).join("")}</div>` : ""}
       </div>`,
         )
         .join("") +
-      `<div style="margin-top:10px;font-size:13px;"><a href="${SITE}/api/report/ops?kind=intelligence" style="color:#FE1B04;font-weight:700;">See every action in the Intelligence report →</a></div>`
+      (extra.isPrimary !== false
+        ? `<div style="margin-top:10px;font-size:13px;"><a href="${SITE}/api/report/ops?kind=intelligence" style="color:#FE1B04;font-weight:700;">See every action in the Intelligence report →</a></div>`
+        : "")
     : "";
 
   const body =
@@ -397,7 +415,16 @@ export function renderCompetitive(r: CompetitiveReport, extra: { actions?: Intel
       { label: "Published this week", value: String(wk.published), hint: "by competitors & partners" },
       { label: "Silent 2 weeks", value: String(r.silent.length), level: r.silent.length ? "warn" : "ok" },
     ]) +
-    (actionsHtml ? section("Suggested actions", actionsHtml, "What to do this week from what competitors and partners posted — click through to the post or the company.") : "") +
+    (actionsHtml
+      ? section(
+          "Suggested actions",
+          actionsHtml,
+          extra.cardsHtml
+            ? "What to do this week from what competitors and partners posted, in the three pillars. One click marks an action done or dismisses it; “Draft it” writes the post, comment or note for you."
+            : "What to do this week from what competitors and partners posted — click through to the post or the company.",
+        )
+      : "") +
+    (extra.resultsHtml ? section("Last week's actions — what happened", extra.resultsHtml, "Posts and engagement of the company after each action marked done, next to its usual week.") : "") +
     section("Collected every day — last 7 days", dailyTable, "When the Chrome extension brought the posts in.") +
     section("Collected every week — last 4 weeks", weeklyTable) +
     section("What they post about — this week", topicTable, `${wk.published} posts published by competitors and partners in the last 7 days.`) +
@@ -411,14 +438,11 @@ export function renderCompetitive(r: CompetitiveReport, extra: { actions?: Intel
     title: "Social Competitive Report",
     subtitle: `Competitors & partners — ${r.dayShort}, the last 7 days and the last 4 weeks`,
     body,
-    cta: { href: `${SITE}/clients`, label: "Open the companies" },
+    cta: extra.cardsHtml ? { href: `${SITE}/actions`, label: "Open your actions" } : { href: `${SITE}/clients`, label: "Open the companies" },
+    internal: extra.isPrimary !== false,
   });
 }
 
-export function competitiveSubject(r: CompetitiveReport, workspace?: string): string {
-  const y = r.daily[r.daily.length - 1];
-  const base = `Social Competitive Report${workspace ? ` — ${workspace}` : ""} — ${r.dayShort}`;
-  if (r.level === "critical") return `⛔ ${base} — nothing collected from competitors or partners`;
-  const top = r.week.topics.find((t) => t.label !== "Other");
-  return `${base} — ${y.total} collected yesterday, ${r.weekly[0].total} this week${top ? ` · top topic: ${top.label}` : ""}`;
+export function competitiveSubject(_r: CompetitiveReport, workspace?: string): string {
+  return socialSubject(workspace, "Competitive report");
 }

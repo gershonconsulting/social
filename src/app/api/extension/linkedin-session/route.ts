@@ -21,6 +21,7 @@ export const runtime = "edge";
  *       → { success, data: { voice } }   voice = the sentence the extension speaks
  * GET   (extension token)  → { success, data: <stored state> }
  */
+import { reportPlan } from "@/lib/reports/settings";
 import { NextRequest, NextResponse } from "next/server";
 import { UserRole } from "@prisma/client";
 import prisma from "@/lib/db";
@@ -32,10 +33,11 @@ const KEY = "linkedin_session";
 
 /** Internal recipient for every sign-out alert. Clients never receive it. */
 const ALERT_TO_DEFAULT = "report@gershonconsulting.com";
-function alertRecipients(): string[] {
-  const env = (process.env.LINKEDIN_SIGNOUT_ALERT_TO || "").trim();
-  const list = (env || ALERT_TO_DEFAULT).split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
-  return list.length ? list : [ALERT_TO_DEFAULT];
+async function alertRecipients(): Promise<string[]> {
+  // Settings → Reports (v4.71.0) — recipients, or [] when turned Off.
+  const plan = await reportPlan("linkedin-signout");
+  if (!plan.due) return [];
+  return plan.to.length ? plan.to : [ALERT_TO_DEFAULT];
 }
 
 type SessionState = {
@@ -123,13 +125,15 @@ async function emailSignOut(
       </table>
       <p style="color:#555;font-size:13px;margin-top:12px">If LinkedIn shows a restriction or "unusual activity" warning on that account, don't keep signing in — tell Olivier first.</p>
     </div>`;
+  const recipients = await alertRecipients();
+  if (!recipients.length) return false; // turned Off in Settings → Reports
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify(withAuditBcc({
         from: resolveFrom(),
-        to: alertRecipients(),
+        to: recipients,
         subject: `[Internal] LinkedIn signed out — ${who}${whoEmail ? ` <${whoEmail}>` : ""}`,
         html,
       })),

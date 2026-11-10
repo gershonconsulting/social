@@ -8,6 +8,7 @@ import { recordExtSeen } from "@/lib/extension/seen";
 import { dbForOrg } from "@/lib/scoped-db";
 import { resolveExtensionCaller } from "@/lib/extension-auth";
 import { recordLinkedInResults } from "@/lib/collection-health";
+import { recordExtensionSyncLog } from "@/lib/extension/sync-log";
 
 /**
  * POST /api/extension/ingest
@@ -80,6 +81,7 @@ interface IncomingBody {
 }
 
 export async function POST(req: NextRequest) {
+  const startedAt = new Date();
   try {
     const caller = await resolveExtensionCaller(req);
     if (!caller.ok) {
@@ -348,6 +350,9 @@ export async function POST(req: NextRequest) {
     try {
       await recordIngestRun({ attempted: totalAttempts, upserted: totalUpserted, failed });
     } catch {}
+    // 3. Sync log (v4.74.0): one SyncJob per company so the Logs page shows
+    //    extension collection runs, not only the old server-side ones.
+    await recordExtensionSyncLog(caller.orgId, perClient, startedAt, (body.extVersion ?? "").trim() || null);
     try {
       const v = (body.extVersion ?? "").trim();
       if (/^\d+(\.\d+){0,3}$/.test(v)) await recordExtSeen(v);

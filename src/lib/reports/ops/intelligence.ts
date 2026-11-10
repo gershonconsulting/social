@@ -13,6 +13,8 @@
  * still goes out with rule-based actions, clearly labelled.
  */
 import prisma from "@/lib/db";
+import rawDb from "@/lib/db-raw";
+import { pillarOf, recordCards, type ActionCard, type NewCard } from "@/lib/actions/store";
 import { getAISettings, runChat } from "@/lib/content/provider";
 import type { ClientType } from "@prisma/client";
 
@@ -21,6 +23,7 @@ const PUBLISHING_CLIENT_TYPES = ["CAMPAIGN", "INTERNAL"] as ClientType[];
 import { etMidnight } from "../et-days";
 import { buildCompetitiveReport, type CompetitiveReport } from "./competitive";
 import { banner, esc, fmt, kpis, page, pill, section, SITE, type Level } from "./shell";
+import { socialSubject } from "@/lib/email/subject";
 
 export const INTEL_TO = "sales@gershonconsulting.com";
 const CACHE_PREFIX = "ops_intel:v3:";
@@ -41,6 +44,12 @@ export type Intel = {
 };
 
 export type IntelligenceReport = {
+  orgId: string;
+  /** The workspace's own company — "Gershon Consulting" for the primary workspace (v4.70.0). */
+  ownName: string;
+  isPrimary: boolean;
+  /** Today's actions as cards (Promote / Network / Engage), with their current status. */
+  cards: ActionCard[];
   dayKey: string;
   dayShort: string;
   competitive: CompetitiveReport;
@@ -78,7 +87,7 @@ export function aboutOf(name: string, industry: string | null): string | null {
 
 type Sample = { id: number; company: string; kind: string; watchedFor: string[]; platform: string; date: string; engagement: number; text: string; url: string | null };
 
-const SYSTEM = `You are the competitive-intelligence analyst of Gershon Consulting, a B2B firm that helps companies enter the US market through LinkedIn and X.
+const GERSHON_SYSTEM = `You are the competitive-intelligence analyst of Gershon Consulting, a B2B firm that helps companies enter the US market through LinkedIn and X.
 You receive (1) Gershon's own companies (campaign clients and internal brands), (2) statistics about what their competitors and partners posted on LinkedIn/X this week, and (3) the week's most-engaged competitor/partner posts, each with an id.
 Your job: turn what competitors and partners post into concrete actions the Gershon sales and content team can take THIS WEEK.
 Rules:
@@ -104,6 +113,26 @@ Answer ONLY with a JSON object, no prose, exactly this shape:
   "watch": [ { "company": string, "signal": string } ]
 }
 Give 3-5 insights, 5-8 actions (highest priority first), up to 5 engage items, 3-5 post ideas, up to 4 watch items.`;
+
+/**
+ * v4.70.0 — every workspace on social.gershon.ai gets its own Intelligence.
+ * The primary (Gershon) workspace keeps the prompt above word for word; any
+ * other workspace gets the same job framed around ITS own company.
+ */
+export function systemFor(isPrimary: boolean, ownName: string): string {
+  if (isPrimary) return GERSHON_SYSTEM;
+  return GERSHON_SYSTEM.replace(
+    /^You are the competitive-intelligence analyst of Gershon Consulting[^\n]*\n/,
+    `You are the competitive-intelligence analyst of ${ownName}. ${ownName} uses LinkedIn and X to win customers in the US market.\n`,
+  )
+    .replace(/\(1\) Gershon's own companies \(campaign clients and internal brands\)/, `(1) ${ownName}'s own companies (the company itself and, when listed, its clients)`)
+    .replace(/the Gershon sales and content team/g, `the ${ownName} sales and marketing team`)
+    .replace(/are part of Gershon Consulting's OWN market \(organisations around foreign companies entering the US\)\. Actions based on them are for "Gershon Consulting"/, `are part of ${ownName}'s OWN market. Actions based on them are for "${ownName}"`)
+    .replace(/Most actions will be for Gershon Consulting/g, `Most actions will be for ${ownName}`)
+    .replace(/Rank by business value for Gershon: a partner event or program where Gershon can meet foreign companies entering the US, or a competitor move Gershon must answer, is high/, `Rank by business value for ${ownName}: a partner event or program where ${ownName} can meet buyers, or a competitor move ${ownName} must answer, is high`)
+    .replace(/Every action names ONE of Gershon's own companies in "forCompany" \(exact name from the list\), or "Gershon Consulting" for agency-wide actions/, `Every action names ONE company from "ourCompanies" in "forCompany" (exact name from the list), usually "${ownName}"`)
+    .replace(/from Gershon's or the named company's voice/g, `from ${ownName}'s or the named company's voice`);
+}
 
 function str(v: unknown, max = 400): string {
   return typeof v === "string" ? v.trim().slice(0, max) : "";
@@ -163,18 +192,18 @@ function parseIntel(text: string, samples: Sample[]): Intel | null {
 }
 
 /** Rule-based stand-in when the AI cannot be reached, so the email still carries actions. */
-function fallbackIntel(r: CompetitiveReport, samples: Sample[]): Intel {
+function fallbackIntel(r: CompetitiveReport, samples: Sample[], ownName = "Gershon Consulting"): Intel {
   const topTopic = r.week.topics.find((t) => t.label !== "Other");
   const actions: Intel["actions"] = [];
   for (const s of samples.slice(0, 3)) {
-    const forCompany = s.watchedFor[0] || "Gershon Consulting";
+    const forCompany = s.watchedFor[0] || ownName;
     actions.push(
       s.kind === "PARTNER"
         ? { action: `Comment on and share ${s.company}'s post from ${s.date}`, forCompany, why: `It is the partner post with the most engagement this week (${s.engagement}).`, basedOn: `#${s.id} ${s.company}`, priority: "medium" }
         : { action: `Publish an answer to ${s.company}'s top post of the week, on the same subject, from our angle`, forCompany, why: `${s.engagement} engagements — the subject clearly works with this audience.`, basedOn: `#${s.id} ${s.company}`, priority: "high" },
     );
   }
-  if (topTopic) actions.push({ action: `Plan at least one "${topTopic.label}" post this week`, forCompany: "Gershon Consulting", why: `${topTopic.share}% of competitor/partner posts this week were about it.`, basedOn: "topic mix", priority: "medium" });
+  if (topTopic) actions.push({ action: `Plan at least one "${topTopic.label}" post this week`, forCompany: ownName, why: `${topTopic.share}% of competitor/partner posts this week were about it.`, basedOn: "topic mix", priority: "medium" });
   return {
     headline: topTopic ? `Competitors and partners focused on ${topTopic.label.toLowerCase()} this week` : "Not enough competitor or partner posts this week for insights",
     insights: [],
@@ -185,8 +214,13 @@ function fallbackIntel(r: CompetitiveReport, samples: Sample[]): Intel {
   };
 }
 
-async function readCache(dayKey: string): Promise<{ intel: Intel; model: string } | null> {
-  const row = await prisma.setting.findUnique({ where: { key: CACHE_PREFIX + dayKey } });
+/** Primary workspace keeps the v3 key; other workspaces get their own (v4.70.0 — was one cache for everyone). */
+function cacheKey(orgId: string, isPrimary: boolean, dayKey: string): string {
+  return isPrimary ? CACHE_PREFIX + dayKey : `${CACHE_PREFIX}${orgId}:${dayKey}`;
+}
+
+async function readCache(key: string): Promise<{ intel: Intel; model: string } | null> {
+  const row = await rawDb.setting.findUnique({ where: { key } });
   if (!row?.value) return null;
   try {
     return JSON.parse(row.value);
@@ -194,19 +228,21 @@ async function readCache(dayKey: string): Promise<{ intel: Intel; model: string 
     return null;
   }
 }
-async function writeCache(dayKey: string, v: { intel: Intel; model: string }): Promise<void> {
+async function writeCache(key: string, v: { intel: Intel; model: string }): Promise<void> {
   const value = JSON.stringify(v);
-  await prisma.setting.upsert({ where: { key: CACHE_PREFIX + dayKey }, update: { value }, create: { key: CACHE_PREFIX + dayKey, value } });
+  await rawDb.setting.upsert({ where: { key }, update: { value }, create: { key, value } });
 }
 
 export async function buildIntelligenceReport(orgId: string, opts: { refresh?: boolean } = {}, now = new Date()): Promise<IntelligenceReport> {
+  const orgRow = await rawDb.organization.findUnique({ where: { id: orgId }, select: { name: true, isPrimary: true } });
+  const isPrimary = !!orgRow?.isPrimary;
   const competitive = await buildCompetitiveReport(orgId, now);
   const ids = competitive.rows.map((c) => c.id);
   const meta = new Map(competitive.rows.map((c) => [c.id, c]));
 
   const [oursRows, posts] = await Promise.all([
     prisma.client.findMany({
-      where: { organizationId: orgId, archivedAt: null, status: { not: "ARCHIVED" }, clientType: { in: PUBLISHING_CLIENT_TYPES } },
+      where: { organizationId: orgId, archivedAt: null, status: { not: "ARCHIVED" }, clientType: { in: isPrimary ? PUBLISHING_CLIENT_TYPES : (["INTERNAL", "CAMPAIGN", "CLIENT"] as ClientType[]) } },
       select: { id: true, name: true, clientType: true, industry: true },
       orderBy: { name: "asc" },
     }),
@@ -223,10 +259,16 @@ export async function buildIntelligenceReport(orgId: string, opts: { refresh?: b
   // unlinked ones belong to. Otherwise the model invents links (a travel post
   // turned into a biocatalysis action).
   const linked = new Set(competitive.rows.flatMap((c) => c.watchedFor.map((n) => n.trim().toLowerCase())));
+  // The workspace's own company: Gershon Consulting for the primary workspace,
+  // otherwise its first INTERNAL company (else the workspace name).
+  const ownName = isPrimary
+    ? "Gershon Consulting"
+    : (oursRows.find((c) => c.clientType === "INTERNAL")?.name.trim() || orgRow?.name?.trim() || "Our company");
+  const isOwn = (n: string) => (isPrimary ? /gershon/i.test(n) : n.trim().toLowerCase() === ownName.toLowerCase());
   const ours = oursRows
-    .filter((c) => /gershon/i.test(c.name) || linked.has(c.name.trim().toLowerCase()))
-    .map((c) => ({ name: c.name.trim(), type: c.clientType === "INTERNAL" ? "internal brand" : "campaign client", industry: aboutOf(c.name, c.industry) }));
-  if (!ours.some((o) => /gershon/i.test(o.name))) ours.unshift({ name: "Gershon Consulting", type: "internal brand", industry: aboutOf("Gershon Consulting", null) });
+    .filter((c) => isOwn(c.name) || linked.has(c.name.trim().toLowerCase()))
+    .map((c) => ({ name: c.name.trim(), type: c.clientType === "INTERNAL" ? "internal brand" : c.clientType === "CLIENT" ? "client" : "campaign client", industry: aboutOf(c.name, c.industry) }));
+  if (!ours.some((o) => isOwn(o.name))) ours.unshift({ name: ownName, type: "internal brand", industry: aboutOf(ownName, null) });
 
   const samples: Sample[] = posts
     .map((p) => ({ p, e: p.likeCount + p.commentCount + p.shareCount }))
@@ -251,7 +293,8 @@ export async function buildIntelligenceReport(orgId: string, opts: { refresh?: b
   let model: string | null = null;
   let note: string | null = null;
 
-  const cached = opts.refresh ? null : await readCache(competitive.dayKey);
+  const ck = cacheKey(orgId, isPrimary, competitive.dayKey);
+  const cached = opts.refresh ? null : await readCache(ck);
   if (cached) {
     intel = cached.intel;
     model = cached.model;
@@ -284,12 +327,12 @@ export async function buildIntelligenceReport(orgId: string, opts: { refresh?: b
         topPosts: samples.map((s) => ({ id: s.id, company: s.company, role: s.kind === "PARTNER" ? "partner" : "competitor", watchedFor: s.watchedFor, platform: s.platform, date: s.date, engagement: s.engagement, text: s.text })),
       };
       // The 70B model reasons noticeably better on this task; runChat falls back down the chain if it is unavailable.
-      const out = await runChat({ ...settings, model: INTEL_MODEL }, SYSTEM, JSON.stringify(payload), 3500);
+      const out = await runChat({ ...settings, model: INTEL_MODEL }, systemFor(isPrimary, ownName), JSON.stringify(payload), 3500);
       intel = parseIntel(out.text, samples);
       model = out.model;
       if (!intel) throw new Error("Intelligence answered in an unreadable format");
       try {
-        await writeCache(competitive.dayKey, { intel, model });
+        await writeCache(ck, { intel, model });
       } catch {
         /* cache is an optimisation */
       }
@@ -299,12 +342,24 @@ export async function buildIntelligenceReport(orgId: string, opts: { refresh?: b
     }
   }
 
-  const final = intel || fallbackIntel(competitive, samples);
+  const final = intel || fallbackIntel(competitive, samples, ownName);
   // Links are resolved on every build (never cached), so cached actions get them too.
   const ourId = new Map(oursRows.map((c) => [c.name.trim().toLowerCase(), c.id]));
   final.actions = final.actions.map((a) => ({ ...a, links: actionLinks(a, samples, competitive, ourId) }));
   const level: Level = !intel ? "warn" : final.actions.some((a) => a.priority === "high") ? "critical" : "ok";
+
+  // v4.70.0 — the day's actions become cards with a status (Promote / Network / Engage).
+  let cards: ActionCard[] = [];
+  try {
+    cards = await recordCards(orgId, intelToCards(final, competitive.dayKey, ownName, ourId));
+  } catch {
+    /* cards are an extra; the report still goes out */
+  }
   return {
+    orgId,
+    ownName,
+    isPrimary,
+    cards,
     dayKey: competitive.dayKey,
     dayShort: competitive.dayShort,
     competitive,
@@ -313,6 +368,36 @@ export async function buildIntelligenceReport(orgId: string, opts: { refresh?: b
     source: { ai: !!intel, model, note },
     level,
   };
+}
+
+/** Today's Intelligence as cards: actions (classified by pillar), posts to engage with, post ideas. */
+export function intelToCards(i: Intel, dayKey: string, ownName: string, ourId: Map<string, string>): NewCard[] {
+  const idOf = (n: string) => ourId.get((n || "").trim().toLowerCase()) || null;
+  const out: NewCard[] = [];
+  for (const a of i.actions) {
+    const forCompany = a.forCompany || ownName;
+    out.push({
+      dayKey, pillar: pillarOf(a.action), priority: a.priority, forCompany, forCompanyId: idOf(forCompany),
+      action: a.action, why: a.why, basedOn: a.basedOn, links: a.links || [], draft: null,
+      postUrl: a.links?.find((l) => /^https?:\/\/(www\.)?(linkedin\.com|x\.com|twitter\.com)/.test(l.href))?.href || null,
+    });
+  }
+  for (const e of i.engage) {
+    out.push({
+      dayKey, pillar: "ENGAGE", priority: "medium", forCompany: ownName, forCompanyId: idOf(ownName),
+      action: `Comment on ${e.company}'s post`, why: `“${e.post}${e.post.length >= 160 ? "…" : ""}”`, basedOn: e.company,
+      links: e.url ? [{ label: `Open ${e.company}'s post`, href: e.url }] : [], draft: e.how || null, postUrl: e.url,
+    });
+  }
+  for (const p of i.postIdeas) {
+    const forCompany = p.forCompany || ownName;
+    out.push({
+      dayKey, pillar: "PROMOTE", priority: "medium", forCompany, forCompanyId: idOf(forCompany),
+      action: `Post: “${p.hook}”`, why: p.angle, basedOn: "Post idea from this week's competitor & partner posts",
+      links: [], draft: null, postUrl: null,
+    });
+  }
+  return out;
 }
 
 /** Post + competitor page + our company page for one action. */
@@ -350,7 +435,7 @@ export function linksHtml(links: ActionLink[] | undefined): string {
 const PRIO_LEVEL: Record<Priority, Level> = { high: "critical", medium: "warn", low: "ok" };
 const PRIO_LABEL: Record<Priority, string> = { high: "HIGH", medium: "MEDIUM", low: "LOW" };
 
-export function renderIntelligence(r: IntelligenceReport): string {
+export function renderIntelligence(r: IntelligenceReport, extra: { buttons?: string[] } = {}): string {
   const i = r.intel;
   const c = r.competitive;
   const high = i.actions.filter((a) => a.priority === "high").length;
@@ -366,11 +451,12 @@ export function renderIntelligence(r: IntelligenceReport): string {
     ? i.actions
         .map(
           (a, n) => `<div style="padding:12px 0;border-bottom:1px solid #f1f1f1;">
-        <div style="font-size:12px;color:#6b7280;">${pill(PRIO_LABEL[a.priority], PRIO_LEVEL[a.priority])} &nbsp;<b style="color:#111;">For ${esc(a.forCompany || "Gershon Consulting")}</b></div>
+        <div style="font-size:12px;color:#6b7280;">${pill(PRIO_LABEL[a.priority], PRIO_LEVEL[a.priority])} &nbsp;<b style="color:#111;">For ${esc(a.forCompany || r.ownName)}</b></div>
         <div style="font-size:15px;font-weight:700;margin-top:6px;line-height:1.4;">${n + 1}. ${esc(a.action)}</div>
         ${a.why ? `<div style="font-size:13px;color:#374151;margin-top:4px;line-height:1.45;">${esc(a.why)}</div>` : ""}
         ${a.basedOn ? `<div style="font-size:12px;color:#9ca3af;margin-top:4px;">Based on: ${esc(a.basedOn)}</div>` : ""}
         ${linksHtml(a.links)}
+        ${extra.buttons?.[n] || ""}
       </div>`,
         )
         .join("")
@@ -440,8 +526,6 @@ export function renderIntelligence(r: IntelligenceReport): string {
   });
 }
 
-export function intelligenceSubject(r: IntelligenceReport, workspace?: string): string {
-  const high = r.intel.actions.filter((a) => a.priority === "high").length;
-  const base = `Social Intelligence Report${workspace ? ` — ${workspace}` : ""} — ${r.dayShort}`;
-  return `${base} — ${r.intel.actions.length} actions${high ? ` (${high} high priority)` : ""}`;
+export function intelligenceSubject(_r: IntelligenceReport, workspace?: string): string {
+  return socialSubject(workspace, "Intelligence report");
 }

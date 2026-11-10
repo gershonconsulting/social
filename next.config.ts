@@ -5,7 +5,13 @@ const nextConfig: NextConfig = {
   // /companies was linked from old emails and bookmarks but never existed;
   // the Companies section lives at /clients (audit 2026-10-06).
   async redirects() {
-    return [{ source: "/companies", destination: "/clients", permanent: false }];
+    return [
+      { source: "/companies", destination: "/clients", permanent: false },
+      // v4.70.0 (Olivier, 2026-11-09): CloudCampaign and HeroPost are retired.
+      // Their views were rebuilt on live data in Publish → Content funnel.
+      { source: "/clients/by-cloudcampaign", destination: "https://publish.gershon.ai/publishing/funnel", permanent: true },
+      { source: "/clients/by-heropost", destination: "https://publish.gershon.ai/publishing/funnel", permanent: true },
+    ];
   },
   webpack: (config) => {
     // Stub out Node.js built-ins that next-auth's oauth dependency may require.

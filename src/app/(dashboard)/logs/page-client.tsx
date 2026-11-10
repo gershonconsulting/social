@@ -82,6 +82,7 @@ export function LogsPageClient() {
   const [attempt, setAttempt] = useState(0);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [companyFilter, setCompanyFilter] = useState<string>("ALL");
 
   useEffect(() => {
     let cancelled = false;
@@ -128,8 +129,12 @@ export function LogsPageClient() {
   }
 
   const filtered = (jobs ?? []).filter((j) =>
-    statusFilter === "ALL" ? true : j.status === statusFilter
+    (statusFilter === "ALL" ? true : j.status === statusFilter) &&
+    (companyFilter === "ALL" ? true : (j.client?.name ?? "") === companyFilter)
   );
+  const companies = Array.from(new Set((jobs ?? []).map((j) => j.client?.name).filter((n): n is string => !!n))).sort((a, b) => a.localeCompare(b));
+  // v4.74.0: last run per company, so "when was X last collected" is one glance.
+  const lastForCompany = companyFilter === "ALL" ? null : (jobs ?? []).find((j) => j.client?.name === companyFilter) ?? null;
 
   const summary = jobs ? {
     total: jobs.length,
@@ -177,6 +182,27 @@ export function LogsPageClient() {
               <div className="text-2xl font-bold text-gray-900 mt-1.5">{s.n}</div>
             </button>
           ))}
+        </div>
+      )}
+
+      {summary && (
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <label className="text-gray-600" htmlFor="company-filter">Company</label>
+          <select
+            id="company-filter"
+            value={companyFilter}
+            onChange={(e) => setCompanyFilter(e.target.value)}
+            className="px-3 py-1.5 border border-gray-300 rounded-lg bg-white text-sm"
+          >
+            <option value="ALL">All companies</option>
+            {companies.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          {lastForCompany && (
+            <span className="text-gray-700">
+              Last collection: <span className="font-semibold">{fmtDate(lastForCompany.startedAt)}</span>
+              {" · "}{lastForCompany.itemsSucceeded} post{lastForCompany.itemsSucceeded === 1 ? "" : "s"} saved · {lastForCompany.status}
+            </span>
+          )}
         </div>
       )}
 
@@ -241,7 +267,7 @@ export function LogsPageClient() {
                         )}
                       </td>
                       <td className="px-4 py-2 text-xs font-mono text-gray-600 whitespace-nowrap">{fmtDate(job.startedAt)}</td>
-                      <td className="px-4 py-2 text-xs text-gray-700">{job.jobType}</td>
+                      <td className="px-4 py-2 text-xs text-gray-700">{(job.notes ?? "").startsWith("Chrome extension collection") ? "Extension collection" : job.jobType}</td>
                       <td className="px-4 py-2 text-xs text-gray-700">{job.client?.name ?? "—"}</td>
                       <td className="px-4 py-2 text-center whitespace-nowrap">
                         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_BADGE[job.status] ?? "bg-gray-50 text-gray-500"}`}>{job.status}</span>
@@ -262,7 +288,7 @@ export function LogsPageClient() {
                         {job.itemsFailed > 0 && <span className="text-red-700">{" · " + job.itemsFailed + " failed"}</span>}
                       </td>
                       <td className="px-4 py-2 text-xs text-gray-500 whitespace-nowrap">{fmtDuration(job.startedAt, job.finishedAt)}</td>
-                      <td className="px-4 py-2 text-xs text-gray-500 truncate max-w-[160px]">{job.triggeredBy?.name ?? job.triggeredBy?.email ?? "system"}</td>
+                      <td className="px-4 py-2 text-xs text-gray-500 truncate max-w-[160px]">{job.triggeredBy?.name ?? job.triggeredBy?.email ?? ((job.notes ?? "").startsWith("Chrome extension collection") ? "Chrome extension" : "system")}</td>
                     </tr>
                     {isOpen && (
                       <tr className="bg-gray-50">

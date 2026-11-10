@@ -13,6 +13,7 @@
  * dispatch, or both schedules firing cannot produce two emails for one day.
  */
 
+import { reportPlan } from "./settings";
 import { withGcName } from "@/lib/email/sender";
 import prisma from "@/lib/db";
 import { buildDailyReport, REPORT_SENT_KEY, DEFAULT_REPORT_TO, type DailyReport } from "./daily-report";
@@ -77,7 +78,7 @@ async function sendViaResend(
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(withAuditBcc({ from, to, subject, html })),
+      body: JSON.stringify(withAuditBcc({ from, to: to.split(/\s*,\s*/).filter(Boolean), subject, html })),
     });
     if (!r.ok) {
       const body = await r.text().catch(() => "");
@@ -92,9 +93,13 @@ async function sendViaResend(
 export async function sendDailyReport(opts: { force?: boolean; to?: string } = {}): Promise<SendResult> {
   const report = await buildDailyReport();
   const subject = dailyReportSubject(report);
-  const to = opts.to || process.env.REPORT_TO || DEFAULT_REPORT_TO;
+  const plan = await reportPlan("collection", process.env.REPORT_TO || DEFAULT_REPORT_TO);
+  const to = opts.to || plan.to.join(", ");
   const dayKey = report.day.key;
 
+  if (!opts.force && !plan.due) {
+    return { dayKey, subject, sent: false, skipped: plan.skipReason, to, report };
+  }
   if (!opts.force) {
     const sent = await readSent();
     if (sent[dayKey]) {

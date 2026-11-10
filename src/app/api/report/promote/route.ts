@@ -114,3 +114,55 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+/**
+ * POST /api/report/promote?resource=recipients  (same key as GET)
+ *
+ * client.gershon.ai is the single place where each client's report recipients
+ * are kept (Settings → "Targets & recipients"). It pushes them here so the
+ * monthly company reports of Social and Social Tracking (shared database) go to
+ * exactly the same people. Body: { recipients: [{ clientId, emails: string[] }] }.
+ * Writes OrgSetting `report_email:<clientId>` (read by loadCompanyExtras) for
+ * clients of the PRIMARY workspace only; unknown ids are skipped. An empty list
+ * leaves the existing value untouched (never wipes a recipient by accident).
+ */
+export async function POST(req: NextRequest) {
+  if (!keyOk(req)) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+  const url = new URL(req.url);
+  if ((url.searchParams.get("resource") || "").toLowerCase() !== "recipients") {
+    return NextResponse.json({ success: false, error: "resource must be recipients" }, { status: 400 });
+  }
+  try {
+    const body = (await req.json().catch(() => ({}))) as { recipients?: Array<{ clientId?: string; emails?: unknown }> };
+    const list = Array.isArray(body.recipients) ? body.recipients.slice(0, 200) : [];
+    const orgId = await primaryOrgId();
+    const ids = list.map((r) => String(r.clientId || "")).filter(Boolean);
+    const owned = await raw.client.findMany({ where: { organizationId: orgId, id: { in: ids } }, select: { id: true, name: true } });
+    const byId = new Map(owned.map((c) => [c.id, c.name]));
+    const results: Array<{ clientId: string; name?: string; saved?: string[]; skipped?: string }> = [];
+    for (const r of list) {
+      const clientId = String(r.clientId || "");
+      const emails = (Array.isArray(r.emails) ? r.emails : [])
+        .map((e) => String(e).trim().toLowerCase())
+        .filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e) && !/@(gershonconsulting\.(com|net)|gershon\.ai|gershoncrm\.com)$/.test(e));
+      if (!byId.has(clientId)) { results.push({ clientId, skipped: "not a Gershon client" }); continue; }
+      if (!emails.length) { results.push({ clientId, name: byId.get(clientId), skipped: "no client email" }); continue; }
+      const value = [...new Set(emails)].join(", ");
+      const key = `report_email:${clientId}`;
+      await raw.orgSetting.upsert({
+        where: { organizationId_key: { organizationId: orgId, key } },
+        create: { organizationId: orgId, key, value },
+        update: { value },
+      });
+      results.push({ clientId, name: byId.get(clientId), saved: value.split(", ") });
+    }
+    return NextResponse.json({ success: true, saved: results.filter((r) => r.saved).length, results });
+  } catch (e) {
+    return NextResponse.json(
+      { success: false, error: e instanceof Error ? e.message : "recipients sync failed" },
+      { status: 500 },
+    );
+  }
+}
