@@ -137,12 +137,32 @@ export async function sendOps(opts: { kinds?: OpsKind[]; force?: boolean; to?: s
   return out;
 }
 
+export const CLIENT_REVIEW_TO = "report@gershonconsulting.com";
+const CLIENT_HOLD_KEY = "client_reports_hold";
+
+/** Client reports are held for review unless Setting client_reports_hold = "off". */
+export async function clientReportsHeld(): Promise<boolean> {
+  try {
+    const row = await rawDb.setting.findUnique({ where: { key: CLIENT_HOLD_KEY } });
+    return (row?.value || "").trim().toLowerCase() !== "off";
+  } catch {
+    return true; // fail safe: never mail a client when we cannot read the switch
+  }
+}
+
 /** One workspace's own Competitive report (with its actions) → its admins. Called once per workspace by sendOps. */
 export async function sendWorkspaceCompetitive(orgId: string, opts: { force?: boolean; to?: string } = {}): Promise<SendResult[]> {
   const primary = await primaryOrgId();
   const w = (await competitiveWorkspaces(primary)).find((x) => x.id === orgId);
   if (!w) return [{ kind: "competitive", sent: false, error: "workspace has no competitor/partner or no admin to send to" }];
   const b = await buildOps("competitive", w.id);
+  // v4.77.0 — Olivier 2026-11-10: "Do not send the reports to clients yet, we need to
+  // review them". While the hold is on (default), a client workspace's report goes to
+  // report@ for review, never to the client's admins.
+  if (!opts.to && (await clientReportsHeld())) {
+    const subject = `[REVIEW — not sent to client] ${b.subject} (would go to ${w.to.join(", ")})`;
+    return [await deliver("competitive", b.dayKey, subject, b.html, { force: opts.force, to: CLIENT_REVIEW_TO, sentKey: `competitive-review:${w.id}:${b.dayKey}`, from: WORKSPACE_FROM })];
+  }
   return [await deliver("competitive", b.dayKey, b.subject, b.html, { force: opts.force, to: opts.to || w.to.join(","), sentKey: `competitive:${w.id}:${b.dayKey}`, from: WORKSPACE_FROM })];
 }
 
