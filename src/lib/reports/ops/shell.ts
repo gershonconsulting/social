@@ -16,7 +16,6 @@
  */
 
 import prisma from "@/lib/db";
-import { reportPlan } from "../settings";
 import { siteUrl } from "@/lib/site";
 import { APP_VERSION } from "@/lib/extension-version";
 import { BUSINESS_TZ } from "../et-days";
@@ -38,6 +37,8 @@ export const SITE = siteUrl();
 /** "GC" prefix on the from-name: Gershon-internal report (sender naming rule). */
 export const OPS_FROM = "Social.gershon.ai <reports@gershon.ai>";
 export const OPS_TO = "report@gershonconsulting.com";
+/** A client workspace's own report: the product's brand, no "GC" (sender naming rule). */
+export const WORKSPACE_FROM = "Social by Gershon.AI <reports@gershon.ai>";
 const SENT_KEY = "ops_reports_sent";
 
 export type Level = "ok" | "warn" | "critical";
@@ -158,18 +159,24 @@ export function page(opts: {
   subtitle: string;
   body: string;
   cta: { href: string; label: string };
+  /**
+   * v4.70.0: false for a workspace other than Gershon's. The sibling links open
+   * Gershon's own internal reports, and the "GC" label is Gershon-internal.
+   */
+  internal?: boolean;
   source?: string;
 }): string {
+  const internal = opts.internal !== false;
   const host = SITE.replace(/^https?:\/\//, "");
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(opts.title)}</title></head>
 <body style="margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:${INK};">
 <div style="max-width:680px;margin:0 auto;background:#ffffff;">
   <div style="height:4px;background:${RED};line-height:4px;font-size:0;">&nbsp;</div>
   <div style="background:#ffffff;padding:20px 24px 16px;border-bottom:1px solid ${BORDER};">
-    <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:${RED};font-weight:700;">GC Social · daily report</div>
+    <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:${RED};font-weight:700;">${internal ? "GC Social · daily report" : "Social · daily report"}</div>
     <div style="font-size:22px;font-weight:800;color:${INK};margin-top:4px;">${esc(opts.title)}</div>
     <div style="font-size:13px;color:#4b5563;margin-top:4px;">${esc(opts.subtitle)}</div>
-    <div style="font-size:12px;margin-top:10px;line-height:1.7;">${siblings(opts.kind)}</div>
+    ${internal ? `<div style="font-size:12px;margin-top:10px;line-height:1.7;">${siblings(opts.kind)}</div>` : ""}
   </div>
   ${opts.body.replace(/#FE1B04/gi, RED)}
   <div style="padding:18px 24px;background:#ffffff;text-align:center;border-top:1px solid ${BORDER};">
@@ -179,7 +186,7 @@ export function page(opts: {
 </div></body></html>`;
 }
 
-// ── Delivery ────────────────────────────────────────────────────────────────
+// ── Delivery ────────────────────────────────────────────────────────────────────────────
 
 async function readSent(): Promise<Record<string, string>> {
   const row = await prisma.setting.findUnique({ where: { key: SENT_KEY } });
@@ -209,14 +216,12 @@ export async function deliver(
   dayKey: string,
   subject: string,
   html: string,
-  opts: { force?: boolean; to?: string; defaultTo?: string } = {},
+  opts: { force?: boolean; to?: string; defaultTo?: string; sentKey?: string; from?: string } = {},
 ): Promise<DeliveryResult> {
-  // Settings → Reports decides who and how often (v4.71.0); an explicit `to`
-  // (manual send, other workspace) still wins.
-  const plan = await reportPlan(kind, opts.defaultTo || process.env.REPORT_TO || OPS_TO);
-  const to = opts.to || plan.to.join(", ");
-  const id = `${kind}:${dayKey}`;
-  if (!opts.force && !opts.to && !plan.due) return { kind, subject, to, sent: false, skipped: plan.skipReason };
+  const to = opts.to || opts.defaultTo || process.env.REPORT_TO || OPS_TO;
+  // v4.70.0: a workspace other than Gershon's gets its own key, so each one is sent once a day.
+  const id = opts.sentKey || `${kind}:${dayKey}`;
+  const toList = to.split(",").map((x) => x.trim()).filter(Boolean);
   if (!opts.force) {
     const sent = await readSent();
     if (sent[id]) return { kind, subject, to, sent: false, skipped: `already sent (${sent[id]})` };
@@ -227,7 +232,7 @@ export async function deliver(
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(withAuditBcc({ from: withGcName(process.env.OPS_REPORT_FROM || OPS_FROM), to: to.split(/\s*,\s*/).filter(Boolean), subject, html })),
+      body: JSON.stringify(withAuditBcc({ from: opts.from || withGcName(process.env.OPS_REPORT_FROM || OPS_FROM), to: toList, subject, html })),
     });
     if (!r.ok) {
       const body = await r.text().catch(() => "");
