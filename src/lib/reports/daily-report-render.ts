@@ -3,7 +3,7 @@
  *
  * Inline CSS only — Gmail strips <style> blocks. Report e-mail house style
  * (2026-10-23): white page, single column, max-width 680px, dark text
- * #12211d, links #1f6f5c, brand red #CC3333 as the accent line. Never light
+ * #12211d, links #1f6f5c, brand red #FE1B04 as the accent line. Never light
  * text on a dark band.
  *
  * The visual hierarchy is deliberate: if the system failed to do its job, the
@@ -14,7 +14,7 @@ import type { DailyReport, Metric } from "./daily-report";
 import { siteUrl } from "@/lib/site";
 import { postsFromCompanies, reportSubject, sourceFreshnessLine } from "./report-subject";
 
-const RED = "#CC3333";
+const RED = "#FE1B04";
 const INK = "#12211d";
 const LINK = "#1f6f5c";
 const SITE = siteUrl();
@@ -82,7 +82,7 @@ function statusBlock(r: DailyReport): string {
   const s = r.status;
   if (s.level === "critical") {
     return `
-  <div style="background:#fdf2f2;color:#7f1d1d;padding:24px 24px;border-bottom:1px solid #f3caca;border-left:4px solid ${RED};">
+  <div style="background:#fff5f5;color:#7f1d1d;padding:24px 24px;border-bottom:1px solid #f3caca;border-left:4px solid ${RED};">
     <div style="font-size:13px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:${RED};">⛔ Critical — action required</div>
     <div style="font-size:24px;font-weight:900;line-height:1.2;margin-top:10px;color:${INK};">${esc(s.headline)}</div>
     <div style="font-size:14px;line-height:1.55;margin-top:12px;">${esc(s.detail)}</div>

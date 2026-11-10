@@ -13,7 +13,7 @@
  * PDF from the share link is the PDF path.
  *
  * Report e-mail house style (2026-10-23): white page, single column,
- * max-width 680px, dark text #12211d, brand red #CC3333 as the accent only.
+ * max-width 680px, dark text #12211d, brand red #FE1B04 as the accent only.
  * Never light text on a dark band (the header used to be white on solid red).
  * One-line "Source: … · Data as of …" footer.
  */
@@ -21,7 +21,7 @@
 import type { CampaignMonth, CampaignMonthlyReport } from "./monthly";
 import { APP_URL } from "./monthly";
 
-const RED = "#CC3333";
+const RED = "#FE1B04";
 const INK = "#12211d";
 const LINK = "#1f6f5c";
 const MUTED = "#6b7280";
@@ -104,7 +104,7 @@ function footer(r: CampaignMonthlyReport, shareUrl: string): string {
 
 function shareBanner(url: string): string {
   return `
-  <div style="padding:14px 24px;background:#fdf2f2;border-bottom:1px solid #f3caca;text-align:center;">
+  <div style="padding:14px 24px;background:#fff5f5;border-bottom:1px solid #f3caca;text-align:center;">
     <a href="${url}" style="display:inline-block;padding:10px 20px;background:${RED};color:#ffffff;font-weight:700;font-size:13px;text-decoration:none;border-radius:8px;">Open the live report →</a>
     <div style="font-size:11px;color:${MUTED};margin-top:8px;word-break:break-all;">${url}</div>
   </div>`;
@@ -145,7 +145,7 @@ export function renderSummaryBody(r: CampaignMonthlyReport): string {
 
   return `
   ${header(`Campaign performance — ${r.monthLabel}`, `${r.totals.companies} campaign ${r.totals.companies === 1 ? "company" : "companies"} · objective: one post per day`)}
-  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;background:#fdf2f2;border-bottom:1px solid #f3caca;">
+  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;background:#fff5f5;border-bottom:1px solid #f3caca;">
   <table style="width:100%;border-collapse:collapse;">
     <tr>
       ${kpi(pctText(r.totals.attainmentPct), "Objective met", true)}
@@ -237,7 +237,7 @@ export function renderCompanyBody(r: CampaignMonthlyReport, c: CampaignMonth): s
 
   return `
   ${header(esc(c.name), `${r.monthLabel} · objective: one post per day`)}
-  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;background:#fdf2f2;border-bottom:1px solid #f3caca;">
+  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;background:#fff5f5;border-bottom:1px solid #f3caca;">
   <table style="width:100%;border-collapse:collapse;">
     <tr>
       ${kpi(pctText(c.attainmentPct), "Objective met", true)}

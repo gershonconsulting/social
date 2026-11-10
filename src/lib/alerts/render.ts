@@ -3,7 +3,7 @@
  * that matters strips <style> blocks.
  *
  * Report e-mail house style (2026-10-23): white page, single column,
- * max-width 680px, dark text #12211d, brand red #CC3333 as the accent only.
+ * max-width 680px, dark text #12211d, brand red #FE1B04 as the accent only.
  * Never light text on a dark band (the header used to be white on charcoal).
  * One-line "Source: … · Data as of …" footer.
  */
@@ -11,7 +11,7 @@
 import { fmtDate, type AlertCompany, type PostingAlert } from "./posting-alerts";
 import { siteUrl } from "@/lib/site";
 
-const RED = "#CC3333";
+const RED = "#FE1B04";
 const INK = "#12211d";
 const MUTED = "#6b7280";
 const LINE = "#e5e7eb";
@@ -74,7 +74,7 @@ export function renderAlertBody(a: PostingAlert): string {
   <div style="color:#4b5563;font-size:13px;margin-top:4px;">${esc(a.periodLabel)} · ${esc(a.from)} → ${esc(a.to)} · campaign companies</div>
 </div>
 
-<div style="padding:20px 24px;background:#fdf2f2;border-bottom:1px solid #f3caca;border-left:4px solid ${RED};">
+<div style="padding:20px 24px;background:#fff5f5;border-bottom:1px solid #f3caca;border-left:4px solid ${RED};">
   <div style="color:${RED};font-size:15px;font-weight:800;">
     ${a.totals.companiesOffTarget} of ${a.totals.companies} companies did not post on every planned day.
   </div>

@@ -237,7 +237,7 @@ function renderHtml(d: DigestData): string {
     const header = c.category !== lastCategory ? `
     <tr>
       <td colspan="3" style="padding:10px 12px 6px;background:${c.category === "CAMPAIGN" ? "#fff8f7" : "#f9fafb"};border-bottom:1px solid #e5e7eb;">
-        <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:${c.category === "CAMPAIGN" ? "#CC3333" : "#374151"};">${CATEGORY_LABELS[c.category] ?? c.category}</span>
+        <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:${c.category === "CAMPAIGN" ? "#FE1B04" : "#374151"};">${CATEGORY_LABELS[c.category] ?? c.category}</span>
         <span style="font-size:11px;color:#9ca3af;margin-left:8px;">${catTotal} ${catTotal === 1 ? "post" : "posts"}</span>
       </td>
     </tr>` : "";
@@ -279,13 +279,13 @@ function renderHtml(d: DigestData): string {
 <!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:0;background:#ffffff;color:#12211d;">
 <div style="max-width:680px;margin:0 auto;background:#ffffff;">
-  <div style="height:4px;background:#CC3333;line-height:4px;font-size:0;">&nbsp;</div>
+  <div style="height:4px;background:#FE1B04;line-height:4px;font-size:0;">&nbsp;</div>
   <div style="padding:20px 24px 16px;border-bottom:1px solid #e5e7eb;">
-    <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#CC3333;font-weight:700;">GC Social · daily digest</div>
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#FE1B04;font-weight:700;">GC Social · daily digest</div>
     <div style="font-size:22px;font-weight:700;margin-top:4px;color:#12211d;">Daily digest — ${day}</div>
   </div>
-  <div style="padding:20px 24px;background:#fdf2f2;border-bottom:1px solid #f3caca;">
-    <div style="font-size:32px;font-weight:800;color:#CC3333;line-height:1;">${d.totals.newPosts}</div>
+  <div style="padding:20px 24px;background:#fff5f5;border-bottom:1px solid #f3caca;">
+    <div style="font-size:32px;font-weight:800;color:#FE1B04;line-height:1;">${d.totals.newPosts}</div>
     <div style="font-size:13px;color:#666;margin-top:4px;">posts collected on ${d.window.dayShort} (America/New_York day) across ${d.totals.clientsWithActivity} ${d.totals.clientsWithActivity === 1 ? "company" : "companies"}</div>
   </div>
   <div style="padding:18px 24px;">
@@ -319,7 +319,7 @@ function renderHtml(d: DigestData): string {
       </tr>
     </table>
     <div style="margin-top:12px;text-align:center;">
-      <a href="https://social.gershon.ai/networks" style="display:inline-block;padding:10px 18px;background:#CC3333;color:#ffffff;font-weight:600;font-size:13px;text-decoration:none;border-radius:8px;">Open Networks page →</a>
+      <a href="https://social.gershon.ai/networks" style="display:inline-block;padding:10px 18px;background:#FE1B04;color:#ffffff;font-weight:600;font-size:13px;text-decoration:none;border-radius:8px;">Open Networks page →</a>
     </div>
   </div>
   <div style="padding:14px 24px;border-top:1px solid #e5e7eb;font-size:11px;line-height:1.5;color:#6b7280;">

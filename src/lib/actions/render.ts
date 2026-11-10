@@ -35,10 +35,10 @@ export async function cardsEmailHtml(orgId: string, cards: ActionCard[], max = 9
         <div style="font-size:12px;color:#6b7280;">${pill(c.priority.toUpperCase(), level)} &nbsp;<b style="color:#111;">For ${esc(c.forCompany)}</b></div>
         <div style="font-size:14px;font-weight:700;margin-top:5px;line-height:1.4;">${esc(c.action)}</div>
         ${c.why ? `<div style="font-size:13px;color:#374151;margin-top:3px;line-height:1.45;">${esc(c.why)}</div>` : ""}
-        ${c.draft ? `<div style="font-size:13px;margin-top:6px;padding:8px 10px;background:#f9fafb;border-left:3px solid #CC3333;line-height:1.45;">${esc(c.draft)}</div>` : ""}
-        ${c.links.length ? `<div style="font-size:12px;margin-top:6px;">${c.links.map((l) => `<a href="${esc(l.href)}" style="color:#CC3333;margin-right:12px;white-space:nowrap;">${esc(l.label)} →</a>`).join("")}</div>` : ""}
+        ${c.draft ? `<div style="font-size:13px;margin-top:6px;padding:8px 10px;background:#f9fafb;border-left:3px solid #FE1B04;line-height:1.45;">${esc(c.draft)}</div>` : ""}
+        ${c.links.length ? `<div style="font-size:12px;margin-top:6px;">${c.links.map((l) => `<a href="${esc(l.href)}" style="color:#FE1B04;margin-right:12px;white-space:nowrap;">${esc(l.label)} →</a>`).join("")}</div>` : ""}
         <div style="margin-top:8px;">
-          <a href="${esc(actionsPageUrl(c.id))}" style="${BTN}background:#CC3333;color:#fff;">${c.draft ? "Edit the draft" : "Draft it"}</a>
+          <a href="${esc(actionsPageUrl(c.id))}" style="${BTN}background:#FE1B04;color:#fff;">${c.draft ? "Edit the draft" : "Draft it"}</a>
           <a href="${esc(done)}" style="${BTN}background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;">✓ Done</a>
           <a href="${esc(dismiss)}" style="${BTN}background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;">Dismiss</a>
         </div>
@@ -46,14 +46,14 @@ export async function cardsEmailHtml(orgId: string, cards: ActionCard[], max = 9
       }),
     );
     blocks.push(
-      `<div style="margin-top:6px;"><div style="font-size:13px;font-weight:800;color:#CC3333;text-transform:uppercase;letter-spacing:.04em;padding-top:8px;">${PILLAR_LABEL[p]}</div>
+      `<div style="margin-top:6px;"><div style="font-size:13px;font-weight:800;color:#FE1B04;text-transform:uppercase;letter-spacing:.04em;padding-top:8px;">${PILLAR_LABEL[p]}</div>
        <div style="font-size:12px;color:#9ca3af;">${esc(PILLAR_HINT[p])}</div>${items.join("")}</div>`,
     );
   }
   const more = open.length - shown.length;
   return (
     blocks.join("") +
-    `<div style="margin-top:12px;font-size:13px;"><a href="${esc(actionsPageUrl())}" style="color:#CC3333;font-weight:700;">${more > 0 ? `See all ${open.length} open actions` : "Open your actions"} in Social →</a></div>`
+    `<div style="margin-top:12px;font-size:13px;"><a href="${esc(actionsPageUrl())}" style="color:#FE1B04;font-weight:700;">${more > 0 ? `See all ${open.length} open actions` : "Open your actions"} in Social →</a></div>`
   );
 }
 
@@ -61,7 +61,7 @@ export async function cardsEmailHtml(orgId: string, cards: ActionCard[], max = 9
 export async function cardButtonsHtml(orgId: string, c: ActionCard): Promise<string> {
   const [done, dismiss] = await Promise.all([actionLink(orgId, c.id, "done"), actionLink(orgId, c.id, "dismissed")]);
   return `<div style="margin-top:8px;">
-    <a href="${esc(actionsPageUrl(c.id))}" style="${BTN}background:#CC3333;color:#fff;">Draft it</a>
+    <a href="${esc(actionsPageUrl(c.id))}" style="${BTN}background:#FE1B04;color:#fff;">Draft it</a>
     <a href="${esc(done)}" style="${BTN}background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;">✓ Done</a>
     <a href="${esc(dismiss)}" style="${BTN}background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb;">Dismiss</a>
   </div>`;

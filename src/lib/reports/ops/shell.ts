@@ -23,10 +23,10 @@ import { BUSINESS_TZ } from "../et-days";
 import { withAuditBcc } from "@/lib/mail-bcc";
 import { withGcName } from "@/lib/email/sender";
 
-/** House style (v4.67.2): white header, dark #1d1d1f text, brand red #CC3333 accents only. */
-export const RED = "#CC3333";
-export const RED_DARK = "#a8281f";
-export const RED_TINT = "#fdf2f2";
+/** House style (v4.67.2): white header, dark #1d1d1f text, brand red #FE1B04 accents only. */
+export const RED = "#FE1B04";
+export const RED_DARK = "#d11200";
+export const RED_TINT = "#fff5f5";
 export const INK = "#1d1d1f";
 export const BORDER = "#e5e7eb";
 export const GREEN = "#047857";
