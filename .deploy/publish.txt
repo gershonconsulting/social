@@ -3,3 +3,4 @@ Last deploy request for publish.gershon.ai (gershonconsulting/publish@main)
 2026-11-09 13:10 ET - v0.13.0 global dashboard + one dashboard per client; Content & review per client - publish@184fcdc - by Claude (approved by Olivier)
 2026-11-09T19:00:43Z publish@14ff5b8 v0.13.1 PUB-212 once a day
 2026-11-09 18:50 ET - v0.14.0 personal LinkedIn connect links + PUB-213 - publish@8a5fd67 - by Claude (approved by Olivier)
+2026-11-10 v0.16.1 client email subject (publish@b915166)
