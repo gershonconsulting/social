@@ -10,13 +10,19 @@ import { reportPlan } from "@/lib/reports/settings";
 import { withAuditBcc } from "@/lib/mail-bcc";
 import { primaryOrgId } from "@/lib/reports/monthly/data";
 import { getSession } from "@/lib/auth";
+import { collectionPerCompany, collectionWindow, postsFromCompanies, reportSubject, sourceFreshnessLine, totalsOf } from "@/lib/reports/collection-counts";
+import { siteUrl } from "@/lib/site";
 
 /**
  * GET  /api/digest/daily            — render the digest as JSON (preview).
  * POST /api/digest/daily            — render AND send via Resend.
  *
  * Daily digest content:
- *   - new posts in last 24h, grouped by company (client) with per-platform breakdown
+ *   - posts collected YESTERDAY (America/New_York day), grouped by company with
+ *     per-platform breakdown. Counted with the ONE shared definition in
+ *     lib/reports/collection-counts, the same as the "Social Collection Report",
+ *     so the two e-mails agree (nightly 2026-11-07; was a rolling 24h window
+ *     labelled with the send date).
  *   - compliance fresh-rate change vs the prior 24h
  *   - any sync errors in last 24h
  *   - coverage snapshot
@@ -35,7 +41,7 @@ import { getSession } from "@/lib/auth";
 
 interface DigestData {
   generatedAt: string;
-  window: { from: string; to: string };
+  window: { from: string; to: string; dayKey: string; dayShort: string };
   totals: { newPosts: number; clientsWithActivity: number };
   perCompany: Array<{ id: string; name: string; category: string; newPosts: number; platforms: Array<{ platform: string; newPosts: number }> }>;
   quietCompanies: number;
@@ -46,8 +52,9 @@ interface DigestData {
 
 async function buildDigest(): Promise<DigestData> {
   const now = new Date();
-  const to = now;
-  const from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  // Yesterday as an America/New_York day — the shared collection window.
+  const win = collectionWindow(1, now);
+  const { from, to } = win;
 
   // v4.65.2: scope EVERYTHING to Gershon's own workspace (the primary
   // organization). Before this, the digest read every workspace in the
@@ -57,9 +64,9 @@ async function buildDigest(): Promise<DigestData> {
   // Gershon's "Competition".
   const orgId = await primaryOrgId();
 
-  // 1. Posts created/ingested in the last 24h
+  // 1. Posts collected (created) on that ET day — used for the top-posts list
   const recentPosts = await prisma.socialPost.findMany({
-    where: { createdAt: { gte: from }, client: { organizationId: orgId } },
+    where: { createdAt: { gte: from, lt: to }, client: { organizationId: orgId } },
     select: {
       id: true,
       clientId: true,
@@ -85,13 +92,19 @@ async function buildDigest(): Promise<DigestData> {
   const clientCategory = new Map<string, string>();
   for (const c of clients) clientCategory.set(c.id, c.clientType);
 
-  // 3. Per-company aggregation + per-platform breakdown within each company
+  // 3. Per-company counts + per-platform breakdown — shared definition
+  //    (lib/reports/collection-counts), identical to the Collection Report.
+  const shared = await collectionPerCompany(orgId, from, to);
   const companyAgg = new Map<string, { newPosts: number; perPlatform: Map<string, number> }>();
-  for (const p of recentPosts) {
-    const slot = companyAgg.get(p.clientId) ?? { newPosts: 0, perPlatform: new Map<string, number>() };
-    slot.newPosts++;
-    slot.perPlatform.set(p.platform, (slot.perPlatform.get(p.platform) ?? 0) + 1);
-    companyAgg.set(p.clientId, slot);
+  for (const c of shared) {
+    const perPlatform = new Map<string, number>();
+    if (c.linkedin) perPlatform.set("LINKEDIN", c.linkedin);
+    if (c.twitter) perPlatform.set("TWITTER", c.twitter);
+    const other = c.n - c.linkedin - c.twitter;
+    if (other > 0) perPlatform.set("OTHER", other);
+    companyAgg.set(c.id, { newPosts: c.n, perPlatform });
+    if (!clientName.has(c.id)) clientName.set(c.id, c.name);
+    if (!clientCategory.has(c.id)) clientCategory.set(c.id, c.category);
   }
   const CATEGORY_ORDER = ["CAMPAIGN", "CLIENT", "PARTNER", "PROSPECT", "INTERNAL", "COMPANY", "COMPETITION"];
   const catRank = (cat: string) => {
@@ -128,7 +141,8 @@ async function buildDigest(): Promise<DigestData> {
 
   // 5. Recent sync errors
   const errorConns = await prisma.platformConnection.findMany({
-    where: { isEnabled: true, lastSyncError: { not: null }, lastSyncAt: { gte: from }, client: { organizationId: orgId } },
+    // Current connection state, so this stays a rolling 24h look-back (not the ET day).
+    where: { isEnabled: true, lastSyncError: { not: null }, lastSyncAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) }, client: { organizationId: orgId } },
     select: { clientId: true, platform: true, lastSyncError: true, lastSyncAt: true },
     take: 30,
   });
@@ -182,11 +196,11 @@ async function buildDigest(): Promise<DigestData> {
 
   return {
     generatedAt: now.toISOString(),
-    window: { from: from.toISOString(), to: to.toISOString() },
-    totals: {
-      newPosts: recentPosts.length,
-      clientsWithActivity: new Set(recentPosts.map((p) => p.clientId)).size,
-    },
+    window: { from: from.toISOString(), to: to.toISOString(), dayKey: win.dayKey, dayShort: win.dayShort },
+    totals: (() => {
+      const t = totalsOf(shared);
+      return { newPosts: t.posts, clientsWithActivity: t.companies };
+    })(),
     perCompany,
     quietCompanies,
     topPosts,
@@ -215,7 +229,7 @@ function renderHtml(d: DigestData): string {
     try { return new Date(iso).toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" }); }
     catch { return iso; }
   };
-  const day = new Date(d.generatedAt).toLocaleDateString("en-US", { dateStyle: "full" });
+  const day = `${d.window.dayShort} (ET)`;
 
   let lastCategory = "";
   const companyRows = d.perCompany.map((c) => {
@@ -272,7 +286,7 @@ function renderHtml(d: DigestData): string {
   </div>
   <div style="padding:20px 24px;background:#fdf2f2;border-bottom:1px solid #f3caca;">
     <div style="font-size:32px;font-weight:800;color:#CC3333;line-height:1;">${d.totals.newPosts}</div>
-    <div style="font-size:13px;color:#666;margin-top:4px;">new posts ingested in the last 24 hours across ${d.totals.clientsWithActivity} ${d.totals.clientsWithActivity === 1 ? "client" : "clients"}</div>
+    <div style="font-size:13px;color:#666;margin-top:4px;">posts collected on ${d.window.dayShort} (America/New_York day) across ${d.totals.clientsWithActivity} ${d.totals.clientsWithActivity === 1 ? "company" : "companies"}</div>
   </div>
   <div style="padding:18px 24px;">
     <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#666;margin-bottom:10px;">Per company</div>
@@ -309,7 +323,7 @@ function renderHtml(d: DigestData): string {
     </div>
   </div>
   <div style="padding:14px 24px;border-top:1px solid #e5e7eb;font-size:11px;line-height:1.5;color:#6b7280;">
-    Source: <a href="https://social.gershon.ai" style="color:#1f6f5c;">social.gershon.ai</a> (Social app database, last 24 hours) · Data as of ${fmtDate(d.generatedAt)} ET · v${(process.env.NEXT_PUBLIC_APP_VERSION || "dev").slice(0, 7)}
+    ${sourceFreshnessLine({ site: siteUrl(), dayKey: d.window.dayKey, generatedAt: d.generatedAt, extra: `v${(process.env.NEXT_PUBLIC_APP_VERSION || "dev").slice(0, 7)}` }).replace(/</g, "&lt;")}
   </div>
 </div>
 </body></html>
@@ -377,9 +391,8 @@ export async function POST(req: NextRequest) {
   try {
     const d = await buildDigest();
     const html = renderHtml(d);
-    const dateStr = new Date(d.generatedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-    const companyWord = d.totals.clientsWithActivity === 1 ? "company" : "companies";
-    const subject = `Report social.gershonCRM.com ${dateStr} — ${d.totals.newPosts} posts collected from ${d.totals.clientsWithActivity} ${companyWord}`;
+    // One subject format with the Collection Report: "<Title> — <Workspace> — <ET day> — N posts from M companies".
+    const subject = reportSubject("Report social.gershonCRM.com", undefined, d.window.dayShort, postsFromCompanies(d.totals.newPosts, d.totals.clientsWithActivity));
     const send = await sendViaResend(html, subject);
 
     // Month-end campaign report piggyback.
