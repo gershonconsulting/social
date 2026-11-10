@@ -35,7 +35,7 @@ export const GREY = "#6b7280";
 export const SITE = siteUrl();
 
 /** "GC" prefix on the from-name: Gershon-internal report (sender naming rule). */
-export const OPS_FROM = "GC Social <reports@gershon.ai>";
+export const OPS_FROM = "Social.gershon.ai <reports@gershon.ai>";
 export const OPS_TO = "report@gershonconsulting.com";
 /** A client workspace's own report: the product's brand, no "GC" (sender naming rule). */
 export const WORKSPACE_FROM = "Social by Gershon.AI <reports@gershon.ai>";

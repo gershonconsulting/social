@@ -27,7 +27,7 @@
  * report/alert is recognisable at a glance). Address unchanged. Was
  * "Social GershonCRM <social@gershon.ai>" until 2026-10-22.
  */
-export const SOCIAL_FROM = "GC Social <social@gershon.ai>";
+export const SOCIAL_FROM = "Social.gershon.ai <social@gershon.ai>";
 
 /** Who gets the daily "what was collected" digest. */
 export const DIGEST_RECIPIENTS = [
@@ -64,12 +64,13 @@ export function resolveFrom(override?: string | null): string {
  * that still carries the old "Social GershonCRM" name (or no name at all) is
  * re-labelled "GC Social"; the ADDRESS is always kept exactly as configured.
  */
-export const GC_SOCIAL_NAME = "GC Social";
+// 2026-11-09 (Olivier): every e-mail from this platform shows the sender name
+// "Social.gershon.ai" — no more "GC Social". Any configured display name is
+// replaced; the ADDRESS is always kept exactly as configured.
+export const GC_SOCIAL_NAME = "Social.gershon.ai";
 export function withGcName(from: string): string {
   const m = from.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
-  const name = m ? m[1].trim() : "";
   const addr = m ? m[2].trim() : from.trim();
-  if (/^GC\s/.test(name)) return from;
   return `${GC_SOCIAL_NAME} <${addr}>`;
 }
 
