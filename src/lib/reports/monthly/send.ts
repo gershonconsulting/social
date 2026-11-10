@@ -25,8 +25,9 @@ const REPORT_INBOX = "report@gershonconsulting.com";
 const SALES_INBOX = "sales@gershonconsulting.com";
 // Sender naming rule: Gershon-internal reports carry the "GC" prefix; the
 // client-facing one keeps the product name. gershon.ai is the only verified domain.
-const FROM_INTERNAL = "GC Social <reports@gershon.ai>";
-const FROM_CLIENT = "Social · Gershon.AI <reports@gershon.ai>";
+// 2026-11-09: one sender name for every e-mail, internal or client-facing.
+const FROM_INTERNAL = "Social.gershon.ai <reports@gershon.ai>";
+const FROM_CLIENT = "Social.gershon.ai <reports@gershon.ai>";
 
 export function buildLabel(): string {
   const sha = (process.env.NEXT_PUBLIC_APP_VERSION || "").slice(0, 7);
@@ -71,6 +72,8 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(
 
 export interface MonthlyBuild {
   win: MonthWindow;
+  /** Workspace (company) name shown in the category / competition subjects. */
+  workspace?: string;
   categories: Array<CategoryModel | CompetitionModel>;
   companies: Array<{ model: CompanyModel; recipients: string[] }>;
 }
@@ -79,6 +82,7 @@ export interface MonthlyBuild {
 export async function buildMonthly(month?: string | null): Promise<MonthlyBuild> {
   const win = monthWindow(month);
   const orgId = await primaryOrgId();
+  const workspace = await prisma.organization.findUnique({ where: { id: orgId }, select: { name: true } }).then((o) => o?.name?.trim() || undefined).catch(() => undefined);
   const cats = await loadCategories(win, orgId);
   const companies: MonthlyBuild["companies"] = [];
   for (const cat of cats.filter((c) => c.perCompany)) {
@@ -94,15 +98,15 @@ export async function buildMonthly(month?: string | null): Promise<MonthlyBuild>
   const categories = cats
     .map((c) => (c.key === "COMPETITION" ? competitionModel(win, c) : categoryModel(win, c)))
     .filter((m): m is CategoryModel | CompetitionModel => !!m);
-  return { win, categories, companies };
+  return { win, workspace, categories, companies };
 }
 
 export function renderCategory(b: MonthlyBuild, m: CategoryModel | CompetitionModel) {
   const build = buildLabel();
   if (m.kind === "competition") {
-    return { subject: competitionSubject(b.win, m), html: competitionHtml(b.win, m, build), pdf: competitionPdf(b.win, m, build), filename: `social-${b.win.key}-competition.pdf` };
+    return { subject: competitionSubject(b.win, m, b.workspace), html: competitionHtml(b.win, m, build), pdf: competitionPdf(b.win, m, build), filename: `social-${b.win.key}-competition.pdf` };
   }
-  return { subject: categorySubject(b.win, m), html: categoryHtml(b.win, m, build), pdf: categoryPdf(b.win, m, build), filename: `social-${b.win.key}-${slug(m.label)}.pdf` };
+  return { subject: categorySubject(b.win, m, b.workspace), html: categoryHtml(b.win, m, build), pdf: categoryPdf(b.win, m, build), filename: `social-${b.win.key}-${slug(m.label)}.pdf` };
 }
 export function renderCompany(b: MonthlyBuild, m: CompanyModel, to: string) {
   const build = buildLabel();

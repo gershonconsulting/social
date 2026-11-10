@@ -13,7 +13,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "jobs:run": "tsx src/jobs/runner.ts",
-    "test": "node tests/background-window.test.mjs && tsx tests/posting-summary.test.mts",
+    "test": "node tests/background-window.test.mjs && tsx tests/posting-summary.test.mts && tsx tests/email-subject.test.mts",
     "test:db": "tsx tests/remote-collect.test.mts && tsx tests/remote-collect-e2e.test.mts",
     "test:all": "npm test && npm run test:db"
   },

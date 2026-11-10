@@ -21,6 +21,7 @@ const PUBLISHING_CLIENT_TYPES = ["CAMPAIGN", "INTERNAL"] as ClientType[];
 import { etMidnight } from "../et-days";
 import { buildCompetitiveReport, type CompetitiveReport } from "./competitive";
 import { banner, esc, fmt, kpis, page, pill, section, SITE, type Level } from "./shell";
+import { socialSubject } from "@/lib/email/subject";
 
 export const INTEL_TO = "sales@gershonconsulting.com";
 const CACHE_PREFIX = "ops_intel:v3:";
@@ -440,8 +441,6 @@ export function renderIntelligence(r: IntelligenceReport): string {
   });
 }
 
-export function intelligenceSubject(r: IntelligenceReport, workspace?: string): string {
-  const high = r.intel.actions.filter((a) => a.priority === "high").length;
-  const base = `Social Intelligence Report${workspace ? ` — ${workspace}` : ""} — ${r.dayShort}`;
-  return `${base} — ${r.intel.actions.length} actions${high ? ` (${high} high priority)` : ""}`;
+export function intelligenceSubject(_r: IntelligenceReport, workspace?: string): string {
+  return socialSubject(workspace, "Intelligence report");
 }
