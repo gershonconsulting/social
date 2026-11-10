@@ -10,6 +10,7 @@
  * settings.monthly_report_sent, so a retry only sends what is still missing
  * and nobody ever gets the same month twice.
  */
+import { reportPlan } from "../settings";
 import prisma from "@/lib/db";
 import { categoryModel, companyModel, type CategoryModel, type CompanyModel, type MonthWindow } from "./model";
 import { categoryPdf, companyPdf } from "./render-pdf";
@@ -121,16 +122,20 @@ export async function runMonthlyReports(opts: { month?: string | null; force?: b
   const b = await buildMonthly(opts.month);
   const sent = opts.force ? {} : (await readSent())[b.win.key] || {};
   const out: MonthlyRunResult = { month: b.win.key, results: [] };
+  // Settings → Reports (v4.71.0): category recipients + client-report copies, or Off.
+  const catPlan = await reportPlan("monthly-category", [REPORT_INBOX]);
+  const coPlan = await reportPlan("monthly-company", [REPORT_INBOX]);
 
   // 1. Each campaign company's own report first, so the category report can
   //    say who received theirs.
   for (const c of b.companies) {
     const item = `co:${c.model.id}`;
+    if (!opts.force && !coPlan.due) { out.results.push({ item: c.model.name, skipped: coPlan.skipReason || "off" }); continue; }
     if (!c.recipients.length) { out.results.push({ item: c.model.name, skipped: "no report email on file" }); continue; }
     if (sent[item]) { out.results.push({ item: c.model.name, skipped: `already sent ${sent[item]}` }); continue; }
     const r = renderCompany(b, c.model, c.recipients.join(", "));
     if (opts.dry) { out.results.push({ item: c.model.name, to: c.recipients, ok: true, skipped: "dry run" }); continue; }
-    const s = await resend({ from: FROM_CLIENT, to: c.recipients, bcc: [REPORT_INBOX], subject: r.subject, html: r.html, filename: r.filename, pdf: r.pdf.base64() });
+    const s = await resend({ from: FROM_CLIENT, to: c.recipients, bcc: coPlan.to, subject: r.subject, html: r.html, filename: r.filename, pdf: r.pdf.base64() });
     out.results.push({ item: c.model.name, to: c.recipients, ...s });
     if (s.ok) await markSent(b.win.key, item, c.recipients.join(","));
     await pause(700);
@@ -139,8 +144,9 @@ export async function runMonthlyReports(opts: { month?: string | null; force?: b
   // 2. One report per category.
   for (const m of b.categories) {
     const item = `cat:${m.key}`;
+    if (!opts.force && !catPlan.due) { out.results.push({ item: m.label, skipped: catPlan.skipReason || "off" }); continue; }
     if (sent[item]) { out.results.push({ item: m.label, skipped: `already sent ${sent[item]}` }); continue; }
-    const to = m.key === "CAMPAIGN" ? [REPORT_INBOX, SALES_INBOX] : [REPORT_INBOX];
+    const to = m.key === "CAMPAIGN" ? Array.from(new Set([...catPlan.to, SALES_INBOX])) : catPlan.to;
     const r = renderCategory(b, m);
     if (opts.dry) { out.results.push({ item: m.label, to, ok: true, skipped: "dry run" }); continue; }
     const s = await resend({ from: FROM_INTERNAL, to, subject: r.subject, html: r.html, filename: r.filename, pdf: r.pdf.base64() });

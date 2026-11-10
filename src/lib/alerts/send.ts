@@ -13,6 +13,7 @@
  */
 
 import prisma from "@/lib/db";
+import { reportPlan } from "@/lib/reports/settings";
 import { buildPostingAlert, SENT_KEY, DEFAULT_TO, type PeriodKind, type PostingAlert } from "./posting-alerts";
 import { alertSubject, renderAlertBody, wrapAlertEmail } from "./render";
 import { resolveFrom } from "@/lib/email/sender";
@@ -48,7 +49,7 @@ async function sendViaResend(html: string, subject: string, to: string) {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(withAuditBcc({ from, to, subject, html })),
+      body: JSON.stringify(withAuditBcc({ from, to: to.split(/\s*,\s*/).filter(Boolean), subject, html })),
     });
     if (!r.ok) {
       const body = await r.text().catch(() => "");
@@ -76,7 +77,8 @@ export async function sendPostingAlert(opts: {
   force?: boolean;
   dry?: boolean;
 } = { kind: "week" }): Promise<AlertSendResult> {
-  const to = process.env.POSTING_ALERT_TO || DEFAULT_TO;
+  const plan = await reportPlan(opts.kind === "month" ? "posting-alert-month" : "posting-alert-week", process.env.POSTING_ALERT_TO || DEFAULT_TO);
+  const to = plan.to.join(", ");
   const alert = await buildPostingAlert(opts.kind, { now: opts.now });
 
   const base = {
@@ -87,6 +89,7 @@ export async function sendPostingAlert(opts: {
     alert,
   };
 
+  if (!opts.force && !plan.due) return { ...base, sent: 0, skipped: plan.skipReason };
   if (!opts.force) {
     const sent = await readSent();
     if (sent[alert.periodKey]) {

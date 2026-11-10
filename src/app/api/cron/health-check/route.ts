@@ -1,4 +1,5 @@
 export const runtime = 'edge';
+import { reportPlan } from "@/lib/reports/settings";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { ClientStatus } from "@prisma/client";
@@ -161,11 +162,13 @@ async function writeLastAlertAt(iso: string): Promise<void> {
   }
 }
 
-async function sendAlert(html: string, subject: string): Promise<{ ok: boolean; status?: number; error?: string; to?: string[] }> {
+async function sendAlert(html: string, subject: string): Promise<{ ok: boolean; status?: number; error?: string; to?: string[]; off?: boolean }> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { ok: false, error: "RESEND_API_KEY not set in environment" };
-  const to = (process.env.HEALTH_ALERT_TO || process.env.DIGEST_TO || "oattia@gmail.com")
-    .split(",").map((s) => s.trim()).filter(Boolean);
+  // Settings → Reports (v4.71.0): recipients, or Off.
+  const plan = await reportPlan("health-check");
+  if (!plan.due) return { ok: false, off: true, error: plan.skipReason || "turned off", to: [] };
+  const to = plan.to;
   const from = resolveFrom(process.env.HEALTH_ALERT_FROM);
   try {
     const r = await fetch("https://api.resend.com/emails", {
@@ -238,8 +241,8 @@ export async function POST(req: NextRequest) {
     if (send.ok) await writeLastAlertAt(new Date().toISOString());
 
     return NextResponse.json(
-      { ok: send.ok, action: send.ok ? "alerted" : "send-failed", sent: send.ok ? 1 : 0, send, status: s },
-      { status: send.ok ? 200 : 502 },
+      { ok: send.ok || !!send.off, action: send.ok ? "alerted" : send.off ? "off-in-settings" : "send-failed", sent: send.ok ? 1 : 0, send, status: s },
+      { status: send.ok || send.off ? 200 : 502 },
     );
   } catch (e) {
     const msg = e instanceof Error ? e.message : "health-check failed";

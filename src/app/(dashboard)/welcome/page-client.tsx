@@ -53,7 +53,7 @@ type Status = {
   next: string;
   complete: boolean;
   dismissed: boolean;
-  counts: { companies: number; linkedinLinks: number; xLinks: number; posts: number };
+  counts: { companies: number; competitors?: number; minCompetitors?: number; linkedinLinks: number; xLinks: number; posts: number };
   ownCompany: { id: string; name: string } | null;
   extensionToken: string;
   extensionLastSeen: string | null;
@@ -142,7 +142,7 @@ export function WelcomePageClient() {
   const [coName, setCoName] = useState("");
   const [coLinkedIn, setCoLinkedIn] = useState("");
   const [coX, setCoX] = useState("");
-  const [coType, setCoType] = useState<string>("CLIENT");
+  const [coType, setCoType] = useState<string>("COMPETITION");
   const [added, setAdded] = useState<string[]>([]);
 
   const load = useCallback(
@@ -408,8 +408,8 @@ export function WelcomePageClient() {
             setOpen(open === "add-companies-to-watch" ? null : "add-companies-to-watch")
           }
           icon={<Users size={14} className="text-[#FE1B04]" />}
-          title="Add the companies you want to watch"
-          why={`Clients, prospects, partners, competitors. ${st.counts.companies} in this workspace so far.`}
+          title={`Add at least ${st.counts.minCompetitors ?? 3} competitors to watch`}
+          why={`Your daily actions come from what competitors and partners post — without competitors there is nothing to act on. ${st.counts.competitors ?? 0} of ${st.counts.minCompetitors ?? 3} competitors so far; clients, prospects and partners are welcome too.`}
         >
           <div className="grid gap-2 sm:grid-cols-2">
             <input

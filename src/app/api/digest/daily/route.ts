@@ -6,6 +6,7 @@ import { sendCampaignMonthlyReport } from "@/lib/campaigns/send";
 import { sendPostingAlert, dueAlerts } from "@/lib/alerts/send";
 import { sendDailyReport } from "@/lib/reports/daily-report-send";
 import { resolveFrom, resolveDigestTo } from "@/lib/email/sender";
+import { reportPlan } from "@/lib/reports/settings";
 import { withAuditBcc } from "@/lib/mail-bcc";
 import { primaryOrgId } from "@/lib/reports/monthly/data";
 import { getSession } from "@/lib/auth";
@@ -315,10 +316,13 @@ function renderHtml(d: DigestData): string {
   `;
 }
 
-async function sendViaResend(html: string, subject: string): Promise<{ ok: boolean; status?: number; error?: string }> {
+async function sendViaResend(html: string, subject: string): Promise<{ ok: boolean; status?: number; error?: string; skipped?: string }> {
+  // Settings → Reports (v4.71.0): who gets the digest and on which days.
+  const plan = await reportPlan("digest", resolveDigestTo());
+  if (!plan.due) return { ok: false, skipped: plan.skipReason || "not a send day" };
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { ok: false, error: "RESEND_API_KEY not set in environment" };
-  const to = resolveDigestTo();
+  const to = plan.to;
   const from = resolveFrom();
   try {
     const r = await fetch("https://api.resend.com/emails", {
@@ -447,7 +451,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      success: send.ok,
+      success: send.ok || !!send.skipped,
       data: {
         digest: { totals: d.totals, perCompany: d.perCompany.map((c) => ({ name: c.name, newPosts: c.newPosts })) },
         send,
@@ -455,7 +459,7 @@ export async function POST(req: NextRequest) {
         postingAlert,
         dailyReport,
       },
-    }, { status: send.ok ? 200 : 502 });
+    }, { status: send.ok || send.skipped ? 200 : 502 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "digest send failed";
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
