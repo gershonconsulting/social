@@ -1,6 +1,6 @@
 # Social (social.gershon.ai) — STATUS
 
-Last updated: 2026-11-10
+Last updated: 2026-11-11
 
 ## Deploy route
 Push / merge to `claude/social-campaign-verification-jiG5E` → `.github/workflows/deploy.yml` → Cloudflare Pages `gershoncrm-social`.
@@ -16,6 +16,7 @@ Production deploys need Olivier's explicit full-sentence OK.
   - Deployed ✅ — live previews show the new subjects
 
 - [19] "still missing today" e-mail removed (PR #23); dead module `src/lib/reports/missing-today.ts` deleted 2026-11-10 (cleanup PR, no version bump, no behaviour change) ✅
+- v4.77.1 (PR nightly/2026-11-11-social-settings-cleanup): dead "Still missing today" entry removed from Settings → Reports (9 reports + 2 alerts) ✅ code, not deployed
 
 ## Open PRs (not deployed) ❌
 - #18 v4.70.0 Actions (per-workspace competitive report to client admins — must get the new subject/sender + report@ Bcc when merged)

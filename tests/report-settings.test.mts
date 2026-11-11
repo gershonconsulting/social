@@ -41,5 +41,7 @@ test("catalog is consistent", () => {
   assert.equal(new Set(ids).size, ids.length);
   for (const r of REPORT_CATALOG) assert.ok(allowedFrequencies(r).includes(r.defaultFrequency), r.id);
   assert.deepEqual(allowedFrequencies(reportDef("posting-alert-week")!), ["weekly", "off"]);
-  assert.equal(REPORT_CATALOG.filter((r) => r.group !== "Alerts").length, 10);
+  assert.equal(REPORT_CATALOG.filter((r) => r.group !== "Alerts").length, 9);
+  // [19] "Still missing today" e-mail was removed (PR #23/#25) — no dead Settings entry.
+  assert.equal(reportDef("missing-today"), undefined);
 });
