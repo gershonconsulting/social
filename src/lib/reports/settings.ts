@@ -50,7 +50,6 @@ export const REPORT_CATALOG: ReportDef[] = [
   { id: "competitive", name: "Competitive Report", group: "Daily reports", trigger: "daily", defaultTo: [REPORT], defaultFrequency: "daily", when: "8:00 am", what: "Competitor and partner posts collected per day / week, their topics, and suggested actions.", previewUrl: "/api/report/ops?kind=competitive" },
   { id: "intelligence", name: "Social Intelligence Report", group: "Daily reports", trigger: "daily", defaultTo: [SALES], defaultFrequency: "daily", when: "8:00 am", what: "AI insights and actions from what competitors and partners post.", previewUrl: "/api/report/ops?kind=intelligence" },
   { id: "digest", name: "Daily Digest", group: "Daily reports", trigger: "daily", defaultTo: [REPORT, AINA], defaultFrequency: "daily", when: "9:00 am", what: "What was collected in the last 24 h, company by company, with the top posts.", previewUrl: "/api/digest/daily" },
-  { id: "missing-today", name: "Still missing today", group: "Daily reports", trigger: "daily", defaultTo: [SOCIAL], defaultFrequency: "daily", when: "9:00 am", what: "Client / network pairs with no post yet today. Not sent when nothing is missing." },
   { id: "posting-alert-week", name: "Weekly posting alert", group: "Weekly & monthly reports", trigger: "weekly", defaultTo: [SOCIAL], defaultFrequency: "weekly", when: "Friday 5:00 pm", what: "Campaign companies that missed planned posting days this week. Silent when everyone hit every day.", previewUrl: "/api/cron/posting-alert?kind=week&preview=email" },
   { id: "posting-alert-month", name: "Monthly posting alert", group: "Weekly & monthly reports", trigger: "monthly", defaultTo: [SOCIAL], defaultFrequency: "monthly", when: "1st of the month, 5:00 pm", what: "Same check for the month that just closed.", previewUrl: "/api/cron/posting-alert?kind=month&preview=email" },
   { id: "monthly-category", name: "Monthly category reports", group: "Weekly & monthly reports", trigger: "monthly", defaultTo: [REPORT], defaultFrequency: "monthly", when: "1st of the month, 9:00 am", what: "One-page PDF per category (Campaigns, Clients, Partners, Prospects, Internal, Companies, Competition, Recycled).", note: "Campaigns also goes to sales@gershonconsulting.com.", previewUrl: "/api/report/monthly" },
@@ -191,7 +190,6 @@ export function envFallback(id: string): string[] {
     case "competitive": return cleanEmails(env("REPORT_TO") || REPORT);
     case "intelligence": return cleanEmails(env("INTEL_REPORT_TO") || SALES);
     case "digest": { const l = legacy(cleanEmails(env("DIGEST_TO"))); return l.length ? l : [REPORT, AINA]; }
-    case "missing-today": return cleanEmails(env("MISSING_REPORT_TO") || SOCIAL);
     case "posting-alert-week":
     case "posting-alert-month": return cleanEmails(env("POSTING_ALERT_TO") || SOCIAL);
     case "health-check": return cleanEmails(env("HEALTH_ALERT_TO") || env("DIGEST_TO") || "oattia@gmail.com");
