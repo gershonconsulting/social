@@ -105,6 +105,9 @@ Reporting     : the daily Phantombuster digest goes to
   [19] REMOVED 2026-11-09 (PR #23, at Olivier's request) and its dead module
        src/lib/reports/missing-today.ts deleted 2026-11-10 (nothing imported it; the
        dashboard / daily-collection-grid compute their own "missing today" counts).
+       ✅ 2026-11-11 v4.77.1 (nightly/2026-11-11-social-settings-cleanup): dead "Still missing
+          today" entry removed from Settings → Reports (REPORT_CATALOG + MISSING_REPORT_TO
+          fallback in src/lib/reports/settings.ts). Settings now lists 9 reports + 2 alerts.
        Historical entry below:
   [19] missing-today.yml + POST /api/report/missing-today — 09:00 New York daily (UTC
        13:00 EDT / 14:00 EST): emails social@gershonconsulting.com from
