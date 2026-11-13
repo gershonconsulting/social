@@ -245,3 +245,20 @@ UPDATE 2026-10-28  -  v4.68.0  unified Gershon design, rebased on v4.67.0
        Dashboard frames, sidebar drawer at 390px and /login before merging.
 [2026-11-07] Merged the deploy branch in (version lines conflicted): package.json + APP_VERSION now
        read 4.69.0, the deploy branch's higher number. Bump to the next free number on merge.
+
+----------------------------------------------------------------
+UPDATE 2026-11-13  -  v4.77.3  one count for every report (nightly, NOT merged, NOT deployed)
+----------------------------------------------------------------
+[2026-11-13] ✅ ready to test - branch nightly/2026-11-13-social-one-count (4.77.2 is taken by open PR #26).
+       Root cause (Resend, same build va2efe24): Collection Report Nov 10 = 76 posts / 18 cos vs digest
+       20 / 10. The Collection headline + scorecard used SQL `"createdAt" AT TIME ZONE 'America/New_York'`
+       on a timestamp WITHOUT time zone (UTC), which converts the wrong way: its "Nov 10" was
+       19:00Z Nov 9 -> 19:00Z Nov 10. Its own per-company list (and the digest) used the right window
+       (that list summed to 20 / 10). Nov 9 "3 posts" digest was the pre-#24 rolling-24h code.
+       Fix: ONE pure function countCollected() in src/lib/reports/collection-day.ts (ET calendar day of
+       createdAt, deduped by company+platform+post id) used by the digest, the Collection Report and the
+       Competitive report; "Companies added" SQL fixed the same way. Footer on every report e-mail =
+       Source + day definition + freshness (ops reports via shell.ts opsFooterText). Subjects say
+       social.gershon.ai (digest, health-check, posting alert). Sender display name NOT changed (Olivier).
+       Tests: tsc --noEmit exit 0; npm test exit 0 (adds report-counts + one-count tests).
+       ❌ after merge: next day's digest and Collection Report subjects must show the same N posts / M cos.
