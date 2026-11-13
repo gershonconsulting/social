@@ -1,0 +1,48 @@
+name: Friday client reports
+
+# v4.78.0 — Olivier, 2026-11-13: three reports per client every Friday
+# (Company, Competitive, Intelligence), built and sent by the app itself
+# (/api/report/friday + Resend + Cloudflare Workers AI) — not by Claude.
+#
+# 19:00 UTC = 14:00 EST (15:00 during summer time).
+# The second line is a one-off catch-up run on Saturday 2026-11-14 at 14:00 EST;
+# the guard below makes it a no-op in any other year.
+# Each client is its own request (one AI call + three e-mails), so the run never
+# hits a Worker limit; the route is idempotent per client per day.
+
+on:
+  schedule:
+    - cron: '0 19 * * 5'
+    - cron: '0 19 14 11 *'
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip the one-off line outside 2026
+        id: guard
+        run: |
+          if [ "${{ github.event.schedule }}" = "0 19 14 11 *" ] && [ "$(date -u +%Y)" != "2026" ]; then
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Send the Friday pack, client by client
+        if: steps.guard.outputs.skip != '1'
+        env:
+          AUTH: "Bearer ${{ secrets.CF_CRON_SECRET }}"
+          SITE: https://social.gershon.ai
+        run: |
+          curl -sS --fail-with-body --max-time 60 -H "Authorization: $AUTH" "$SITE/api/report/friday?list=1" -o /tmp/list.json
+          ids=$(jq -r '.data[].id' /tmp/list.json)
+          echo "Clients: $(jq -r '[.data[].name] | join(", ")' /tmp/list.json)"
+          fail=0
+          for id in $ids; do
+            code=$(curl -sS -o /tmp/out.json -w '%{http_code}' --max-time 120 -X POST -H "Authorization: $AUTH" "$SITE/api/report/friday?client=$id" || echo 000)
+            if [ "$code" != "200" ]; then
+              sleep 20
+              code=$(curl -sS -o /tmp/out.json -w '%{http_code}' --max-time 120 -X POST -H "Authorization: $AUTH" "$SITE/api/report/friday?client=$id" || echo 000)
+            fi
+            echo "$id → HTTP $code $(jq -c '[.data[]? | {kind, sent, skipped, error}]' /tmp/out.json 2>/dev/null)"
+            [ "$code" = "200" ] || fail=1
+          done
+          exit $fail
