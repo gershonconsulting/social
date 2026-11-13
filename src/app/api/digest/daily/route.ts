@@ -10,7 +10,7 @@ import { reportPlan } from "@/lib/reports/settings";
 import { withAuditBcc } from "@/lib/mail-bcc";
 import { primaryOrgId } from "@/lib/reports/monthly/data";
 import { getSession } from "@/lib/auth";
-import { collectionPerCompany, collectionWindow, postsFromCompanies, reportSubject, sourceFreshnessLine, totalsOf } from "@/lib/reports/collection-counts";
+import { collectionWindow, countCollected, DIGEST_TITLE, loadCollectedPosts, postsFromCompanies, reportSubject, sourceFreshnessLine } from "@/lib/reports/collection-counts";
 import { siteUrl } from "@/lib/site";
 
 /**
@@ -93,8 +93,10 @@ async function buildDigest(): Promise<DigestData> {
   for (const c of clients) clientCategory.set(c.id, c.clientType);
 
   // 3. Per-company counts + per-platform breakdown — shared definition
-  //    (lib/reports/collection-counts), identical to the Collection Report.
-  const shared = await collectionPerCompany(orgId, from, to);
+  //    (countCollected in lib/reports/collection-day), identical to the
+  //    Collection Report and the Competitive report (v4.77.3).
+  const count = countCollected(await loadCollectedPosts(orgId, from, to), win.dayKey);
+  const shared = count.perCompany;
   const companyAgg = new Map<string, { newPosts: number; perPlatform: Map<string, number> }>();
   for (const c of shared) {
     const perPlatform = new Map<string, number>();
@@ -197,10 +199,7 @@ async function buildDigest(): Promise<DigestData> {
   return {
     generatedAt: now.toISOString(),
     window: { from: from.toISOString(), to: to.toISOString(), dayKey: win.dayKey, dayShort: win.dayShort },
-    totals: (() => {
-      const t = totalsOf(shared);
-      return { newPosts: t.posts, clientsWithActivity: t.companies };
-    })(),
+    totals: { newPosts: count.day.posts, clientsWithActivity: count.day.companies },
     perCompany,
     quietCompanies,
     topPosts,
@@ -392,7 +391,7 @@ export async function POST(req: NextRequest) {
     const d = await buildDigest();
     const html = renderHtml(d);
     // One subject format with the Collection Report: "<Title> — <Workspace> — <ET day> — N posts from M companies".
-    const subject = reportSubject("Report social.gershonCRM.com", undefined, d.window.dayShort, postsFromCompanies(d.totals.newPosts, d.totals.clientsWithActivity));
+    const subject = reportSubject(DIGEST_TITLE, undefined, d.window.dayShort, postsFromCompanies(d.totals.newPosts, d.totals.clientsWithActivity));
     const send = await sendViaResend(html, subject);
 
     // Month-end campaign report piggyback.
