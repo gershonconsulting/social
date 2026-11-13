@@ -13,6 +13,7 @@
  */
 import prisma from "@/lib/db";
 import { etDayKey, etDayShort, etMidnight } from "../et-days";
+import { postsCollectedOn } from "../collection-day";
 import type { Intel } from "./intelligence";
 import { banner, esc, etKeyOf, fmt, kpis, page, pill, section, shortDay, SITE, table, TD, TDR, TH, THR, type Level } from "./shell";
 import { socialSubject } from "@/lib/email/subject";
@@ -125,7 +126,7 @@ export async function buildCompetitiveReport(orgId: string, now = new Date()): P
       ? prisma.socialPost.findMany({
           where: { clientId: { in: ids }, OR: [{ createdAt: { gte: from28, lt: today0 } }, { publishedAtUtc: { gte: week0, lt: today0 } }] },
           select: {
-            clientId: true, platform: true, createdAt: true, publishedAtUtc: true, publishedDateLocal: true,
+            clientId: true, platform: true, externalPostId: true, createdAt: true, publishedAtUtc: true, publishedDateLocal: true,
             postTextSnippet: true, hashtags: true, hasMedia: true, likeCount: true, commentCount: true, shareCount: true, postUrl: true,
           },
           take: 8000,
@@ -160,7 +161,8 @@ export async function buildCompetitiveReport(orgId: string, now = new Date()): P
   // Daily (last 7 ET days) and weekly (last 4 weeks) collection volume.
   const keys = [7, 6, 5, 4, 3, 2, 1].map((d) => etDayKey(d, now));
   const daily = keys.map((key) => {
-    const onDay = collected.filter((p) => etKeyOf(p.createdAt) === key);
+    // The ONE shared "collected on an ET day" count (deduped), same as the digest and Collection Report.
+    const onDay = postsCollectedOn(collected, key);
     return {
       key,
       competitors: onDay.filter((p) => kindOf(p.clientId) === "COMPETITION").length,

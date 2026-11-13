@@ -20,6 +20,7 @@ import { reportPlan } from "../settings";
 import { siteUrl } from "@/lib/site";
 import { APP_VERSION } from "@/lib/extension-version";
 import { BUSINESS_TZ } from "../et-days";
+import { COLLECTION_DAY_DEFINITION } from "../collection-day";
 import { withAuditBcc } from "@/lib/mail-bcc";
 import { withGcName } from "@/lib/email/sender";
 
@@ -150,8 +151,16 @@ export function asOf(d: Date = new Date()): string {
  */
 export function sourceLine(source: string, dataAsOf: Date = new Date(), extra = ""): string {
   return `<div style="padding:14px 24px;background:#ffffff;border-top:1px solid ${BORDER};font-size:11px;line-height:1.5;color:${GREY};">
-    Source: ${esc(source)} · Data as of ${esc(asOf(dataAsOf))} ET${extra ? ` · ${extra}` : ""}
+    ${esc(opsFooterText(source, dataAsOf))}${extra ? ` · ${extra}` : ""}
   </div>`;
+}
+
+/**
+ * v4.77.3: Source + day definition + freshness, the same three parts as the
+ * digest / Collection Report footer (report-subject.ts sourceFreshnessLine).
+ */
+export function opsFooterText(source: string, dataAsOf: Date = new Date()): string {
+  return `Source: ${source} · Days: America/New_York calendar days; "collected" = ${COLLECTION_DAY_DEFINITION} · Data as of ${asOf(dataAsOf)} ET`;
 }
 
 export function page(opts: {
@@ -187,7 +196,7 @@ export function page(opts: {
 </div></body></html>`;
 }
 
-// ── Delivery ────────────────────────────────────────────────────────────────
+// ── Delivery ────────────────────────────────────────────────────────────────────
 
 async function readSent(): Promise<Record<string, string>> {
   const row = await prisma.setting.findUnique({ where: { key: SENT_KEY } });

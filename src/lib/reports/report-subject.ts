@@ -5,8 +5,11 @@
  */
 import { BUSINESS_TZ } from "./et-days";
 
-export const COLLECTION_DEFINITION =
-  "posts stored in the Social app during the America/New_York day, Gershon workspace companies only";
+export { COLLECTION_DAY_DEFINITION as COLLECTION_DEFINITION } from "./collection-day";
+import { COLLECTION_DAY_DEFINITION } from "./collection-day";
+
+/** Digest title. v4.77.3: the app's real domain (was "Report social.gershonCRM.com"). Sender name unchanged. */
+export const DIGEST_TITLE = "Report social.gershon.ai";
 
 // ── One subject format for the daily social e-mails ─────────────────────────
 // "<Title> — <Workspace> — <Month D, YYYY> — <tail>". The workspace falls back
@@ -30,5 +33,5 @@ export function postsFromCompanies(posts: number, companies: number): string {
 export function sourceFreshnessLine(opts: { site: string; dayKey: string; generatedAt: string | Date; extra?: string }): string {
   const asOf = new Date(opts.generatedAt).toLocaleString("en-US", { timeZone: BUSINESS_TZ, dateStyle: "medium", timeStyle: "short" });
   const host = opts.site.replace(/^https?:\/\//, "");
-  return `Source: ${host} (Social app database: ${COLLECTION_DEFINITION}) · Counts for ${opts.dayKey} ET · Data as of ${asOf} ET${opts.extra ? ` · ${opts.extra}` : ""}`;
+  return `Source: ${host} (Social app database: ${COLLECTION_DAY_DEFINITION}) · Counts for ${opts.dayKey} ET · Data as of ${asOf} ET${opts.extra ? ` · ${opts.extra}` : ""}`;
 }
