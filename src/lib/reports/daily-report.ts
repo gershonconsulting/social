@@ -276,7 +276,7 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
     },
   ];
 
-  // ── Run status ──────────────────────────────────────────────────────────────────────────────────────────
+  // ── Run status ────────────────────────────────────────────────────────────────────────────────────────
   const hbY = hbDay(yKey);
   const ranYesterday = hbY ? hbY.runs > 0 : null; // null = heartbeat has no record for that day
   const avgPosts = avg(week.map((w) => w.posts)) ?? 0;
@@ -321,7 +321,7 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
     };
   }
 
-  // ── Progress verdict ─────────────────────────────────────────────────────────────────────────────
+  // ── Progress verdict ────────────────────────────────────────────────────────────────────────────────
   let improved = 0;
   let declined = 0;
   let flat = 0;
@@ -345,10 +345,10 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
     flat,
   };
 
-  // ── Extension version ───────────────────────────────────────────────────────────────────────────
+  // ── Extension version ─────────────────────────────────────────────────────────────────────────────
   const extension = buildExtensionBlock(extSeen, now);
 
-  // ── Movers / went quiet ────────────────────────────────────────────────────────────────────────
+  // ── Movers / went quiet ───────────────────────────────────────────────────────────────────────
   const dMap = new Map(compD.map((c) => [c.id, c.n]));
   const yMap = new Map(compY.map((c) => [c.id, c.n]));
   const movers = compY

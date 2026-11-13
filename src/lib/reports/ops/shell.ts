@@ -196,7 +196,7 @@ export function page(opts: {
 </div></body></html>`;
 }
 
-// ── Delivery ────────────────────────────────────────────────────────────────────
+// ── Delivery ────────────────────────────────────────────────────────────────────────
 
 async function readSent(): Promise<Record<string, string>> {
   const row = await prisma.setting.findUnique({ where: { key: SENT_KEY } });
