@@ -33,7 +33,7 @@ const STOP = new Set(
   ("the and for with that this from your our you are was were will have has had not but all can more about into their there they them what when where which who how its it's also just than then out over new one two get got make made like see now via per any each other some such only very most much many well been being would could should may might must here every across within while today week year years team teams day days time help helps world great work working way ways business businesses company companies people learn read join us we i a an to of in on at by is be as or if so do does did no yes up down off").split(/\s+/),
 );
 
-function words(text: string): string[] {
+export function words(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/https?:\/\/\S+/g, " ")
@@ -44,7 +44,7 @@ function words(text: string): string[] {
     .filter((w) => w.length > 3 && !STOP.has(w) && !/^\d+$/.test(w));
 }
 
-function hashtagsOf(text: string, col: string | null): string[] {
+export function hashtagsOf(text: string, col: string | null): string[] {
   const out = new Set<string>();
   if (col) {
     let tags: string[] = [];
