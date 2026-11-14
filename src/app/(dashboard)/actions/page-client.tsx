@@ -185,7 +185,7 @@ export function ActionsPageClient() {
         return (
           <section key={p.key} className="space-y-3">
             <div>
-              <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-[#CC3333]">{p.icon} {p.label} · {mine.length}</div>
+              <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-[#FE1B04]">{p.icon} {p.label} · {mine.length}</div>
               <div className="text-xs text-gray-500">{p.hint}</div>
             </div>
             {mine.map((c) => {
@@ -203,7 +203,7 @@ export function ActionsPageClient() {
                   {c.links.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-3 text-xs">
                       {c.links.map((l) => (
-                        <a key={l.href} href={l.href} target={l.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer" className="text-[#CC3333] font-semibold inline-flex items-center gap-1">
+                        <a key={l.href} href={l.href} target={l.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer" className="text-[#FE1B04] font-semibold inline-flex items-center gap-1">
                           {l.label} <ExternalLink size={11} />
                         </a>
                       ))}
@@ -214,7 +214,7 @@ export function ActionsPageClient() {
                     <div className="mt-3">
                       {text ? (
                         <textarea
-                          className="w-full min-h-[110px] px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#CC3333]"
+                          className="w-full min-h-[110px] px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#FE1B04]"
                           value={text}
                           disabled={!data.canEdit}
                           onChange={(e) => setEdits({ ...edits, [c.id]: e.target.value })}
@@ -227,7 +227,7 @@ export function ActionsPageClient() {
                   {data.canEdit && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {c.status === "open" && (
-                        <button className={`${btn} bg-[#CC3333] text-white border-[#CC3333]`} disabled={busy === `draft-${c.id}`} onClick={() => post(`draft-${c.id}`, { op: "draft", id: c.id }).then(() => setEdits((e) => { const n = { ...e }; delete n[c.id]; return n; }))}>
+                        <button className={`${btn} bg-[#FE1B04] text-white border-[#FE1B04]`} disabled={busy === `draft-${c.id}`} onClick={() => post(`draft-${c.id}`, { op: "draft", id: c.id }).then(() => setEdits((e) => { const n = { ...e }; delete n[c.id]; return n; }))}>
                           {busy === `draft-${c.id}` ? <Loader2 size={13} className="animate-spin" /> : null}
                           {text ? "Write it again" : c.pillar === "PROMOTE" ? "Draft the post" : c.pillar === "ENGAGE" ? "Draft the comment" : "Draft the note"}
                         </button>

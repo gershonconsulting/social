@@ -4,7 +4,7 @@
  * from the same model. Kept well under Gmail's 102 KB clipping limit.
  *
  * Report e-mail house style (2026-10-23): white page, single column,
- * max-width 680px, dark text #12211d, brand red #CC3333 only as an accent
+ * max-width 680px, dark text #12211d, brand red #FE1B04 only as an accent
  * (thin top line, month, numbers, button). Never light text on a dark band —
  * the header used to be a black block with white text. Footer carries the
  * one-line "Source: … · Data as of …" provenance.
@@ -15,7 +15,7 @@ import { socialSubject, categoryReportType } from "@/lib/email/subject";
 
 const APP = siteUrl();
 const F = "font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif";
-const K = { red: "#CC3333", ink: "#12211d", mut: "#6B7280", rule: "#E4E2DC", tint: "#F5F4F0", good: "#067647", goodb: "#E7F3EC", li: "#0A66C2" };
+const K = { red: "#FE1B04", ink: "#12211d", mut: "#6B7280", rule: "#E4E2DC", tint: "#F5F4F0", good: "#067647", goodb: "#E7F3EC", li: "#0A66C2" };
 const e = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
 const TK = (k: Tile["color"]) => ({ ink: K.ink, good: K.good, red: K.red })[k];

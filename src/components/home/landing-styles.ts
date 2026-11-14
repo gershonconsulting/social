@@ -4,8 +4,8 @@ export const landingStyles = `
   .rdpage{
     --bg:#0b1020; --bg2:#0e1530; --ink:#0b1020; --paper:#ffffff;
     --muted:#5b6478; --line:#e6e9f2; --soft:#f5f7fc;
-    --brand:#3b5bfd; --brand2:#22d3ee; --brand-ink:#1e34c4;
-    --grad:linear-gradient(120deg,#3b5bfd 0%,#6366f1 45%,#22d3ee 100%);
+    --brand:#FE1B04; --brand2:#ff6a4d; --brand-ink:#d11200;
+    --grad:linear-gradient(120deg,#d11200 0%,#FE1B04 50%,#ff6a4d 100%);
     --ok:#16a34a; --shadow:0 18px 50px rgba(18,28,64,.14);
     --radius:16px;
   }
@@ -15,8 +15,8 @@ export const landingStyles = `
   .rdpage a{color:inherit;text-decoration:none}
   .rdpage .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
   .rdpage .btn{display:inline-flex;align-items:center;gap:.5rem;font-weight:600;font-size:.98rem;padding:.8rem 1.25rem;border-radius:12px;border:1px solid transparent;cursor:pointer;transition:.18s;white-space:nowrap}
-  .rdpage .btn-primary{background:var(--grad);color:#fff;box-shadow:0 8px 22px rgba(59,91,253,.35)}
-  .rdpage .btn-primary:hover{transform:translateY(-1px);box-shadow:0 12px 28px rgba(59,91,253,.45)}
+  .rdpage .btn-primary{background:var(--grad);color:#fff;box-shadow:0 8px 22px rgba(254,27,4,.35)}
+  .rdpage .btn-primary:hover{transform:translateY(-1px);box-shadow:0 12px 28px rgba(254,27,4,.45)}
   .rdpage .btn-ghost{background:#fff;border-color:var(--line);color:#1a2133}
   .rdpage .btn-ghost:hover{border-color:#c8cfe6;background:var(--soft)}
   .rdpage .btn-lite{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.22);color:#fff}
@@ -26,7 +26,7 @@ export const landingStyles = `
   .rdpage header{position:sticky;top:0;z-index:40;backdrop-filter:saturate(180%) blur(12px);background:rgba(255,255,255,.82);border-bottom:1px solid var(--line)}
   .rdpage .nav{display:flex;align-items:center;justify-content:space-between;height:66px}
   .rdpage .brand{display:flex;align-items:center;gap:.6rem;font-weight:800;font-size:1.12rem;letter-spacing:-.02em}
-  .rdpage .brand .dot{width:30px;height:30px;border-radius:9px;background:var(--grad);display:grid;place-items:center;box-shadow:0 6px 16px rgba(59,91,253,.4)}
+  .rdpage .brand .dot{width:30px;height:30px;border-radius:9px;background:var(--grad);display:grid;place-items:center;box-shadow:0 6px 16px rgba(254,27,4,.4)}
   .rdpage .brand small{display:block;font-weight:600;font-size:.62rem;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-top:-2px}
   .rdpage .nav-links{display:flex;align-items:center;gap:1.4rem}
   .rdpage .nav-links a.link{color:#3a4258;font-weight:500;font-size:.95rem}
@@ -47,7 +47,7 @@ export const landingStyles = `
   .rdpage .rings span:nth-child(2){width:460px;height:460px}
   .rdpage .rings span:nth-child(3){width:300px;height:300px}
   .rdpage .rings span:nth-child(4){width:150px;height:150px}
-  .rdpage .sweep{position:absolute;inset:0;margin:auto;width:620px;height:620px;border-radius:50%;background:conic-gradient(from 0deg,rgba(34,211,238,.28),transparent 30%);animation:rdspin 6s linear infinite}
+  .rdpage .sweep{position:absolute;inset:0;margin:auto;width:620px;height:620px;border-radius:50%;background:conic-gradient(from 0deg,rgba(255,106,77,.28),transparent 30%);animation:rdspin 6s linear infinite}
   @keyframes rdspin{to{transform:rotate(360deg)}}
 
   .rdpage .mock{margin-top:3.2rem;position:relative;z-index:2;background:#0c1430;border:1px solid rgba(120,150,255,.22);border-radius:20px;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden}
@@ -81,14 +81,14 @@ export const landingStyles = `
   @media(max-width:600px){.rdpage .grid3{grid-template-columns:1fr}}
   .rdpage .card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:24px;transition:.18s}
   .rdpage .card:hover{border-color:#c9d2ee;box-shadow:var(--shadow);transform:translateY(-2px)}
-  .rdpage .card .ic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:1.3rem;background:linear-gradient(135deg,#eef2ff,#e0f7ff);border:1px solid #e2e8ff}
+  .rdpage .card .ic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:1.3rem;background:linear-gradient(135deg,#fff5f5,#fff0ec);border:1px solid #ffe1dc}
   .rdpage .card h3{margin:.9rem 0 .35rem;font-size:1.08rem;letter-spacing:-.01em}
   .rdpage .card p{margin:0;color:var(--muted);font-size:.94rem}
 
   .rdpage .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:44px}
   @media(max-width:820px){.rdpage .steps{grid-template-columns:1fr}}
   .rdpage .step{position:relative;padding:26px 22px;background:var(--soft);border:1px solid var(--line);border-radius:var(--radius)}
-  .rdpage .step .n{width:38px;height:38px;border-radius:11px;background:var(--grad);color:#fff;font-weight:800;display:grid;place-items:center;box-shadow:0 8px 18px rgba(59,91,253,.35)}
+  .rdpage .step .n{width:38px;height:38px;border-radius:11px;background:var(--grad);color:#fff;font-weight:800;display:grid;place-items:center;box-shadow:0 8px 18px rgba(254,27,4,.35)}
   .rdpage .step h3{margin:.8rem 0 .3rem;font-size:1.08rem}
   .rdpage .step p{margin:0;color:var(--muted);font-size:.94rem}
 
@@ -96,7 +96,7 @@ export const landingStyles = `
   @media(max-width:820px){.rdpage .extbox{grid-template-columns:1fr}}
   .rdpage .extbox-main{padding:30px 32px}
   .rdpage .extbox-head{display:flex;align-items:center;gap:14px}
-  .rdpage .extbox-ic{width:52px;height:52px;flex:none;border-radius:14px;display:grid;place-items:center;color:var(--brand-ink);background:linear-gradient(135deg,#eef2ff,#e0f7ff);border:1px solid #e2e8ff}
+  .rdpage .extbox-ic{width:52px;height:52px;flex:none;border-radius:14px;display:grid;place-items:center;color:var(--brand-ink);background:linear-gradient(135deg,#fff5f5,#fff0ec);border:1px solid #ffe1dc}
   .rdpage .extbox-head h3{margin:0;font-size:1.12rem;letter-spacing:-.01em}
   .rdpage .extbox-meta{font-size:.85rem;color:var(--muted);margin-top:2px}
   .rdpage .extbox-dl{margin-top:22px}
@@ -108,7 +108,7 @@ export const landingStyles = `
   .rdpage .extbox-steps ol{margin:.9rem 0 0;padding-left:20px;color:#33405e;font-size:.94rem;line-height:1.85}
   .rdpage .extbox-steps code{background:#e8ecf9;border-radius:5px;padding:1px 6px;font-size:.86em}
   .rdpage .extbox-foot{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);font-size:.86rem;color:var(--muted)}
-  .rdpage .band{background:linear-gradient(180deg,#f7f9ff,#eef2ff);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .rdpage .band{background:linear-gradient(180deg,#fffafa,#fff5f5);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
   .rdpage .why{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:center}
   @media(max-width:820px){.rdpage .why{grid-template-columns:1fr}}
   .rdpage .why h2{font-size:clamp(1.5rem,3vw,2.1rem);letter-spacing:-.02em;margin:0 0 .8rem;font-weight:800}

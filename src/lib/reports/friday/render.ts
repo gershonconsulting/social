@@ -73,7 +73,7 @@ function bar(value: number, max: number, color: string): string {
   return `<span style="display:inline-block;height:9px;width:${w}px;background:${color};border-radius:3px;vertical-align:middle;"></span>`;
 }
 
-// ── Company ─────────────────────────────────────────────────────────────────
+// ── Company ──────────────────────────────────────────────────────────────────────────
 
 export function renderCompany(d: FridayData): string {
   const s = d.self;
@@ -104,7 +104,7 @@ export function renderCompany(d: FridayData): string {
   return shell("company", d, body);
 }
 
-// ── Competitive ─────────────────────────────────────────────────────────────
+// ── Competitive ──────────────────────────────────────────────────────────────────────
 
 export function renderCompetitive(d: FridayData): string {
   if (!d.competitors.length) {
@@ -128,7 +128,7 @@ export function renderCompetitive(d: FridayData): string {
       .map((x) => {
         const st = byId.get(x.id)!;
         const self = x.role === "self";
-        return `<tr${self ? ` style="background:#fdf2f2;"` : ""}><td ${TD}><a href="${clientUrl(x.id)}" style="color:${INK};${self ? "font-weight:800;" : ""}">${esc(x.name)}</a>${st.postsWeek === 0 ? ` ${pill("silent", "warn")}` : ""}</td><td ${TDR}>${x.posts}</td><td ${TDR}>${trend(st.postsWeek, st.postsPrev)}</td><td ${TDR}>${fmt(x.engagement)} · ${x.engagementShare}%</td><td ${TD}>${bar(x.engagement, maxEng, self ? RED : "#9ca3af")}</td><td ${TD} style="font-size:12px;">${esc(st.mainTopic || "—")}</td></tr>`;
+        return `<tr${self ? ` style="background:#fff5f5;"` : ""}><td ${TD}><a href="${clientUrl(x.id)}" style="color:${INK};${self ? "font-weight:800;" : ""}">${esc(x.name)}</a>${st.postsWeek === 0 ? ` ${pill("silent", "warn")}` : ""}</td><td ${TDR}>${x.posts}</td><td ${TDR}>${trend(st.postsWeek, st.postsPrev)}</td><td ${TDR}>${fmt(x.engagement)} · ${x.engagementShare}%</td><td ${TD}>${bar(x.engagement, maxEng, self ? RED : "#9ca3af")}</td><td ${TD} style="font-size:12px;">${esc(st.mainTopic || "—")}</td></tr>`;
       })
       .join(""),
   );
@@ -147,7 +147,7 @@ export function renderCompetitive(d: FridayData): string {
   return shell("competitive", d, body);
 }
 
-// ── Intelligence ────────────────────────────────────────────────────────────
+// ── Intelligence ────────────────────────────────────────────────────────────────────
 
 const PRIO: Record<string, Level> = { high: "critical", medium: "warn", low: "ok" };
 

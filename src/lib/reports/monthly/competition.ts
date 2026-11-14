@@ -235,7 +235,7 @@ export function competitionPdf(win: MonthWindow, m: CompetitionModel, build: str
 }
 
 // ─────────────────────────────── EMAIL ───────────────────────────────
-const K = { red: "#CC3333", ink: "#12211d", mut: "#6B7280", rule: "#E4E2DC", tint: "#F5F4F0", li: "#0A66C2", lib: "#E8F1FB" };
+const K = { red: "#FE1B04", ink: "#12211d", mut: "#6B7280", rule: "#E4E2DC", tint: "#F5F4F0", li: "#0A66C2", lib: "#E8F1FB" };
 const F = "font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif";
 const e = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const sec = (t: string) => `<tr><td style="padding:22px 28px 8px"><div style="font-size:11px;font-weight:700;letter-spacing:.8px;color:${K.mut};border-bottom:1px solid ${K.rule};padding-bottom:6px">${e(t.toUpperCase())}</div></td></tr>`;

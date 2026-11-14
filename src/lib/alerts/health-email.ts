@@ -2,13 +2,13 @@
  * HTML for the "collection has stopped" health alert (cron/health-check).
  *
  * Report e-mail house style (2026-10-23): white page, single column,
- * max-width 680px, dark text #12211d, brand red #CC3333 as the accent only.
+ * max-width 680px, dark text #12211d, brand red #FE1B04 as the accent only.
  * Never light text on a dark band — this used to be a solid red header with
  * white text and a black button. One-line "Source: … · Data as of …" footer.
  * Inline CSS only (mail clients strip <style>).
  */
 
-const RED = "#CC3333";
+const RED = "#FE1B04";
 const INK = "#12211d";
 const MUTED = "#6b7280";
 const LINE = "#e5e7eb";
@@ -42,7 +42,7 @@ export function healthAlertHtml(s: HealthAlertFacts, gap: string, dashboardUrl: 
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:${RED};">GC Social · collection alert</div>
       <div style="font-size:21px;font-weight:800;letter-spacing:-0.01em;margin-top:4px;line-height:1.25;color:${INK};">⚠️ ${host} has stopped collecting</div>
     </div>
-    <div style="padding:16px 24px;background:#fdf2f2;border-bottom:1px solid #f3caca;border-left:4px solid ${RED};color:#7f1d1d;font-size:15px;line-height:1.5;">
+    <div style="padding:16px 24px;background:#fff5f5;border-bottom:1px solid #f3caca;border-left:4px solid ${RED};color:#7f1d1d;font-size:15px;line-height:1.5;">
       No new social posts have been ingested in <strong>${s.staleHours}+ hours</strong>.
       The last post was collected <strong>${gap}</strong> (${lastTxt}), and
       <strong>${s.postsLast24h}</strong> posts landed in the last 24 hours.

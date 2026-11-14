@@ -17,7 +17,7 @@ const config: Config = {
       colors: {
         // v4.66.0 — unified Gershon design (Linalysis layout, Gershon.ai red).
         // Neutral greys (text #1d1d1f, borders #e5e7eb) and "red" = Gershon red
-        // #CC3333 (600) / #a8281f (700) / tint #fdf2f2 (50). Every page picks
+        // #FE1B04 (600) / #d11200 (700) / tint #fff5f5 (50). Every page picks
         // this up without being edited. Status colours (green / amber) are
         // untouched; status red stays a clearly-red red.
         gray: {
@@ -34,21 +34,21 @@ const config: Config = {
           950: "#111113",
         },
         red: {
-          50: "#FDF2F2",
+          50: "#fff5f5",
           100: "#FBE1E1",
           200: "#F3CACA",
           300: "#EC9F9F",
           400: "#E06B6B",
           500: "#D64545",
-          600: "#CC3333",
-          700: "#A8281F",
+          600: "#FE1B04",
+          700: "#d11200",
           800: "#86201A",
           900: "#6B1A15",
         },
         brand: {
-          DEFAULT: "#CC3333",
-          hover: "#A8281F",
-          tint: "#FDF2F2",
+          DEFAULT: "#FE1B04",
+          hover: "#d11200",
+          tint: "#fff5f5",
           charcoal: "#1D1D1F",
           ink: "#1D1D1F",
           paper: "#FAFAFA",

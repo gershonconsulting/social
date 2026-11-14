@@ -2,7 +2,7 @@
    Social - unified Gershon design (v4.66.0, 2026-10-27; rebuilt from PR #2 on v4.65.0;
    v4.68.0, 2026-10-28: re-applied on v4.67.0 - client-frame initials stay neutral)
    Decision 2026-10-13: every Gershon app looks like Linalysis (the master
-   layout) and the main colour everywhere is the Gershon.ai red #CC3333.
+   layout) and the main colour everywhere is the Gershon.ai red #FE1B04.
    Same approach as Radar (radar/app/unified-theme.css, PR #4) and Pulse
    (pulse/app/unified-theme.css): one override layer, imported LAST in
    src/app/layout.tsx, plus minimal markup tweaks (sidebar, filter panel,
@@ -21,9 +21,9 @@
 
 /* ---------- Tokens ---------- */
 html:root{
-  --gx-red:#CC3333; --gx-red-dark:#a8281f; --gx-red-light:#fdf2f2; --gx-red-line:#f3caca;
+  --gx-red:#FE1B04; --gx-red-dark:#d11200; --gx-red-light:#fff5f5; --gx-red-line:#f3caca;
   --gx-text:#1d1d1f; --gx-muted:#6e6e73; --gx-border:#e5e7eb; --gx-bg:#fafafa; --gx-radius:12px;
-  --gx-ring:0 0 0 3px rgba(204,51,51,.15);
+  --gx-ring:0 0 0 3px rgba(254,27,4,.15);
 
   /* shadcn/ui HSL tokens used by src/components/ui/* */
   --background:0 0% 98%;          /* #fafafa */
@@ -32,17 +32,17 @@ html:root{
   --card-foreground:240 3% 12%;
   --popover:0 0% 100%;
   --popover-foreground:240 3% 12%;
-  --primary:0 60% 50%;            /* #CC3333 */
+  --primary:6 99% 51%;            /* #FE1B04 */
   --primary-foreground:0 0% 100%;
   --secondary:220 14% 96%;
   --secondary-foreground:240 3% 12%;
   --muted:220 14% 96%;
   --muted-foreground:240 2% 44%;  /* #6e6e73 */
-  --accent:0 71% 97%;             /* #fdf2f2 */
-  --accent-foreground:4 69% 39%;  /* #a8281f */
+  --accent:0 71% 97%;             /* #fff5f5 */
+  --accent-foreground:4 69% 39%;  /* #d11200 */
   --border:220 13% 91%;           /* #e5e7eb */
   --input:220 13% 91%;
-  --ring:0 60% 50%;
+  --ring:6 99% 51%;
   /* --radius stays 0.5rem (buttons/inputs); cards already use rounded-xl = 12px */
 }
 html body{ background:var(--gx-bg); color:var(--gx-text); }
@@ -101,7 +101,7 @@ main button:focus-visible, main a:focus-visible, .gx-sidebar a:focus-visible, .g
    ===================================================================== */
 html body .rdpage{
   --brand:var(--gx-red); --brand2:#f08a8a; --brand-ink:var(--gx-red-dark);
-  --grad:linear-gradient(120deg,#CC3333 0%,#a8281f 100%);
+  --grad:linear-gradient(120deg,#FE1B04 0%,#d11200 100%);
   --line:var(--gx-border); --soft:var(--gx-bg); --muted:var(--gx-muted);
   --shadow:0 18px 50px rgba(29,29,31,.08); --radius:12px;
   color:var(--gx-text); overflow-x:hidden;
@@ -110,7 +110,7 @@ html body .rdpage header{ background:rgba(255,255,255,.92); border-bottom-color:
 html body .rdpage .nav-links a.link{ color:var(--gx-text); }
 html body .rdpage .nav-links a.link:hover{ color:var(--gx-red); }
 html body .rdpage .btn-primary{ background:var(--gx-red); box-shadow:none; color:#fff; border-radius:999px; }
-html body .rdpage .btn-primary:hover{ background:var(--gx-red-dark); box-shadow:0 8px 22px rgba(204,51,51,.28); transform:none; }
+html body .rdpage .btn-primary:hover{ background:var(--gx-red-dark); box-shadow:0 8px 22px rgba(254,27,4,.28); transform:none; }
 html body .rdpage .btn-ghost{ border-radius:999px; }
 
 html body .rdpage .hero{ background:linear-gradient(180deg,#ffffff 0%,var(--gx-bg) 60%,var(--gx-red-light) 100%); color:var(--gx-text); }
@@ -123,8 +123,8 @@ html body .rdpage .trust a{ color:var(--gx-red) !important; }   /* inline style 
 html body .rdpage .hero .btn-lite{ background:#fff; border-color:var(--gx-border); color:var(--gx-text); border-radius:999px; }
 html body .rdpage .hero .btn-lite:hover{ border-color:var(--gx-red); color:var(--gx-red); background:#fff; }
 html body .rdpage .rings{ opacity:.35; }
-html body .rdpage .rings span{ border-color:rgba(204,51,51,.22); }
-html body .rdpage .sweep{ background:conic-gradient(from 0deg,rgba(204,51,51,.16),transparent 30%); }
+html body .rdpage .rings span{ border-color:rgba(254,27,4,.22); }
+html body .rdpage .sweep{ background:conic-gradient(from 0deg,rgba(254,27,4,.16),transparent 30%); }
 html body .rdpage .mock{ background:#fff; border-color:var(--gx-border); box-shadow:0 30px 80px rgba(29,29,31,.10); }
 html body .rdpage .mock .bar{ background:var(--gx-bg); border-bottom-color:var(--gx-border); }
 html body .rdpage .mock .bar i{ background:#d9d9de; }

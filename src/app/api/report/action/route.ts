@@ -19,10 +19,10 @@ function pageHtml(title: string, detail: string, ok: boolean): string {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title></head>
 <body style="margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#f5f5f7;color:#1d1d1f;">
 <div style="max-width:520px;margin:48px auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:28px;">
-<div style="font-size:12px;font-weight:700;color:#CC3333;letter-spacing:.04em;">SOCIAL · GERSHON.AI</div>
+<div style="font-size:12px;font-weight:700;color:#FE1B04;letter-spacing:.04em;">SOCIAL · GERSHON.AI</div>
 <div style="font-size:22px;font-weight:800;margin-top:8px;">${ok ? "✅" : "⚠️"} ${esc(title)}</div>
 <div style="font-size:14px;color:#374151;margin-top:10px;line-height:1.5;">${detail}</div>
-<a href="${SITE}/actions" style="display:inline-block;margin-top:20px;padding:10px 16px;border-radius:8px;background:#CC3333;color:#fff;font-weight:700;text-decoration:none;">Open your actions</a>
+<a href="${SITE}/actions" style="display:inline-block;margin-top:20px;padding:10px 16px;border-radius:8px;background:#FE1B04;color:#fff;font-weight:700;text-decoration:none;">Open your actions</a>
 </div></body></html>`;
 }
 
