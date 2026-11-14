@@ -19,8 +19,8 @@ export const EXTENSION_LATEST = "0.26.0";
 export const EXTENSION_ZIP_NAME = `social-extension-v${EXTENSION_LATEST}.zip`;
 export const EXTENSION_ZIP_URL = `/${EXTENSION_ZIP_NAME}`;
 
-/** App version — keep in sync with package.json. Shown in the home-page footer. */
-export const APP_VERSION = "4.78.2";
+/** App version — keep in sync with package.json. Shown in the home-page footer and dashboard header/footer (the one app version; 0.26.0 is the Chrome extension, always labelled "extension"). */
+export const APP_VERSION = "4.78.3";
 
 // 2026-10-07: account moved to Workers Paid (the free plan's 10 ms CPU cap
 // caused the 1102/1101 errors). Redeployed so the deployment picks it up.

@@ -92,7 +92,7 @@ export default async function DashboardLayout({
             <CollectionHealthBanner />
             {children}
             <footer className="mt-12 pt-4 border-t border-gray-200 text-[11px] text-gray-500 font-mono">
-              {buildLabel && <>{buildLabel} &middot; </>}v{shortVersion} &middot; {buildDate}
+              {buildLabel && <>{buildLabel} &middot; </>}App v{APP_RELEASE} &middot; commit {shortVersion} &middot; {buildDate}
             </footer>
           </div>
         </main>
