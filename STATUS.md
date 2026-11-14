@@ -1,6 +1,6 @@
 # Social (social.gershon.ai) — STATUS
 
-Last updated: 2026-11-13
+Last updated: 2026-11-14
 
 ## Deploy route
 Push / merge to `claude/social-campaign-verification-jiG5E` → `.github/workflows/deploy.yml` → Cloudflare Pages `gershoncrm-social`.
@@ -19,6 +19,8 @@ Production deploys need Olivier's explicit full-sentence OK.
 - v4.77.1 (PR nightly/2026-11-11-social-settings-cleanup): dead "Still missing today" entry removed from Settings → Reports (9 reports + 2 alerts) ✅ code, not deployed
 
 - v4.78.0 Friday client reports (branch `feat/friday-reports-v4.78.0`): Company + Competitive + Intelligence per CAMPAIGN/CLIENT company, to Olivier for review, Fridays 14:00 EST + one-off Sat 2026-11-14 14:00 EST (`friday-reports.yml`). Tests 18/18 ✅, tsc ✅, next build ✅. Deploy ❌ (needs Olivier's OK). See docs/FRIDAY-REPORTS.md.
+
+- v4.78.3 (nightly/2026-11-14-social-one-version): UI shows one app version; 0.26.0 is the Chrome extension version, now labelled "Chrome extension v0.26.0" on the home page; dashboard footer reads "App v… · commit …". Not deployed.
 
 ## Open PRs (not deployed) ❌
 - #18 v4.70.0 Actions (per-workspace competitive report to client admins — must get the new subject/sender + report@ Bcc when merged)
