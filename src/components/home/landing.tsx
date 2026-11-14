@@ -242,7 +242,7 @@ export function Landing({
                 </span>
                 <div>
                   <h3>Social by Gershon.AI — LinkedIn &amp; X</h3>
-                  <div className="extbox-meta">Version <b>{extensionVersion}</b> · Chrome &amp; Edge (Chromium)</div>
+                  <div className="extbox-meta">Chrome extension <b>v{extensionVersion}</b> · Chrome &amp; Edge (Chromium)</div>
                 </div>
               </div>
               <a className="btn btn-primary extbox-dl" href={EXTENSION_ZIP_URL} download={EXTENSION_ZIP_NAME}>
@@ -306,7 +306,7 @@ export function Landing({
             <a className="link" href="mailto:support@gershonconsulting.com">Support</a>
           </div>
           <div className="copy">
-            © 2026 Gershon.AI · Social — social network management software for LinkedIn and X. v{appVersion}
+            © 2026 Gershon.AI · Social — social network management software for LinkedIn and X. App v{appVersion}
           </div>
         </div>
       </footer>
