@@ -19,7 +19,7 @@
  * "yesterday" means yesterday as the business lived it.
  *
  * Posts / companies collected use the ONE shared definition in
- * ./collection-counts (same as the daily digest): ET day, posts stored in the
+ * ./collection-day (countCollected, same as the daily digest): ET day, posts stored in the
  * app that day, Gershon workspace only (nightly 2026-11-07).
  *
  * Recipient follows the platform-report-email convention: every platform
@@ -33,7 +33,7 @@ import { EXTENSION_LATEST, EXTENSION_ZIP_URL } from "@/lib/extension-version";
 import { readExtSeen, semverLt, type ExtSeen } from "@/lib/extension/seen";
 import { readHeartbeat } from "@/lib/extension/heartbeat";
 import { etDayKey, etDayLabel, etDayShort, etMidnight } from "./et-days";
-import { collectionByDay as sharedCollectionByDay, collectionPerCompany, emptyCollectionDay, type CollectionDay } from "./collection-counts";
+import { countCollected, countCollectedByDay, emptyCollectionDay, loadCollectedPosts, type CollectionDay } from "./collection-counts";
 import { primaryOrgId } from "./monthly/data";
 import { siteUrl } from "@/lib/site";
 
@@ -104,17 +104,15 @@ export interface DailyReport {
 
 type DayRow = CollectionDay;
 
-/** Per-ET-day collection stats for the last `days` days (today excluded) — shared definition. */
-async function collectionByDay(orgId: string, now: Date, days: number): Promise<Map<string, DayRow>> {
-  return sharedCollectionByDay(orgId, etMidnight(days, now), etMidnight(0, now));
-}
 
 /** Companies added per ET day. */
 async function companiesAddedByDay(orgId: string, now: Date, days: number): Promise<Map<string, number>> {
   const from = etMidnight(days, now);
   const to = etMidnight(0, now);
   const rows = await prisma.$queryRaw<Array<{ day: string; added: number }>>`
-    SELECT to_char(("createdAt" AT TIME ZONE 'America/New_York')::date, 'YYYY-MM-DD') AS day,
+    -- "createdAt" is timestamp WITHOUT time zone holding UTC: read it AS UTC
+    -- first, then convert to New York (a bare AT TIME ZONE goes the wrong way).
+    SELECT to_char((("createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/New_York')::date, 'YYYY-MM-DD') AS day,
            count(*)::int AS added
       FROM clients
      WHERE "createdAt" >= ${from} AND "createdAt" < ${to}
@@ -145,10 +143,6 @@ async function freshCompaniesAt(orgId: string, boundary: Date): Promise<number> 
   return Number(rows[0]?.n ?? 0);
 }
 
-/** Per-company post counts for one ET day — shared definition. */
-async function perCompany(orgId: string, from: Date, to: Date) {
-  return collectionPerCompany(orgId, from, to);
-}
 
 function avg(values: number[]): number | null {
   if (values.length === 0) return null;
@@ -162,20 +156,19 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
 
   const yFrom = etMidnight(1, now);
   const yTo = etMidnight(0, now);
-  const dFrom = etMidnight(2, now);
   const orgId = await primaryOrgId();
 
-  const [byDay, added, hb, extSeen, activeCompanies, freshY, freshD, compY, compD, errConns, pageConns] =
+  const [collected, added, hb, extSeen, activeCompanies, freshY, freshD, errConns, pageConns] =
     await Promise.all([
-      collectionByDay(orgId, now, 8),
+      // Posts stored over the last 8 ET days; counted per day by the ONE shared
+      // function (countCollected), exactly as the digest counts (v4.77.3).
+      loadCollectedPosts(orgId, etMidnight(8, now), etMidnight(0, now)),
       companiesAddedByDay(orgId, now, 8),
       readHeartbeat(),
       readExtSeen(),
       prisma.client.count({ where: { status: "ACTIVE", organizationId: orgId } }),
       freshCompaniesAt(orgId, yTo),
       freshCompaniesAt(orgId, yFrom),
-      perCompany(orgId, yFrom, yTo),
-      perCompany(orgId, dFrom, yFrom),
       prisma.platformConnection.findMany({
         where: { isEnabled: true, lastSyncError: { not: null } },
         select: {
@@ -207,6 +200,9 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
       }),
     ]);
 
+  const byDay = countCollectedByDay(collected, weekKeys);
+  const compY = countCollected(collected, yKey).perCompany;
+  const compD = countCollected(collected, dKey).perCompany;
   const dayRow = (k: string): DayRow =>
     byDay.get(k) ?? emptyCollectionDay(k);
 
@@ -352,7 +348,7 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
   // ── Extension version ─────────────────────────────────────────────────────────────────────────────
   const extension = buildExtensionBlock(extSeen, now);
 
-  // ── Movers / went quiet ───────────────────────────────────────────────────────────────────────────
+  // ── Movers / went quiet ───────────────────────────────────────────────────────────────────────
   const dMap = new Map(compD.map((c) => [c.id, c.n]));
   const yMap = new Map(compY.map((c) => [c.id, c.n]));
   const movers = compY

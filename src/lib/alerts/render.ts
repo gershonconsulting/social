@@ -128,5 +128,5 @@ ${body}
 
 export function alertSubject(a: PostingAlert): string {
   const scope = a.kind === "week" ? `Week ${a.from} → ${a.to}` : a.periodLabel;
-  return `⚠ social.gershonCRM.com — ${a.totals.companiesOffTarget} ${a.totals.companiesOffTarget === 1 ? "company" : "companies"} off plan — ${scope}`;
+  return `⚠ social.gershon.ai — ${a.totals.companiesOffTarget} ${a.totals.companiesOffTarget === 1 ? "company" : "companies"} off plan — ${scope}`;
 }

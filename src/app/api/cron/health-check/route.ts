@@ -236,7 +236,7 @@ export async function POST(req: NextRequest) {
     }
     // (d) Stale & not recently alerted → send + record.
     const gap = humanGap(s.hoursSinceLastPost);
-    const subject = `⚠️ social.gershonCRM.com has stopped collecting — last post ${gap}`;
+    const subject = `⚠️ social.gershon.ai has stopped collecting — last post ${gap}`;
     const send = await sendAlert(alertHtml(s), subject);
     if (send.ok) await writeLastAlertAt(new Date().toISOString());
 

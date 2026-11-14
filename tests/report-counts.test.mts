@@ -1,12 +1,12 @@
 // Pure unit test, no DB:  npx tsx tests/report-counts.test.mts
 // The two daily collection e-mails ("Social Collection Report" and
-// "Report social.gershonCRM.com") must count with ONE definition and share one
+// "Report social.gershon.ai") must count with ONE definition and share one
 // subject format (nightly 2026-11-07).
 import { readFileSync } from "node:fs";
 // Loaded through import() + default so the test also runs where tsx hands .ts
 // files to Node as CommonJS without named-export detection (Node 22.18+).
 const load = async (p: string) => { const m: any = await import(p); return { ...(m.default ?? {}), ...m }; };
-const { reportSubject, postsFromCompanies, sourceFreshnessLine, workspaceLabel, COLLECTION_DEFINITION } = await load("../src/lib/reports/report-subject.ts");
+const { reportSubject, postsFromCompanies, sourceFreshnessLine, workspaceLabel, COLLECTION_DEFINITION, DIGEST_TITLE } = await load("../src/lib/reports/report-subject.ts");
 const { etDayWindow, etDayKey, etDayShort } = await load("../src/lib/reports/et-days.ts");
 let pass = 0, fail = 0;
 const ok = (c: unknown, m: string) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗", m); } };
@@ -23,9 +23,9 @@ ok(dst.from.toISOString() === "2026-11-01T04:00:00.000Z" && dst.to.toISOString()
 console.log("2. one subject format");
 const day = etDayShort(1, sentDigest);
 const collection = `${reportSubject("Social Collection Report", undefined, day)} — ${postsFromCompanies(19, 11)}`;
-const digest = reportSubject("Report social.gershonCRM.com", undefined, day, postsFromCompanies(19, 11));
+const digest = reportSubject(DIGEST_TITLE, undefined, day, postsFromCompanies(19, 11));
 ok(collection === "Social Collection Report — Gershon Consulting — November 4, 2026 — 19 posts from 11 companies", collection);
-ok(digest === "Report social.gershonCRM.com — Gershon Consulting — November 4, 2026 — 19 posts from 11 companies", digest);
+ok(digest === "Report social.gershon.ai — Gershon Consulting — November 4, 2026 — 19 posts from 11 companies", digest);
 ok(collection.split(" — ").slice(1).join(" — ") === digest.split(" — ").slice(1).join(" — "), "same workspace, day and counts after the title");
 ok(postsFromCompanies(1, 1) === "1 post from 1 company", "singular");
 
@@ -43,8 +43,8 @@ console.log("5. both builders use the shared count functions (no private copy le
 const src = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 const collectionSrc = src("src/lib/reports/daily-report.ts");
 const digestSrc = src("src/app/api/digest/daily/route.ts");
-ok(/sharedCollectionByDay\(orgId/.test(collectionSrc) && /collectionPerCompany\(orgId/.test(collectionSrc), "Collection Report counts via collection-counts");
-ok(/collectionPerCompany\(orgId, from, to\)/.test(digestSrc) && /collectionWindow\(1, now\)/.test(digestSrc), "digest counts via collection-counts, ET yesterday");
+ok(/countCollectedByDay\(collected/.test(collectionSrc) && /countCollected\(collected, yKey\)/.test(collectionSrc), "Collection Report counts via countCollected (v4.77.3)");
+ok(/countCollected\(await loadCollectedPosts\(orgId, from, to\), win\.dayKey\)/.test(digestSrc) && /collectionWindow\(1, now\)/.test(digestSrc), "digest counts via countCollected, ET yesterday");
 ok(!/24 \* 60 \* 60 \* 1000\);\s*\n\s*\/\/ v4\.65\.2/.test(digestSrc) && !/const from = new Date\(now\.getTime\(\) - 24/.test(digestSrc), "digest no longer uses a rolling 24h window");
 ok(!/FROM social_posts\n\s+WHERE "createdAt"/.test(collectionSrc), "Collection Report no longer counts every workspace");
 ok(/reportSubject\(/.test(src("src/lib/reports/daily-report-render.ts")), "Collection Report uses the shared subject format");
