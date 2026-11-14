@@ -1,32 +1,26 @@
 # Social (social.gershon.ai) — STATUS
 
-Last updated: 2026-11-14
+Last updated: 2026-11-14 (night push)
 
 ## Deploy route
-Push / merge to `claude/social-campaign-verification-jiG5E` → `.github/workflows/deploy.yml` → Cloudflare Pages `gershoncrm-social`.
-Production deploys need Olivier's explicit full-sentence OK.
+Push / merge to `claude/social-campaign-verification-jiG5E` (the default branch) → `.github/workflows/deploy.yml` → Cloudflare Pages `gershoncrm-social`.
+Commits with `[skip-db-push]` in the message skip `prisma db push` (code-only changes).
+Live check: `GET https://social.gershon.ai/api/ping` → `commit` = deployed SHA, `build` = run number.
 
-## Current
-- Live: v4.73.0 (16108b9, deployed 2026-11-09 ~18:05 ET, build 480).
-- v4.73.0 — PR "E-mail subjects + sender" (branch `feat/email-subjects-sender`):
-  - Subjects: `Social.gershon.ai — <Company> — <Type> report` (Company, Client, Competitive, Campaign, Partner, Posting, Intelligence…) ✅ code
-  - Sender name on every e-mail: `Social.gershon.ai` (was "GC Social" / "Social · Gershon.AI") ✅ code
-  - Client-facing monthly company report Bcc report@gershonconsulting.com ✅ (already in place)
-  - Tests: `npm test` (incl. tests/email-subject.test.mts) ✅, tsc ✅, next build ✅
-  - Deployed ✅ — live previews show the new subjects
+## Current — v4.78.3
+- v4.78.3 released 2026-11-14 night push (Olivier: "Do them, release them. I test tomorrow everything."):
+  - PR #29 — one shared count for every Social report (digest, Collection Report, Competitive report: `countCollected`, ET day of collection, deduped); footer = source + day definition + freshness; subjects say social.gershon.ai ✅
+  - PR #26 — brand red #FE1B04 (dark #d11200, tint #fff5f5) across UI, e-mails and reports ✅
+  - PR #31 — one app version in the UI; 0.26.0 labelled "Chrome extension v0.26.0"; dashboard footer "App v… · commit …" ✅
+  - Checks: tsc ✅, `npm test` 6 suites all passing (run with TZ=UTC, as CI) ✅; next build: runs in the deploy workflow
+- PR #19 closed (replaced by #24 / #29) ✅
+- v4.78.0 Friday client reports — live (build 489) ✅. See docs/FRIDAY-REPORTS.md.
+- v4.77.1 dead "Still missing today" entry removed from Settings → Reports ✅
+- v4.73.0 e-mail subjects `Social.gershon.ai — <Company> — <Type> report` ✅
 
-- [19] "still missing today" e-mail removed (PR #23); dead module `src/lib/reports/missing-today.ts` deleted 2026-11-10 (cleanup PR, no version bump, no behaviour change) ✅
-- v4.77.1 (PR nightly/2026-11-11-social-settings-cleanup): dead "Still missing today" entry removed from Settings → Reports (9 reports + 2 alerts) ✅ code, not deployed
-- v4.78.1 (was 4.77.3, renumbered 2026-11-14 after v4.78.0 landed; branch nightly/2026-11-13-social-one-count): digest, Collection Report and Competitive report count with ONE function (countCollected, ET day of collection, deduped); fixes Collection headline off by 10h (76 vs 20 for Nov 10); footer = source + day definition + freshness; subjects say social.gershon.ai ✅ code, not merged/deployed
-
-- v4.78.0 Friday client reports (branch `feat/friday-reports-v4.78.0`): Company + Competitive + Intelligence per CAMPAIGN/CLIENT company, to Olivier for review, Fridays 14:00 EST + one-off Sat 2026-11-14 14:00 EST (`friday-reports.yml`). Tests 18/18 ✅, tsc ✅, next build ✅. Deploy ❌ (needs Olivier's OK). See docs/FRIDAY-REPORTS.md.
-
-- v4.78.3 (nightly/2026-11-14-social-one-version): UI shows one app version; 0.26.0 is the Chrome extension version, now labelled "Chrome extension v0.26.0" on the home page; dashboard footer reads "App v… · commit …". Not deployed.
-
-## Open PRs (not deployed) ❌
-- #18 v4.70.0 Actions (per-workspace competitive report to client admins — must get the new subject/sender + report@ Bcc when merged)
-- #19 nightly 2026-11-07 collection counts / subject format
-- #20 v4.71.0 Settings → Reports
-
-## Known issues
+## Open ❌
+- E-mail sender name — open decision for Olivier (unchanged tonight) ❌
+- #18 v4.70.0 Actions (per-workspace competitive report to client admins) ❌
+- #20 v4.71.0 Settings → Reports ❌
 - GET /api/report/ops?kind=… previews readable without sign-in ❌
+- `src/lib/reports/et-days.ts` tzOffsetMs parses locale strings: the "DST end day is 25 hours" test fails when the process TZ is America/New_York (passes in UTC = CI/Cloudflare). Harden with Intl formatToParts ❌
