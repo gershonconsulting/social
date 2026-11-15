@@ -264,12 +264,9 @@ UPDATE 2026-11-13  -  v4.77.3  one count for every report (nightly, NOT merged, 
        ❌ after merge: next day's digest and Collection Report subjects must show the same N posts / M cos.
 
 ----------------------------------------------------------------
-UPDATE 2026-11-15  -  v4.78.5  Friday client reports go out once per report Friday (nightly, NOT merged)
+UPDATE 2026-11-15  -  v4.78.4  ET day boundaries independent of the machine time zone (nightly, NOT merged)
 ----------------------------------------------------------------
-[2026-11-15] ✅ ready to test - branch nightly/2026-11-15-social-batch-once (merge AFTER PR #32 / v4.78.4; version lines conflict, keep 4.78.5).
-       Root cause (Resend): the pack went out at 00:17Z Nov 14 (Fri 19:17 ET, day key 11-13, "week of Nov 6 – Nov 12") and again at
-       22:48Z Nov 14 (Sat 17:48 ET, the one-off Saturday cron line, day key 11-14, "week of Nov 7 – Nov 13"): the sent-marker was keyed on the
-       ET day the job ran. Fix: every run resolves to its report Friday (src/lib/reports/friday/once.ts) = same week, marker and Resend
-       Idempotency-Key. Test tests/friday-once.test.mts (19/19, TZ UTC/New_York/Paris).
-       ❌ after merge: next Friday (Nov 20) 1 pack per client; a manual re-run of "Friday client reports" must log "already sent".
-       ❌ friday-reports.yml: drop the spent `0 19 14 11 *` line + add a concurrency group (nightly app lacks `workflows` permission).
+[2026-11-15] ✅ ready to test - branch nightly/2026-11-15-social-et-dst: src/lib/reports/et-days.ts reads the
+       America/New_York offset only from Intl formatToParts (no toLocaleString re-parse in local time); new
+       tests/et-days.test.mts (DST 2026-03-08 = 23 h, 2026-11-01 = 25 h) passes with TZ=UTC, America/New_York,
+       Europe/Paris, America/Curacao. No data, API or schema change [skip-db-push].
