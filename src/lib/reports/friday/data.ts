@@ -3,10 +3,10 @@
  * its own posts and the posts of the competitors linked to it in Competitor Watch.
  */
 import rawDb from "@/lib/db-raw";
-import { etDayKey } from "../et-days";
 import { getCompetitorIds } from "@/lib/competitors/store";
 import { aboutOf } from "../ops/intelligence";
 import { compare, statsFor, type CompanyStats, type Comparison, type FPost, type Role, type Window } from "./analyze";
+import { fridayReportDay, fridayWeekFor } from "./once";
 
 /** Which companies get the Friday pack: Gershon's campaign clients and clients. */
 export const FRIDAY_TYPES = ["CAMPAIGN", "CLIENT"] as const;
@@ -15,6 +15,7 @@ export type FridayClient = { id: string; name: string; clientType: string; indus
 
 export type FridayData = {
   orgId: string;
+  /** The report Friday (ET) this pack belongs to — the same for a late, catch-up or repeated run (v4.78.5). */
   dayKey: string;
   window: Window;
   weekLabel: string;
@@ -26,8 +27,9 @@ export type FridayData = {
   weekPosts: FPost[];
 };
 
+/** v4.78.5: the week is anchored on the report Friday, not on the day the job happens to run. */
 export function fridayWindow(now = new Date()): Window {
-  return { weekFrom: etDayKey(7, now), weekTo: etDayKey(1, now), prevFrom: etDayKey(14, now), prevTo: etDayKey(8, now) };
+  return fridayWeekFor(fridayReportDay(now));
 }
 
 function label(key: string): string {
@@ -50,7 +52,8 @@ export async function listFridayClients(orgId: string): Promise<FridayClient[]> 
 export async function loadFridayData(orgId: string, clientId: string, now = new Date()): Promise<FridayData> {
   const client = (await listFridayClients(orgId)).find((c) => c.id === clientId);
   if (!client) throw new Error("Not a campaign client / client of this workspace");
-  const w = fridayWindow(now);
+  const reportDay = fridayReportDay(now);
+  const w = fridayWeekFor(reportDay);
 
   const compIds = (await getCompetitorIds(orgId, clientId)).filter((id) => id !== clientId);
   const comps = compIds.length
@@ -103,7 +106,7 @@ export async function loadFridayData(orgId: string, clientId: string, now = new 
 
   return {
     orgId,
-    dayKey: etDayKey(0, now),
+    dayKey: reportDay,
     window: w,
     weekLabel: weekLabelOf(w),
     client,

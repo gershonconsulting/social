@@ -4,7 +4,9 @@
  * Olivier, 2026-11-10: client reports are reviewed before any client sees them,
  * so the pack goes to Gershon (Setting `friday_reports_to`, default
  * olivier@gershonconsulting.com), never to the client. Each e-mail is sent once
- * per client per report day (Setting `friday_reports_sent`), so retries are safe.
+ * per client per REPORT FRIDAY (v4.78.5: Setting `friday_reports_sent` keyed on
+ * the report Friday, not on the ET day the job ran, plus a Resend
+ * Idempotency-Key — see ./once.ts), so late crons, catch-up runs and retries are safe.
  * Scheduled by .github/workflows/friday-reports.yml (Fridays 14:00 ET).
  */
 import rawDb from "@/lib/db-raw";
@@ -13,6 +15,7 @@ import { withGcName } from "@/lib/email/sender";
 import { OPS_FROM } from "../ops/shell";
 import { loadFridayData, type FridayData } from "./data";
 import { buildFridayIntel } from "./intel";
+import { sendOncePerReportDay } from "./once";
 import { FRIDAY_KINDS, fridaySubject, renderCompany, renderCompetitive, renderIntelligence, type FridayKind } from "./render";
 
 export const FRIDAY_TO_DEFAULT = "olivier@gershonconsulting.com";
@@ -64,35 +67,29 @@ export type FridayResult = { client: string; kind: FridayKind; subject: string; 
 export async function sendFridayPack(orgId: string, clientId: string, opts: { force?: boolean; to?: string } = {}): Promise<FridayResult[]> {
   const { data, emails } = await buildFridayPack(orgId, clientId);
   const to = opts.to ? opts.to.split(",").map((x) => x.trim()).filter(Boolean) : await fridayRecipients();
-  const sent = opts.force ? {} : await readSent();
+  const base = { client: data.client.name, to: to.join(", ") };
   const apiKey = process.env.RESEND_API_KEY;
-  const out: FridayResult[] = [];
-  for (const e of emails) {
-    const id = `${e.kind}:${clientId}:${data.dayKey}`;
-    const base = { client: data.client.name, kind: e.kind, subject: e.subject, to: to.join(", ") };
-    if (sent[id] && !opts.to) {
-      out.push({ ...base, sent: false, skipped: `already sent (${sent[id]})` });
-      continue;
-    }
-    if (!apiKey) {
-      out.push({ ...base, sent: false, error: "RESEND_API_KEY not set" });
-      continue;
-    }
-    try {
-      const r = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify(withAuditBcc({ from: withGcName(process.env.OPS_REPORT_FROM || OPS_FROM), to, subject: e.subject, html: e.html })),
-      });
-      if (!r.ok) {
-        out.push({ ...base, sent: false, error: `Resend ${r.status}: ${(await r.text().catch(() => "")).slice(0, 200)}` });
-        continue;
-      }
-      if (!opts.to) await markSent(id, `→ ${to.join(", ")}`).catch(() => undefined);
-      out.push({ ...base, sent: true });
-    } catch (err) {
-      out.push({ ...base, sent: false, error: err instanceof Error ? err.message : String(err) });
-    }
-  }
-  return out;
+  if (!apiKey) return emails.map((e) => ({ ...base, kind: e.kind, subject: e.subject, sent: false, error: "RESEND_API_KEY not set" }));
+  const from = withGcName(process.env.OPS_REPORT_FROM || OPS_FROM);
+  const results = await sendOncePerReportDay(
+    clientId,
+    data.dayKey,
+    emails,
+    {
+      post: async (e, idempotencyKey) => {
+        const headers: Record<string, string> = { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` };
+        if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+        const r = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers,
+          body: JSON.stringify(withAuditBcc({ from, to, subject: e.subject, html: e.html })),
+        });
+        return { status: r.status, text: r.ok ? "" : await r.text().catch(() => "") };
+      },
+      readSent,
+      markSent: (key) => markSent(key, `→ ${to.join(", ")}`),
+    },
+    { force: opts.force, testOnly: !!opts.to },
+  );
+  return results.map((r) => ({ ...base, ...r }));
 }

@@ -1,13 +1,14 @@
 # Social (social.gershon.ai) — STATUS
 
-Last updated: 2026-11-14 (night push)
+Last updated: 2026-11-15 (night push)
 
 ## Deploy route
 Push / merge to `claude/social-campaign-verification-jiG5E` (the default branch) → `.github/workflows/deploy.yml` → Cloudflare Pages `gershoncrm-social`.
 Commits with `[skip-db-push]` in the message skip `prisma db push` (code-only changes).
 Live check: `GET https://social.gershon.ai/api/ping` → `commit` = deployed SHA, `build` = run number.
 
-## Current — v4.78.3
+## Current — v4.78.3 (open: #32 v4.78.4, then v4.78.5)
+- v4.78.5 (nightly/2026-11-15-social-batch-once, NOT merged — merge after #32): Friday client reports once per client per report Friday. The pack went out twice on Nov 14 (00:17Z = Fri ET run, 22:48Z = the one-off Saturday cron) because the sent-marker was keyed on the ET day the job ran. Now pinned to the report Friday (`src/lib/reports/friday/once.ts`) + Resend Idempotency-Key; test `tests/friday-once.test.mts` ✅
 - v4.78.3 released 2026-11-14 night push (Olivier: "Do them, release them. I test tomorrow everything."):
   - PR #29 — one shared count for every Social report (digest, Collection Report, Competitive report: `countCollected`, ET day of collection, deduped); footer = source + day definition + freshness; subjects say social.gershon.ai ✅
   - PR #26 — brand red #FE1B04 (dark #d11200, tint #fff5f5) across UI, e-mails and reports ✅
@@ -19,6 +20,7 @@ Live check: `GET https://social.gershon.ai/api/ping` → `commit` = deployed SHA
 - v4.73.0 e-mail subjects `Social.gershon.ai — <Company> — <Type> report` ✅
 
 ## Open ❌
+- `.github/workflows/friday-reports.yml`: remove the spent one-off line `0 19 14 11 *` + add `concurrency: friday-reports` (the nightly GitHub App has no `workflows` permission; harmless meanwhile) ❌
 - E-mail sender name — open decision for Olivier (unchanged tonight) ❌
 - #18 v4.70.0 Actions (per-workspace competitive report to client admins) ❌
 - #20 v4.71.0 Settings → Reports ❌
