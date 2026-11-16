@@ -19,9 +19,9 @@ function extractHrefs(html: string): string[] {
 const PLATFORM_MATCHERS: { platform: string; test: (url: string) => boolean; clean: (url: string) => string }[] = [
   {
     platform: "LINKEDIN",
-    test: (url) => /linkedin\.com\/(company|in|school)\/[a-zA-Z0-9_-]+/i.test(url),
+    test: (url) => /linkedin\.com\/(company|showcase|in|school)\/[a-zA-Z0-9_-]+/i.test(url),
     clean: (url) => {
-      const m = url.match(/(https?:\/\/(?:www\.)?linkedin\.com\/(?:company|in|school)\/[a-zA-Z0-9_-]+)\/?/i);
+      const m = url.match(/(https?:\/\/(?:www\.)?linkedin\.com\/(?:company|showcase|in|school)\/[a-zA-Z0-9_-]+)\/?/i);
       return m ? m[1] : url;
     },
   },

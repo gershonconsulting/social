@@ -68,7 +68,7 @@ export async function syncPlatformConnection(
   if (connection.platform === "LINKEDIN" && !externalAccountId && connection.tokenReference) {
     const companyUrl = connection.externalAccountUrl || "";
     // Extract vanity name from URL like https://www.linkedin.com/company/gershonconsulting
-    const vanityMatch = companyUrl.match(/linkedin\.com\/(?:company|in)\/([^\/?#]+)/i);
+    const vanityMatch = companyUrl.match(/linkedin\.com\/(?:company|showcase|in)\/([^\/?#]+)/i);
     if (vanityMatch) {
       const vanityName = vanityMatch[1];
       try {

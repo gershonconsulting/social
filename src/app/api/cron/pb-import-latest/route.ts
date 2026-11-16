@@ -264,7 +264,7 @@ async function importLinkedIn(apiKey: string, phantomId: string): Promise<Platfo
   });
   const vanityMap = new Map<string, { connId: string; clientId: string; name: string }>();
   for (const c of conns) {
-    const m = (c.externalAccountUrl || "").toLowerCase().match(/linkedin\.com\/(?:company|in|school)\/([^/?#]+)/i);
+    const m = (c.externalAccountUrl || "").toLowerCase().match(/linkedin\.com\/(?:company|showcase|in|school)\/([^/?#]+)/i);
     if (m) vanityMap.set(m[1].toLowerCase(), { connId: c.id, clientId: c.clientId, name: c.client.name });
   }
 
@@ -276,10 +276,10 @@ async function importLinkedIn(apiKey: string, phantomId: string): Promise<Platfo
     if (!url || !text) continue;
     const author = ((iAuthorUrl >= 0 && row[iAuthorUrl]) || (iProfileUrl >= 0 && row[iProfileUrl]) || "").toLowerCase();
     let vanity: string | null = null;
-    const am = author.match(/linkedin\.com\/(?:company|in|school)\/([^/?#]+)/i);
+    const am = author.match(/linkedin\.com\/(?:company|showcase|in|school)\/([^/?#]+)/i);
     if (am) vanity = am[1].toLowerCase();
     else {
-      const um = url.toLowerCase().match(/linkedin\.com\/(?:company|in|school)\/([^/?#]+)/i);
+      const um = url.toLowerCase().match(/linkedin\.com\/(?:company|showcase|in|school)\/([^/?#]+)/i);
       if (um) vanity = um[1].toLowerCase();
     }
     if (!vanity) continue;
