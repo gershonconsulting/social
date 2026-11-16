@@ -63,7 +63,7 @@ async function scrapeLinkedInOne(
   const res: ScrapeResult = { client: clientName, clientId, platform: "LINKEDIN", url, upserted: 0, status: 0 };
   if (!cookies.li_at) { res.error = "no LinkedIn cookies on file"; return res; }
   // Extract vanity name from URL: /company/<vanity>
-  const m = url.match(/linkedin\.com\/(?:company|in)\/([a-zA-Z0-9\-_.]+)/);
+  const m = url.match(/linkedin\.com\/(?:company|showcase|in)\/([a-zA-Z0-9\-_.]+)/);
   if (!m) { res.error = "couldn't parse vanity from URL"; return res; }
   const vanity = m[1];
   // Step 1: resolve company URN

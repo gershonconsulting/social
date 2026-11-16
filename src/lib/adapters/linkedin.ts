@@ -63,7 +63,7 @@ function voyagerHeaders(s: LinkedInSession): HeadersInit {
 
 function extractVanity(url: string | null | undefined): string | null {
   if (!url) return null;
-  const m = url.match(/linkedin\.com\/(?:company|in|school)\/([^\/?#]+)/i);
+  const m = url.match(/linkedin\.com\/(?:company|showcase|in|school)\/([^\/?#]+)/i);
   return m ? m[1] : null;
 }
 
