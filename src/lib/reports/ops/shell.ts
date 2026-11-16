@@ -22,6 +22,7 @@ import { APP_VERSION } from "@/lib/extension-version";
 import { BUSINESS_TZ } from "../et-days";
 import { COLLECTION_DAY_DEFINITION } from "../collection-day";
 import { withAuditBcc } from "@/lib/mail-bcc";
+import { sendResend } from "@/lib/resend-send";
 import { withGcName } from "@/lib/email/sender";
 
 /** House style (v4.67.2): white header, dark #1d1d1f text, brand red #FE1B04 accents only. */
@@ -243,14 +244,10 @@ export async function deliver(
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { kind, subject, to, sent: false, skipped: null, error: "RESEND_API_KEY not set" };
   try {
-    const r = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(withAuditBcc({ from: opts.from || withGcName(process.env.OPS_REPORT_FROM || OPS_FROM), to: toList, subject, html })),
-    });
+    // v4.78.6: retries 429/5xx/network 3x with one Idempotency-Key (lib/resend-send.ts).
+    const r = await sendResend(apiKey, withAuditBcc({ from: opts.from || withGcName(process.env.OPS_REPORT_FROM || OPS_FROM), to: toList, subject, html }), { label: "ops-report" });
     if (!r.ok) {
-      const body = await r.text().catch(() => "");
-      return { kind, subject, to, sent: false, skipped: null, status: r.status, error: body.slice(0, 300) };
+      return { kind, subject, to, sent: false, skipped: null, status: r.status, error: (r.error || "").slice(0, 300) };
     }
     try {
       await markSent(id, `→ ${to}`);
