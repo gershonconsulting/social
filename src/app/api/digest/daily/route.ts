@@ -8,6 +8,7 @@ import { sendDailyReport } from "@/lib/reports/daily-report-send";
 import { resolveFrom, resolveDigestTo } from "@/lib/email/sender";
 import { reportPlan } from "@/lib/reports/settings";
 import { withAuditBcc } from "@/lib/mail-bcc";
+import { sendResend } from "@/lib/resend-send";
 import { primaryOrgId } from "@/lib/reports/monthly/data";
 import { getSession } from "@/lib/auth";
 import { collectionWindow, countCollected, DIGEST_TITLE, loadCollectedPosts, postsFromCompanies, reportSubject, sourceFreshnessLine } from "@/lib/reports/collection-counts";
@@ -338,14 +339,10 @@ async function sendViaResend(html: string, subject: string): Promise<{ ok: boole
   const to = plan.to;
   const from = resolveFrom();
   try {
-    const r = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(withAuditBcc({ from, to, subject, html })),
-    });
+    // v4.78.6: retries 429/5xx/network 3x with one Idempotency-Key (lib/resend-send.ts).
+    const r = await sendResend(apiKey, withAuditBcc({ from, to, subject, html }), { label: "digest" });
     if (!r.ok) {
-      const body = await r.text().catch(() => "");
-      return { ok: false, status: r.status, error: body.slice(0, 400) };
+      return { ok: false, status: r.status, error: (r.error || "").slice(0, 400) };
     }
     return { ok: true, status: r.status };
   } catch (e) {
