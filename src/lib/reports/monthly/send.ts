@@ -19,6 +19,7 @@ import { loadCategories, loadCompanyExtras, monthWindow, primaryOrgId } from "./
 import { APP_VERSION } from "@/lib/extension-version";
 import { competitionHtml, competitionModel, competitionPdf, competitionSubject, type CompetitionModel } from "./competition";
 import { withAuditBcc } from "@/lib/mail-bcc";
+import { sendResend } from "@/lib/resend-send";
 
 export const MONTHLY_SENT_KEY = "monthly_report_sent";
 const REPORT_INBOX = "report@gershonconsulting.com";
@@ -53,16 +54,12 @@ async function resend(msg: { from: string; to: string[]; bcc?: string[]; subject
   const key = process.env.RESEND_API_KEY;
   if (!key) return { ok: false, error: "RESEND_API_KEY not set" };
   try {
-    const r = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify(withAuditBcc({
-        from: msg.from, to: msg.to, bcc: msg.bcc?.length ? msg.bcc : undefined, subject: msg.subject, html: msg.html,
-        attachments: [{ filename: msg.filename, content: msg.pdf }],
-      })),
-    });
-    const body = await r.text().catch(() => "");
-    return r.ok ? { ok: true, id: (body.match(/"id"\s*:\s*"([^"]+)"/) || [])[1] } : { ok: false, status: r.status, error: body.slice(0, 300) };
+    // v4.78.6: retries 429/5xx/network 3x with one Idempotency-Key (lib/resend-send.ts).
+    const r = await sendResend(key, withAuditBcc({
+      from: msg.from, to: msg.to, bcc: msg.bcc?.length ? msg.bcc : undefined, subject: msg.subject, html: msg.html,
+      attachments: [{ filename: msg.filename, content: msg.pdf }],
+    }), { label: "monthly-report" });
+    return r.ok ? { ok: true, id: r.id } : { ok: false, status: r.status, error: (r.error || "").slice(0, 300) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
