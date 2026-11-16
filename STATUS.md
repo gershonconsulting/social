@@ -8,7 +8,7 @@ Commits with `[skip-db-push]` in the message skip `prisma db push` (code-only ch
 Live check: `GET https://social.gershon.ai/api/ping` → `commit` = deployed SHA, `build` = run number.
 
 ## Current — v4.78.5 (open: v4.78.6 Resend retry)
-- v4.78.6 (nightly/2026-11-16-social-resend-retry, NOT merged): every report/alert Resend send retries 429/5xx/network 3x (1s/4s/10s) with the same Idempotency-Key, 4xx not retried, final failure logged (`src/lib/resend-send.ts`, `tests/resend-retry.test.mts`) ✅
+- v4.78.6 (PR #34, merged 2026-11-16, live): every report/alert Resend send retries 429/5xx/network 3x (1s/4s/10s) with the same Idempotency-Key, 4xx not retried, final failure logged (`src/lib/resend-send.ts`, `tests/resend-retry.test.mts`) ✅
 - v4.78.5 (PR #33, merged 2026-11-15): Friday client reports once per client per report Friday. The pack went out twice on Nov 14 (00:17Z = Fri ET run, 22:48Z = the one-off Saturday cron) because the sent-marker was keyed on the ET day the job ran. Now pinned to the report Friday (`src/lib/reports/friday/once.ts`) + Resend Idempotency-Key; test `tests/friday-once.test.mts` ✅
 - v4.78.3 released 2026-11-14 night push (Olivier: "Do them, release them. I test tomorrow everything."):
   - PR #29 — one shared count for every Social report (digest, Collection Report, Competitive report: `countCollected`, ET day of collection, deduped); footer = source + day definition + freshness; subjects say social.gershon.ai ✅
