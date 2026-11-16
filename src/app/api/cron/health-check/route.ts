@@ -6,6 +6,7 @@ import { ClientStatus } from "@prisma/client";
 import { resolveFrom } from "@/lib/email/sender";
 import { siteUrl } from "@/lib/site";
 import { withAuditBcc } from "@/lib/mail-bcc";
+import { sendResend } from "@/lib/resend-send";
 import { healthAlertHtml } from "@/lib/alerts/health-email";
 
 /**
@@ -171,14 +172,10 @@ async function sendAlert(html: string, subject: string): Promise<{ ok: boolean; 
   const to = plan.to;
   const from = resolveFrom(process.env.HEALTH_ALERT_FROM);
   try {
-    const r = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(withAuditBcc({ from, to, reply_to: REPLY_TO, subject, html })),
-    });
+    // v4.78.6: retries 429/5xx/network 3x with one Idempotency-Key (lib/resend-send.ts).
+    const r = await sendResend(apiKey, withAuditBcc({ from, to, reply_to: REPLY_TO, subject, html }), { label: "health-check" });
     if (!r.ok) {
-      const body = await r.text().catch(() => "");
-      return { ok: false, status: r.status, error: body.slice(0, 400), to };
+      return { ok: false, status: r.status, error: (r.error || "").slice(0, 400), to };
     }
     return { ok: true, status: r.status, to };
   } catch (e) {

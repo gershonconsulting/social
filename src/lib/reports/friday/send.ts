@@ -11,6 +11,7 @@
  */
 import rawDb from "@/lib/db-raw";
 import { withAuditBcc } from "@/lib/mail-bcc";
+import { sendResend } from "@/lib/resend-send";
 import { withGcName } from "@/lib/email/sender";
 import { OPS_FROM } from "../ops/shell";
 import { loadFridayData, type FridayData } from "./data";
@@ -77,14 +78,13 @@ export async function sendFridayPack(orgId: string, clientId: string, opts: { fo
     emails,
     {
       post: async (e, idempotencyKey) => {
-        const headers: Record<string, string> = { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` };
-        if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
-        const r = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers,
-          body: JSON.stringify(withAuditBcc({ from, to, subject: e.subject, html: e.html })),
+        // v4.78.6: retries 429/5xx/network 3x with the same Idempotency-Key (lib/resend-send.ts).
+        // A 409 for an already-used key is not retried, so once.ts still sees it as "already sent".
+        const r = await sendResend(apiKey, withAuditBcc({ from, to, subject: e.subject, html: e.html }), {
+          idempotencyKey: idempotencyKey || undefined,
+          label: `friday-${e.kind}`,
         });
-        return { status: r.status, text: r.ok ? "" : await r.text().catch(() => "") };
+        return { status: r.status, text: r.ok ? "" : r.text || r.error || "" };
       },
       readSent,
       markSent: (key) => markSent(key, `→ ${to.join(", ")}`),

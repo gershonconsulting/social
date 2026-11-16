@@ -282,3 +282,18 @@ UPDATE 2026-11-15  -  v4.78.5  Friday client reports go out once per report Frid
        Idempotency-Key. Test tests/friday-once.test.mts (19/19, TZ UTC/New_York/Paris).
        ❌ after merge: next Friday (Nov 20) 1 pack per client; a manual re-run of "Friday client reports" must log "already sent".
        ❌ friday-reports.yml: drop the spent `0 19 14 11 *` line + add a concurrency group (nightly app lacks `workflows` permission).
+
+----------------------------------------------------------------
+UPDATE 2026-11-16  -  v4.78.6  Resend sends retry on 429/5xx/network with the same Idempotency-Key (nightly, NOT merged)
+----------------------------------------------------------------
+[2026-11-16] ✅ ready to test - branch nightly/2026-11-16-social-resend-retry. Why: 2026-11-13 18:20-21:54 UTC Resend failed and the
+       Social report (with Task, Publish, Radar ones) was never retried - every sender made one attempt.
+       ✅ src/lib/resend-send.ts sendResend(): network/10 s timeout, 429, 5xx (+409 concurrent_idempotent_requests) retried 3x after
+       1 s / 4 s / 10 s with the SAME Idempotency-Key (caller key kept, e.g. Friday once.ts; else one UUID per email) - no double send;
+       other 4xx (incl. Friday's 409 "already sent") not retried; final failure logged "[resend] <label>: FINAL FAILURE ... idempotency <key>".
+       Used by: ops reports (shell.ts), Collection daily report, Friday packs, monthly reports, posting alerts, digest, health-check
+       alert, talking-points relay. No sender / recipient / secret change [skip-db-push].
+       ✅ tests/resend-retry.test.mts 5/5 (429->200 = one send same key; 400 no retry; network+503 keeps caller key; 4x500 final
+       failure; 409 not retried) added to npm test; npm test all green; tsc --noEmit clean; next build passes.
+       ❌ Not changed: extension/linkedin-session sign-out alert and workspaces/import-radar-competitors still send once.
+       ❌ Not merged / not deployed.
