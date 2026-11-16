@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Platform } from "@prisma/client";
 import { dbForOrg } from "@/lib/scoped-db";
 import { resolveExtensionCaller } from "@/lib/extension-auth";
+import { parseLinkedInPage, type LinkedInPageKind } from "@/lib/linkedin-page";
 
 /**
  * GET /api/extension/clients
@@ -24,7 +25,7 @@ import { resolveExtensionCaller } from "@/lib/extension-auth";
  *     data: {
  *       clients: [
  *         { id, name, slug,
- *           linkedin: { connectionId, url, vanity } | null,
+ *           linkedin: { connectionId, url, vanity, kind } | null,   // kind: company | showcase | school | in
  *           twitter:  { connectionId, url, handle } | null
  *         },
  *         ...
@@ -72,7 +73,7 @@ export async function GET(req: NextRequest) {
       name: string;
       slug: string;
       category: string;
-      linkedin: { connectionId: string; url: string; vanity: string } | null;
+      linkedin: { connectionId: string; url: string; vanity: string; kind: LinkedInPageKind } | null;
       twitter: { connectionId: string; url: string; handle: string } | null;
     }> = [];
 
@@ -84,11 +85,11 @@ export async function GET(req: NextRequest) {
     for (const c of clients) {
       const li = c.platformConnections.find((p) => p.platform === Platform.LINKEDIN);
       const tw = c.platformConnections.find((p) => p.platform === Platform.TWITTER);
-      let linkedin: { connectionId: string; url: string; vanity: string } | null = null;
+      let linkedin: { connectionId: string; url: string; vanity: string; kind: LinkedInPageKind } | null = null;
       let twitter: { connectionId: string; url: string; handle: string } | null = null;
       if (li?.externalAccountUrl) {
-        const m = li.externalAccountUrl.match(/linkedin\.com\/(?:company|in|school)\/([^/?#]+)/i);
-        if (m) linkedin = { connectionId: li.id, url: li.externalAccountUrl, vanity: m[1] };
+        const page = parseLinkedInPage(li.externalAccountUrl);
+        if (page) linkedin = { connectionId: li.id, url: li.externalAccountUrl, vanity: page.vanity, kind: page.kind };
       }
       if (tw?.externalAccountUrl) {
         const m = tw.externalAccountUrl.match(/(?:twitter\.com|x\.com)\/([A-Za-z0-9_]{1,20})/i);

@@ -6,7 +6,7 @@
  *   - GET /api/extension/version  (the popup's update check)
  *   - the public home page        (download card)
  */
-export const EXTENSION_LATEST = "0.26.0";
+export const EXTENSION_LATEST = "0.27.0";
 
 /**
  * The download carries its version in the file name, like the other Gershon
