@@ -13,6 +13,7 @@
 export const runtime = "edge";
 
 import { withAuditBcc } from "@/lib/mail-bcc";
+import { sendResend } from "@/lib/resend-send";
 
 const TP_ORIGIN = "https://talkingpoints.gershon.ai";
 const FROM = "Talking Points <talkingpoints@gershon.ai>";
@@ -45,12 +46,10 @@ export async function POST(req: Request) {
     text: m.text ? String(m.text) : undefined,
     reply_to: m.reply_to && EMAIL.test(m.reply_to) ? m.reply_to : "olivier@gershonconsulting.com",
   });
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { authorization: `Bearer ${key}`, "content-type": "application/json", "user-agent": "social.gershon.ai/relay" },
-    body: JSON.stringify(payload),
-  });
-  const out = await res.json().catch(() => ({}));
+  // v4.78.6: retries 429/5xx/network 3x with one Idempotency-Key (lib/resend-send.ts).
+  const res = await sendResend(key, payload, { idempotencyKey: `talkingpoints-${id}`, label: "relay-talkingpoints" });
+  let out: unknown = {};
+  try { out = JSON.parse(res.text || "{}"); } catch { out = { error: res.error }; }
   if (!res.ok) return Response.json({ ok: false, error: "Resend refused", detail: out }, { status: 502 });
-  return Response.json({ ok: true, id: (out as { id?: string }).id, to });
+  return Response.json({ ok: true, id: res.id, to });
 }

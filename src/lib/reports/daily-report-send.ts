@@ -19,6 +19,7 @@ import prisma from "@/lib/db";
 import { buildDailyReport, REPORT_SENT_KEY, DEFAULT_REPORT_TO, type DailyReport } from "./daily-report";
 import { renderDailyReportHtml, dailyReportSubject } from "./daily-report-render";
 import { withAuditBcc } from "@/lib/mail-bcc";
+import { sendResend } from "@/lib/resend-send";
 
 const KEEP_KEYS = 30;
 
@@ -75,14 +76,10 @@ async function sendViaResend(
   // so the report uses it and leaves the digest's sender untouched.
   const from = withGcName(process.env.REPORT_FROM || "GC Social <reports@gershon.ai>");
   try {
-    const r = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(withAuditBcc({ from, to: to.split(/\s*,\s*/).filter(Boolean), subject, html })),
-    });
+    // v4.78.6: retries 429/5xx/network 3x with one Idempotency-Key (lib/resend-send.ts).
+    const r = await sendResend(apiKey, withAuditBcc({ from, to: to.split(/\s*,\s*/).filter(Boolean), subject, html }), { label: "daily-report" });
     if (!r.ok) {
-      const body = await r.text().catch(() => "");
-      return { ok: false, status: r.status, error: body.slice(0, 400) };
+      return { ok: false, status: r.status, error: (r.error || "").slice(0, 400) };
     }
     return { ok: true, status: r.status };
   } catch (e) {
