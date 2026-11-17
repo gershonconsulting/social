@@ -5,6 +5,18 @@ Date: 2026-09-09
 ================================================================
 
 ----------------------------------------------------------------
+2026-11-17 nightly  -  v4.79.2 (branch nightly/2026-11-17-coverage-wording)
+----------------------------------------------------------------
+[DONE/LIVE] v4.79.1 version alignment: footer APP_VERSION = package.json,
+  enforced by tests/app-version.test.mts.
+[DONE] Daily digest coverage snapshot now says "59 companies x 2 networks
+  = 118 profiles: 34 up to date, 36 stale, 9 link only, 39 missing"
+  (wording only; src/app/api/digest/daily/route.ts; internal recipients).
+[TO DO] LinkedIn collector broke around 11-11: gx-linkedin.js harvest()
+  readNew/readOld match nothing since a LinkedIn markup change; 0 posts
+  stored 11-12 to 11-15. Fix needs a new extension release (0.27.1).
+
+----------------------------------------------------------------
 2026-10-23 nightly  -  Report e-mails in the house style (branch
 nightly/2026-10-23-report-emails, base claude/social-campaign-verification-jiG5E)
 Preview: https://claude.ai/artifact/KJjafTUE8znwZX87p7hTf2 (sample data)
