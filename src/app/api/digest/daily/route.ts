@@ -310,6 +310,7 @@ function renderHtml(d: DigestData): string {
   </div>
   <div style="padding:18px 24px;">
     <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#666;margin-bottom:10px;">Coverage snapshot</div>
+    <div style="font-size:13px;color:#444;margin-bottom:10px;">${d.coverageSummary.totalCells / 2} companies × 2 networks (LinkedIn, X) = ${d.coverageSummary.totalCells} profiles: ${d.coverageSummary.tier3} up to date, ${d.coverageSummary.tier2} stale, ${d.coverageSummary.tier1} link only, ${d.coverageSummary.tier0} missing</div>
     <table style="width:100%;border-collapse:collapse;font-size:14px;">
       <tr>
         <td style="padding:8px 12px;background:#d1fae5;color:#065f46;font-weight:700;text-align:center;width:25%;">${d.coverageSummary.tier3}<br><span style="font-size:11px;font-weight:500;">✓✓✓ Up to date</span></td>
