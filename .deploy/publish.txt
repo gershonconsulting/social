@@ -13,3 +13,4 @@ Last deploy request for publish.gershon.ai (gershonconsulting/publish@main)
 2026-11-17 v0.19.0 publish@08d6922 published links
 2026-11-18T02:22Z v0.19.2 clickable Connections cards, PR #32 (publish@ccc7fff) - by Claude (nightly auto-merge rule: SAFE, UI only)
 2026-11-18T02:55Z v0.19.2 re-trigger (publish@42b53fd) - 02:22Z request not live after 25 min - by Claude (nightly)
+2026-11-18 v0.19.3 one PUB-203/PUB-204 per burst (internal team inbox only), PR #34 (publish@ea32418) - by Claude (nightly: internal-only email change)
