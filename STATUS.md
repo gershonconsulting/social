@@ -1,13 +1,16 @@
 # Social (social.gershon.ai) — STATUS
 
-Last updated: 2026-11-17 (nightly)
+Last updated: 2026-11-18
 
 ## Deploy route
 Push / merge to `claude/social-campaign-verification-jiG5E` (the default branch) → `.github/workflows/deploy.yml` → Cloudflare Pages `gershoncrm-social`.
 Commits with `[skip-db-push]` in the message skip `prisma db push` (code-only changes).
 Live check: `GET https://social.gershon.ai/api/ping` → `commit` = deployed SHA, `build` = run number.
 
-## Current — v4.79.1 (version sync)
+## Current — v4.79.3 (Friday pack sent-marker retry)
+- ✅ v4.79.3 PR #38 merged 2026-11-18 (c339136, approved by Olivier "All 10"): Friday pack sent-marker write retried 3x (`once.ts`); tsc clean, `npm test` all suites green (friday-once 22/22); LIVE 12:51Z (ping commit c339136)
+
+## Previous — v4.79.1 (version sync)
 - v4.79.1 (nightly/2026-11-17-social-version): APP_VERSION constant (footer "App v…") was 4.78.6 while package.json was 4.79.0; both now 4.79.1, guarded by `tests/app-version.test.mts` (first step of `npm test`). Note: the "v0.27.0" on the home page is the Chrome EXTENSION version ("Chrome extension v0.27.0"), not the app version — correct as is ✅
 
 ## Previous — v4.78.5 (open: v4.78.6 Resend retry)
@@ -25,7 +28,7 @@ Live check: `GET https://social.gershon.ai/api/ping` → `commit` = deployed SHA
 
 ## Open ❌
 - Resend retry not yet on the LinkedIn sign-out alert (`api/extension/linkedin-session`) and `workspaces/import-radar-competitors` ❌
-- `.github/workflows/friday-reports.yml`: remove the spent one-off line `0 19 14 11 *` + add `concurrency: friday-reports` (the nightly GitHub App has no `workflows` permission; harmless meanwhile) ❌
+- `.github/workflows/friday-reports.yml`: remove the spent one-off line `0 19 14 11 *` + guard step, add `concurrency: friday-reports` (the nightly GitHub App has no `workflows` permission; harmless meanwhile; exact edit in PR #38 body) ❌
 - E-mail sender name — open decision for Olivier (unchanged tonight) ❌
 - #18 v4.70.0 Actions (per-workspace competitive report to client admins) ❌
 - #20 v4.71.0 Settings → Reports ❌
