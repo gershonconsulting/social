@@ -4,7 +4,7 @@
 // Saturday catch-up (22:48Z) must resolve to the same report Friday, the same
 // week and the same keys, so the second run sends nothing.
 const load = async (p: string) => { const m: any = await import(p); return { ...(m.default ?? {}), ...m }; };
-const { fridayReportDay, fridayWeekFor, fridaySentKey, fridayIdempotencyKey, sendOncePerReportDay, addDays, weekdayOf } = await load("../src/lib/reports/friday/once.ts");
+const { fridayReportDay, fridayWeekFor, fridaySentKey, fridayIdempotencyKey, sendOncePerReportDay, addDays, weekdayOf, markSentWithRetry } = await load("../src/lib/reports/friday/once.ts");
 
 let pass = 0, fail = 0;
 const ok = (c: unknown, msg: string) => { if (c) { pass++; console.log("  ✓", msg); } else { fail++; console.log("  ✗", msg); } };
@@ -67,6 +67,20 @@ const test = await sendOncePerReportDay("valos", "2026-11-13", pack, d3, { testO
 ok(test.every((r: any) => r.sent), "?to= test send ignores the marker");
 const failing = await sendOncePerReportDay("x", "2026-11-13", pack.slice(0, 1), { ...d3, post: async () => ({ status: 500, text: "boom" }) });
 ok(failing[0].error === "Resend 500: boom", "Resend error is reported, not marked sent");
+
+console.log("7. marker write retried, so a blip cannot lose the once-per-Friday marker");
+const flaky: Record<string, string> = {}; let writes = 0;
+const d7 = {
+  post: async () => ({ status: 200, text: "" }),
+  readSent: async () => ({ ...flaky }),
+  markSent: async (k: string) => { writes++; if (writes < 3) throw new Error("db blip"); flaky[k] = "ok"; },
+};
+const pack1 = pack.slice(0, 1);
+const r7 = await sendOncePerReportDay("flaky", "2026-11-13", pack1, d7);
+ok(r7[0].sent && flaky["company:flaky:2026-11-13"] === "ok", "marker written on the 3rd attempt");
+const r7b = await sendOncePerReportDay("flaky", "2026-11-13", pack1, d7);
+ok(!r7b[0].sent && /already sent/.test(r7b[0].skipped), "late run (>24 h, no Resend key window) is skipped by the marker");
+ok((await markSentWithRetry(async () => { throw new Error("down"); }, "k")) === false, "gives up quietly after 3 attempts (e-mail is already out)");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
