@@ -56,6 +56,19 @@ export function fridayIdempotencyKey(kind: FridayKindId, clientId: string, repor
   return `social-client-${clientId}-${kind}-${reportDay}`;
 }
 
+/**
+ * v4.79.3: the sent-marker is the second line of defence (Resend's Idempotency-Key only
+ * lasts 24 h, and the 2026-11-14 double batch was 22.5 h apart). A marker write that fails
+ * once (DB blip right after the e-mail went out) is retried, so a late run cannot slip past
+ * both guards. Never throws: the e-mail is already sent.
+ */
+export async function markSentWithRetry(markSent: (key: string) => Promise<void>, key: string, attempts = 3): Promise<boolean> {
+  for (let i = 0; i < attempts; i++) {
+    try { await markSent(key); return true; } catch { /* retry */ }
+  }
+  return false;
+}
+
 export type OnceEmail = { kind: FridayKindId; subject: string; html: string };
 export type OnceResult = { kind: FridayKindId; subject: string; sent: boolean; skipped?: string; error?: string };
 export type OnceDeps = {
@@ -91,7 +104,7 @@ export async function sendOncePerReportDay(
       const r = await deps.post(e, idem);
       if (r.status === 409 && idem) {
         // Resend already accepted this key in the last 24 h (or one is in flight): it was sent.
-        await deps.markSent(key).catch(() => undefined);
+        await markSentWithRetry(deps.markSent, key);
         out.push({ ...base, sent: false, skipped: `already sent for report day ${reportDay} (Resend idempotency key)` });
         continue;
       }
@@ -99,7 +112,7 @@ export async function sendOncePerReportDay(
         out.push({ ...base, sent: false, error: `Resend ${r.status}: ${r.text.slice(0, 200)}` });
         continue;
       }
-      if (!opts.testOnly) await deps.markSent(key).catch(() => undefined);
+      if (!opts.testOnly) await markSentWithRetry(deps.markSent, key);
       out.push({ ...base, sent: true });
     } catch (err) {
       out.push({ ...base, sent: false, error: err instanceof Error ? err.message : String(err) });
