@@ -7,7 +7,10 @@ Push / merge to `claude/social-campaign-verification-jiG5E` (the default branch)
 Commits with `[skip-db-push]` in the message skip `prisma db push` (code-only changes).
 Live check: `GET https://social.gershon.ai/api/ping` → `commit` = deployed SHA, `build` = run number.
 
-## Current — v4.79.3 (Friday pack sent-marker retry)
+## Current — v4.80.0 (client report weekly)
+- ✅ v4.80.0: client workspaces' Competitive report goes out WEEKLY on Friday (ET) instead of daily (Olivier 2026-11-18). Gershon's own daily reports unchanged; a forced send still works any day. `src/lib/reports/ops/weekly.ts`, `tests/client-weekly.test.mts` 6/6; tsc + npm test green. Hold still on (goes to report@ "[REVIEW — not sent to client]").
+
+## Previous — v4.79.3 (Friday pack sent-marker retry)
 - ✅ v4.79.3 PR #38 merged 2026-11-18 (c339136, approved by Olivier "All 10"): Friday pack sent-marker write retried 3x (`once.ts`); tsc clean, `npm test` all suites green (friday-once 22/22); LIVE 12:51Z (ping commit c339136)
 
 ## Previous — v4.79.1 (version sync)

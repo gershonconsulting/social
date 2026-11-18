@@ -13,6 +13,7 @@ import { cardButtonsHtml, cardsEmailHtml, resultsEmailHtml } from "@/lib/actions
 import { cardId, pillarOf } from "@/lib/actions/store";
 import { buildResults } from "@/lib/actions/results";
 import { workspaceLabel } from "../report-subject";
+import { isClientReportDay } from "./weekly";
 
 // v4.65.0: "content" (Content Ready — approved posts waiting to publish) left
 // with publishing; Publish's own daily inventory email covers it.
@@ -109,7 +110,9 @@ export async function sendOps(opts: { kinds?: OpsKind[]; force?: boolean; to?: s
       out.push({ kind, sent: false, error: e instanceof Error ? e.message : String(e) });
     }
   }
-  if (opts.workspaces !== false && (!opts.kinds || opts.kinds.includes("competitive"))) {
+  // v4.80.0: client workspaces get their Competitive report WEEKLY (Fridays ET), not daily.
+  // A forced send (manual re-run) still goes out any day.
+  if (opts.workspaces !== false && (!opts.kinds || opts.kinds.includes("competitive")) && (opts.force || isClientReportDay())) {
     let list: Array<{ id: string; name: string; to: string[] }> = [];
     try {
       list = await competitiveWorkspaces(org);
@@ -155,6 +158,10 @@ export async function sendWorkspaceCompetitive(orgId: string, opts: { force?: bo
   const primary = await primaryOrgId();
   const w = (await competitiveWorkspaces(primary)).find((x) => x.id === orgId);
   if (!w) return [{ kind: "competitive", sent: false, error: "workspace has no competitor/partner or no admin to send to" }];
+  // v4.80.0: weekly — outside Friday (ET) only a forced send goes out.
+  if (!opts.force && !isClientReportDay()) {
+    return [{ kind: "competitive", subject: "", to: "", sent: false, skipped: "client reports are weekly (Fridays ET)" }];
+  }
   const b = await buildOps("competitive", w.id);
   // v4.77.0 — Olivier 2026-11-10: "Do not send the reports to clients yet, we need to
   // review them". While the hold is on (default), a client workspace's report goes to
