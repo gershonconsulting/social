@@ -1,13 +1,17 @@
 # Social (social.gershon.ai) — STATUS
 
-Last updated: 2026-11-18
+Last updated: 2026-11-19
 
 ## Deploy route
 Push / merge to `claude/social-campaign-verification-jiG5E` (the default branch) → `.github/workflows/deploy.yml` → Cloudflare Pages `gershoncrm-social`.
 Commits with `[skip-db-push]` in the message skip `prisma db push` (code-only changes).
 Live check: `GET https://social.gershon.ai/api/ping` → `commit` = deployed SHA, `build` = run number.
 
-## Current — v4.80.0 (client report weekly)
+## Current — v4.80.1 (GC sender on internal emails)
+- ✅ v4.80.1 (nightly 2026-11-19): emails whose To/Cc are ALL Gershon addresses (gershonconsulting.com / gershon.ai) go out as "GC Social" (was "Social.gershon.ai") and Talking Points relay mails as "GC Talking Points" (was "Talking Points"). Any client recipient → sender unchanged. Address never changes. One hook: `internalSender()` in `src/lib/email/sender.ts`, applied in `withAuditBcc()`. `tests/internal-sender.test.mts`; tsc + npm test green.
+- ❌ Subjects still carry no task/report number: no number is assigned to Social's reports in any registry — Olivier to assign.
+
+## Previous — v4.80.0 (client report weekly)
 - ✅ v4.80.0: client workspaces' Competitive report goes out WEEKLY on Friday (ET) instead of daily (Olivier 2026-11-18). Gershon's own daily reports unchanged; a forced send still works any day. `src/lib/reports/ops/weekly.ts`, `tests/client-weekly.test.mts` 6/6; tsc + npm test green. Hold still on (goes to report@ "[REVIEW — not sent to client]").
 
 ## Previous — v4.79.3 (Friday pack sent-marker retry)
@@ -32,7 +36,7 @@ Live check: `GET https://social.gershon.ai/api/ping` → `commit` = deployed SHA
 ## Open ❌
 - Resend retry not yet on the LinkedIn sign-out alert (`api/extension/linkedin-session`) and `workspaces/import-radar-competitors` ❌
 - `.github/workflows/friday-reports.yml`: remove the spent one-off line `0 19 14 11 *` + guard step, add `concurrency: friday-reports` (the nightly GitHub App has no `workflows` permission; harmless meanwhile; exact edit in PR #38 body) ❌
-- E-mail sender name — open decision for Olivier (unchanged tonight) ❌
+- E-mail sender name: internal-only emails now "GC Social" (v4.80.1, audit option "GC + number for internal only"); client emails still "Social.gershon.ai"; subject numbers not assigned yet ❌
 - #18 v4.70.0 Actions (per-workspace competitive report to client admins) ❌
 - #20 v4.71.0 Settings → Reports ❌
 - GET /api/report/ops?kind=… previews readable without sign-in ❌

@@ -5,6 +5,17 @@ Date: 2026-09-09
 ================================================================
 
 ----------------------------------------------------------------
+2026-11-19 nightly  -  v4.80.1 (branch nightly/2026-11-19-internal-email-naming)
+----------------------------------------------------------------
+[DONE] Internal-only emails (every To/Cc @gershonconsulting.com / @gershon.ai)
+  show sender "GC Social" (was "Social.gershon.ai"); Talking Points relay
+  mails to Gershon-only lists show "GC Talking Points" (was "Talking Points").
+  Client emails (any outside recipient) unchanged. src/lib/email/sender.ts
+  internalSender(), applied in src/lib/mail-bcc.ts withAuditBcc();
+  tests/internal-sender.test.mts.
+[TO DO] Report subjects have no task number; none assigned yet (Olivier).
+
+----------------------------------------------------------------
 2026-11-17 nightly  -  v4.79.2 (branch nightly/2026-11-17-coverage-wording)
 ----------------------------------------------------------------
 [DONE/LIVE] v4.79.1 version alignment: footer APP_VERSION = package.json,

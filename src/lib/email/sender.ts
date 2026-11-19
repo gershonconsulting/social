@@ -92,3 +92,48 @@ export function resolveDigestTo(): string[] {
   );
   return explicit.length ? explicit : [...DIGEST_RECIPIENTS];
 }
+
+/**
+ * v4.80.1 (nightly 2026-11-19) — GC prefix on INTERNAL emails only.
+ * Olivier's sender rule: a Gershon-internal report shows a display name starting
+ * with "GC " (Talking Points already does this itself: "GC Talking Points").
+ * An email goes out with the GC name ONLY when every To/Cc address is a Gershon
+ * address (gershonconsulting.com / gershon.ai). As soon as one recipient is
+ * outside Gershon (a client), the sender is left exactly as the caller set it,
+ * so client e-mails keep "Social.gershon.ai" / "Talking Points" / "Social by
+ * Gershon.AI". Only the display name changes; the address is never touched.
+ * Applied to every Resend payload through withAuditBcc() (lib/mail-bcc.ts).
+ */
+export const INTERNAL_DOMAINS = ["gershonconsulting.com", "gershon.ai"];
+export const INTERNAL_SENDER_NAMES: Record<string, string> = {
+  "social.gershon.ai": "GC Social",
+  "talking points": "GC Talking Points",
+};
+
+function addrList(v: unknown): string[] {
+  if (!v) return [];
+  return (Array.isArray(v) ? v : String(v).split(","))
+    .map((x) => bareAddress(String(x)))
+    .filter(Boolean);
+}
+
+export function isInternalAddress(addr: string): boolean {
+  const a = bareAddress(addr);
+  const at = a.lastIndexOf("@");
+  return at > 0 && INTERNAL_DOMAINS.includes(a.slice(at + 1));
+}
+
+/** All To + Cc recipients are Gershon addresses (Bcc is ignored: it is the audit copy). */
+export function isInternalOnly(to: unknown, cc?: unknown): boolean {
+  const all = [...addrList(to), ...addrList(cc)];
+  return all.length > 0 && all.every(isInternalAddress);
+}
+
+/** "Social.gershon.ai <x@gershon.ai>" -> "GC Social <x@gershon.ai>" when the email is internal-only. */
+export function internalSender(from: string, to: unknown, cc?: unknown): string {
+  if (typeof from !== "string" || !isInternalOnly(to, cc)) return from;
+  const m = from.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
+  if (!m) return from;
+  const gc = INTERNAL_SENDER_NAMES[m[1].trim().toLowerCase()];
+  return gc ? `${gc} <${m[2].trim()}>` : from;
+}
