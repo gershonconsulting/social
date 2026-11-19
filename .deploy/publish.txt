@@ -18,3 +18,4 @@ Last deploy request for publish.gershon.ai (gershonconsulting/publish@main)
 2026-11-19 v0.20.1 version footer "Publish by Gershon.AI" on shell + /login, PR #35 (publish@914a705) - by Claude (nightly: visible text only)
 2026-11-19T16:32Z v0.21.0 weekly connections report PUB-215 to report@, PR #36 (publish@74f7109) - by Claude (approved by Olivier "ship it")
 2026-11-19T16:40Z v0.22.0 semi-autopilot + weekdays only + @company tag, PR #37 (publish@fdc495f) - by Claude (approved by Olivier "ship it")
+2026-11-19T23:13:02Z v0.23.0 Knowledge links (publish@30c8f58, PR #38) — Olivier ship it
