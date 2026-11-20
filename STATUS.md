@@ -1,13 +1,18 @@
 # Social (social.gershon.ai) — STATUS
 
-Last updated: 2026-11-19
+Last updated: 2026-11-20
 
 ## Deploy route
 Push / merge to `claude/social-campaign-verification-jiG5E` (the default branch) → `.github/workflows/deploy.yml` → Cloudflare Pages `gershoncrm-social`.
 Commits with `[skip-db-push]` in the message skip `prisma db push` (code-only changes).
 Live check: `GET https://social.gershon.ai/api/ping` → `commit` = deployed SHA, `build` = run number.
 
-## Current — v4.80.1 (GC sender on internal emails)
+## Current — v4.80.2 (digest says "No collection")
+- ✅ v4.80.2 (nightly 2026-11-20): internal daily digest no longer looks like a quiet day when nothing was collected. Headline + subject: "⚠ No collection on <day> — 0 posts (collector did not run / collector failed: N runs, F failed, 0 stored; top error …)". New "Collection status" block on every digest: heartbeat runs/attempted/stored/failed, last successful collection date, profiles missing X of 120 with top reasons, top current collection errors. Normal-day subject unchanged. `src/lib/reports/digest-headline.ts`, `tests/digest-headline.test.mts`; tsc + npm test green.
+- ❌ Separate "⛔ NO COLLECTION" mail NOT merged: it is the daily Social Collection Report itself (scorecard + links to fix); dropping it on bad days would lose that. Both now carry the same verdict.
+- ❌ Root cause of the 0-post days: collector runs (11-18: 13 runs, 20 failed) but LinkedIn harvest reads nothing ("LinkedIn layout changed again" / "no posts found"), extension 0.27.0 — needs a new extension release with updated LinkedIn selectors (live DOM needed). Report sends land ~7-8h after their cron time (digest cron 13:00Z, sent ~21:10Z) — check Actions schedule.
+
+## Previous — v4.80.1 (GC sender on internal emails)
 - ✅ v4.80.1 (nightly 2026-11-19): emails whose To/Cc are ALL Gershon addresses (gershonconsulting.com / gershon.ai) go out as "GC Social" (was "Social.gershon.ai") and Talking Points relay mails as "GC Talking Points" (was "Talking Points"). Any client recipient → sender unchanged. Address never changes. One hook: `internalSender()` in `src/lib/email/sender.ts`, applied in `withAuditBcc()`. `tests/internal-sender.test.mts`; tsc + npm test green.
 - ❌ Subjects still carry no task/report number: no number is assigned to Social's reports in any registry — Olivier to assign.
 

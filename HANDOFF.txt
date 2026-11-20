@@ -5,6 +5,17 @@ Date: 2026-09-09
 ================================================================
 
 ----------------------------------------------------------------
+2026-11-20 nightly  -  v4.80.2 (branch nightly/2026-11-20-social-digest-nocollection)
+----------------------------------------------------------------
+[DONE] Internal daily digest: 0-post days say "⚠ No collection on <day> -
+  0 posts (collector did not run / failed: <reason>)" in headline and
+  subject; new Collection status block (heartbeat, last successful
+  collection, profiles missing + top reasons, top errors).
+  src/lib/reports/digest-headline.ts; tests/digest-headline.test.mts.
+[TO DO] LinkedIn harvest still reads 0 posts (ext 0.27.0): new extension
+  release needed. Separate Collection Report kept (not merged).
+
+----------------------------------------------------------------
 2026-11-19 nightly  -  v4.80.1 (branch nightly/2026-11-19-internal-email-naming)
 ----------------------------------------------------------------
 [DONE] Internal-only emails (every To/Cc @gershonconsulting.com / @gershon.ai)
