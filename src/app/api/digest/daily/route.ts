@@ -11,8 +11,10 @@ import { withAuditBcc } from "@/lib/mail-bcc";
 import { sendResend } from "@/lib/resend-send";
 import { primaryOrgId } from "@/lib/reports/monthly/data";
 import { getSession } from "@/lib/auth";
-import { collectionWindow, countCollected, DIGEST_TITLE, loadCollectedPosts, postsFromCompanies, reportSubject, sourceFreshnessLine } from "@/lib/reports/collection-counts";
+import { collectionWindow, countCollected, DIGEST_TITLE, loadCollectedPosts, reportSubject, sourceFreshnessLine } from "@/lib/reports/collection-counts";
 import { siteUrl } from "@/lib/site";
+import { readHeartbeat } from "@/lib/extension/heartbeat";
+import { digestHeadline, groupReasons, topReasons, type Reason } from "@/lib/reports/digest-headline";
 
 /**
  * GET  /api/digest/daily            — render the digest as JSON (preview).
@@ -49,6 +51,13 @@ interface DigestData {
   topPosts: Array<{ clientName: string; platform: string; snippet: string; postUrl: string; engagement: number; publishedAt: string }>;
   recentSyncErrors: Array<{ clientName: string; platform: string; error: string; lastSyncAt: string | null }>;
   coverageSummary: { tier3: number; tier2: number; tier1: number; tier0: number; totalCells: number };
+  /** v4.80.2: collection health — did the collector run, why not, when it last worked. */
+  health: {
+    heartbeat: { runs: number; attempted: number; upserted: number; failed: number } | null;
+    failureReasons: Reason[];
+    missingReasons: Reason[];
+    lastSuccessDay: string | null;
+  };
 }
 
 async function buildDigest(): Promise<DigestData> {
@@ -197,8 +206,42 @@ async function buildDigest(): Promise<DigestData> {
     }
   }
 
+  // 7. Collection health (v4.80.2): heartbeat for the day, current failure
+  //    reasons, why profiles are missing, and the last day anything was stored.
+  const [hb, failConns, lastPost] = await Promise.all([
+    readHeartbeat(),
+    prisma.platformConnection.findMany({
+      where: { isEnabled: true, lastSyncError: { not: null }, platform: { in: COVERAGE_PLATFORMS }, client: { status: ClientStatus.ACTIVE, organizationId: orgId } },
+      select: { lastSyncError: true },
+      take: 200,
+    }),
+    prisma.socialPost.findFirst({
+      where: { createdAt: { lt: to }, client: { organizationId: orgId } },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    }),
+  ]);
+  const missingReasons: Reason[] = [];
+  for (const plat of COVERAGE_PLATFORMS) {
+    let n = 0;
+    for (const c of clients) {
+      const conn = conns.find((cc) => cc.clientId === c.id && cc.platform === plat);
+      if (!conn?.externalAccountUrl) n++;
+    }
+    missingReasons.push({ reason: `no ${PLATFORM_LABELS[plat] ?? plat} link set`, n });
+  }
+  const lastSuccessDay = lastPost?.createdAt
+    ? lastPost.createdAt.toLocaleDateString("en-US", { timeZone: "America/New_York", dateStyle: "long" })
+    : null;
+
   return {
     generatedAt: now.toISOString(),
+    health: {
+      heartbeat: hb.days[win.dayKey] ?? null,
+      failureReasons: groupReasons(failConns.map((c) => c.lastSyncError)),
+      missingReasons: topReasons(missingReasons),
+      lastSuccessDay,
+    },
     window: { from: from.toISOString(), to: to.toISOString(), dayKey: win.dayKey, dayShort: win.dayShort },
     totals: { newPosts: count.day.posts, clientsWithActivity: count.day.companies },
     perCompany,
@@ -224,7 +267,40 @@ const CATEGORY_LABELS: Record<string, string> = {
   COMPETITION: "Competition",
 };
 
+function headlineOf(d: DigestData) {
+  return digestHeadline({
+    dayShort: d.window.dayShort,
+    posts: d.totals.newPosts,
+    companies: d.totals.clientsWithActivity,
+    heartbeat: d.health.heartbeat,
+    failureReasons: d.health.failureReasons,
+  });
+}
+
+function esc(s: string) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function renderHealth(d: DigestData): string {
+  const h = headlineOf(d);
+  const cov = d.coverageSummary;
+  const missing = d.health.missingReasons.filter((r) => r.n > 0).map((r) => `${r.n} ${esc(r.reason)}`).join(" · ");
+  const fails = topReasons(d.health.failureReasons).map((r) => `<li>${r.n} × ${esc(r.reason)}</li>`).join("");
+  const hb = d.health.heartbeat;
+  const runs = hb ? `${hb.runs} run(s), ${hb.attempted} attempted, ${hb.upserted} stored, ${hb.failed} failed` : "no run recorded";
+  return `
+  <div style="padding:14px 24px;border-bottom:1px solid #e5e7eb;font-size:13px;line-height:1.55;color:#374151;">
+    <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#666;margin-bottom:6px;">Collection status</div>
+    <div>Collector on ${esc(d.window.dayShort)}: ${esc(runs)}</div>
+    <div>Last successful collection: <b>${esc(d.health.lastSuccessDay ?? "none on record")}</b></div>
+    <div>Profiles missing: <b>${cov.tier0} of ${cov.totalCells}</b>${missing ? ` (${missing})` : ""}</div>
+    ${fails ? `<div style="margin-top:6px;">Top collection errors now:</div><ul style="margin:4px 0 0 18px;padding:0;">${fails}</ul>` : ""}
+    ${h.noCollection ? `<div style="margin-top:8px;"><a href="https://social.gershon.ai/extension" style="color:#FE1B04;font-weight:700;">Run a full sync →</a></div>` : ""}
+  </div>`;
+}
+
 function renderHtml(d: DigestData): string {
+  const h = headlineOf(d);
   const fmtDate = (iso: string) => {
     try { return new Date(iso).toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" }); }
     catch { return iso; }
@@ -284,10 +360,16 @@ function renderHtml(d: DigestData): string {
     <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#FE1B04;font-weight:700;">GC Social · daily digest</div>
     <div style="font-size:22px;font-weight:700;margin-top:4px;color:#12211d;">Daily digest — ${day}</div>
   </div>
+  ${h.noCollection ? `
+  <div style="padding:20px 24px;background:#fff5f5;border-bottom:1px solid #f3caca;border-left:4px solid #FE1B04;">
+    <div style="font-size:20px;font-weight:900;color:#12211d;line-height:1.25;">⚠ No collection on ${esc(d.window.dayShort)} — 0 posts</div>
+    <div style="font-size:13px;color:#7f1d1d;margin-top:6px;">${esc(h.reason.charAt(0).toUpperCase() + h.reason.slice(1))}. This is not a quiet day: nothing was captured.</div>
+  </div>` : `
   <div style="padding:20px 24px;background:#fff5f5;border-bottom:1px solid #f3caca;">
     <div style="font-size:32px;font-weight:800;color:#FE1B04;line-height:1;">${d.totals.newPosts}</div>
     <div style="font-size:13px;color:#666;margin-top:4px;">posts collected on ${d.window.dayShort} (America/New_York day) across ${d.totals.clientsWithActivity} ${d.totals.clientsWithActivity === 1 ? "company" : "companies"}</div>
-  </div>
+  </div>`}
+  ${renderHealth(d)}
   <div style="padding:18px 24px;">
     <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#666;margin-bottom:10px;">Per company</div>
     <table style="width:100%;border-collapse:collapse;font-size:14px;">
@@ -389,7 +471,8 @@ export async function POST(req: NextRequest) {
     const d = await buildDigest();
     const html = renderHtml(d);
     // One subject format with the Collection Report: "<Title> — <Workspace> — <ET day> — N posts from M companies".
-    const subject = reportSubject(DIGEST_TITLE, undefined, d.window.dayShort, postsFromCompanies(d.totals.newPosts, d.totals.clientsWithActivity));
+    // v4.80.2: a no-collection day says so first (digestHeadline); normal days unchanged.
+    const subject = headlineOf(d).subject(reportSubject(DIGEST_TITLE, undefined, d.window.dayShort));
     const send = await sendViaResend(html, subject);
 
     // Month-end campaign report piggyback.
@@ -463,7 +546,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: send.ok || !!send.skipped,
       data: {
-        digest: { totals: d.totals, perCompany: d.perCompany.map((c) => ({ name: c.name, newPosts: c.newPosts })) },
+        digest: { totals: d.totals, headline: headlineOf(d).headline, lastSuccessDay: d.health.lastSuccessDay, perCompany: d.perCompany.map((c) => ({ name: c.name, newPosts: c.newPosts })) },
         send,
         campaignReport,
         postingAlert,
