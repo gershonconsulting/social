@@ -18,6 +18,12 @@
  *   monthly-trigger        → monthly | off      (1st of the month)
  *   event alerts           → on | off           (sent when the problem happens)
  * Day tests use the America/New_York calendar day, like every report here.
+ *
+ * v4.81.0 — Olivier 2026-11-14: "Too many emails sent. Review and re organize
+ * the emails from this platform." Defaults now: ONE daily email (Collection —
+ * it carries the "collector did not run" alarm); Posting, Competitive,
+ * Intelligence and the Digest go out once a week, on Monday. A frequency saved
+ * in Settings → Reports still wins.
  */
 import prisma from "@/lib/db";
 
@@ -46,10 +52,10 @@ const AINA = "aina.rama@gershonconsulting.com";
 
 export const REPORT_CATALOG: ReportDef[] = [
   { id: "collection", name: "Social Collection Report", group: "Daily reports", trigger: "daily", defaultTo: [REPORT], defaultFrequency: "daily", when: "8:00 am", what: "Yesterday's collection: posts collected, companies with new content, big warning if the collector did not run, Chrome extension version.", previewUrl: "/api/report/daily" },
-  { id: "posting", name: "Social Posting Report", group: "Daily reports", trigger: "daily", defaultTo: [REPORT], defaultFrequency: "daily", when: "8:00 am", what: "Did every campaign / internal company post — day by day, with links to the content.", previewUrl: "/api/report/ops?kind=posting" },
-  { id: "competitive", name: "Competitive Report", group: "Daily reports", trigger: "daily", defaultTo: [REPORT], defaultFrequency: "daily", when: "8:00 am", what: "Competitor and partner posts collected per day / week, their topics, and suggested actions.", previewUrl: "/api/report/ops?kind=competitive" },
-  { id: "intelligence", name: "Social Intelligence Report", group: "Daily reports", trigger: "daily", defaultTo: [SALES], defaultFrequency: "daily", when: "8:00 am", what: "AI insights and actions from what competitors and partners post.", previewUrl: "/api/report/ops?kind=intelligence" },
-  { id: "digest", name: "Daily Digest", group: "Daily reports", trigger: "daily", defaultTo: [REPORT, AINA], defaultFrequency: "daily", when: "9:00 am", what: "What was collected in the last 24 h, company by company, with the top posts.", previewUrl: "/api/digest/daily" },
+  { id: "posting", name: "Social Posting Report", group: "Daily reports", trigger: "daily", defaultTo: [REPORT], defaultFrequency: "weekly", when: "8:00 am", what: "Did every campaign / internal company post — day by day, with links to the content.", previewUrl: "/api/report/ops?kind=posting" },
+  { id: "competitive", name: "Competitive Report", group: "Daily reports", trigger: "daily", defaultTo: [REPORT], defaultFrequency: "weekly", when: "8:00 am", what: "Competitor and partner posts collected per day / week, their topics, and suggested actions.", previewUrl: "/api/report/ops?kind=competitive" },
+  { id: "intelligence", name: "Social Intelligence Report", group: "Daily reports", trigger: "daily", defaultTo: [SALES], defaultFrequency: "weekly", when: "8:00 am", what: "AI insights and actions from what competitors and partners post.", previewUrl: "/api/report/ops?kind=intelligence" },
+  { id: "digest", name: "Daily Digest", group: "Daily reports", trigger: "daily", defaultTo: [REPORT, AINA], defaultFrequency: "weekly", when: "9:00 am", what: "What was collected in the last 24 h, company by company, with the top posts.", previewUrl: "/api/digest/daily" },
   { id: "posting-alert-week", name: "Weekly posting alert", group: "Weekly & monthly reports", trigger: "weekly", defaultTo: [SOCIAL], defaultFrequency: "weekly", when: "Friday 5:00 pm", what: "Campaign companies that missed planned posting days this week. Silent when everyone hit every day.", previewUrl: "/api/cron/posting-alert?kind=week&preview=email" },
   { id: "posting-alert-month", name: "Monthly posting alert", group: "Weekly & monthly reports", trigger: "monthly", defaultTo: [SOCIAL], defaultFrequency: "monthly", when: "1st of the month, 5:00 pm", what: "Same check for the month that just closed.", previewUrl: "/api/cron/posting-alert?kind=month&preview=email" },
   { id: "monthly-category", name: "Monthly category reports", group: "Weekly & monthly reports", trigger: "monthly", defaultTo: [REPORT], defaultFrequency: "monthly", when: "1st of the month, 9:00 am", what: "One-page PDF per category (Campaigns, Clients, Partners, Prospects, Internal, Companies, Competition, Recycled).", note: "Campaigns also goes to sales@gershonconsulting.com.", previewUrl: "/api/report/monthly" },
