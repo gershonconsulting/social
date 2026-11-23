@@ -4,6 +4,8 @@ import { buildDailyReport } from "@/lib/reports/daily-report";
 import { renderDailyReportHtml, dailyReportSubject } from "@/lib/reports/daily-report-render";
 import { sendDailyReport } from "@/lib/reports/daily-report-send";
 import { sendOps } from "@/lib/reports/ops";
+import { bundlingOn } from "@/lib/reports/bundle/mode";
+import { sendDailyBrief } from "@/lib/reports/bundle/daily-brief";
 
 /**
  * GET  /api/report/daily              — render the email in the browser (never sends)
@@ -45,6 +47,19 @@ export async function POST(req: NextRequest) {
     const url = new URL(req.url);
     const force = url.searchParams.get("force") === "1";
     const to = url.searchParams.get("to") || undefined;
+    // v4.82.0: ONE Daily brief (Collection + Posting + Competitive + Intelligence + Digest)
+    // instead of five emails. ?separate=1 or Setting report_bundling=off → the old separate emails.
+    if (url.searchParams.get("separate") !== "1" && (await bundlingOn())) {
+      const brief = await sendDailyBrief({ force, to });
+      let workspaces: unknown = null;
+      try {
+        workspaces = await sendOps({ force, to, primary: false }); // client workspaces' Friday Competitive (review hold unchanged)
+      } catch (e) {
+        workspaces = { error: e instanceof Error ? e.message : String(e) };
+      }
+      const ok = brief.sent || brief.skipped !== null;
+      return NextResponse.json({ success: ok, data: { brief, workspaces } }, { status: ok ? 200 : 502 });
+    }
     const r = await sendDailyReport({ force, to });
     // v4.49.0 — the same morning cron also sends the Posting, Content Ready
     // and Competitive reports (four separate emails to report@). Each one is

@@ -30,7 +30,10 @@ export async function GET(req: NextRequest) {
     // v4.70.0: a signed-in user previews their OWN workspace's report; no session = Gershon's, as before.
     const own = await orgFromSession().catch(() => null);
     // Without a session: no signed action links and no AI re-run (v4.70.0 review).
-    const b = await buildOps(kind, own || undefined, { refresh: !!own && url.searchParams.get("refresh") === "1", actionLinks: !!own });
+    // v4.82.0: the Daily brief fetches this with the cron Bearer — it is an email, so it keeps the action buttons.
+    const secret = process.env.CRON_SECRET || process.env.DIGEST_SECRET;
+    const cron = !!secret && (req.headers.get("authorization") || "") === `Bearer ${secret}`;
+    const b = await buildOps(kind, own || undefined, { refresh: !!own && url.searchParams.get("refresh") === "1", actionLinks: !!own || cron });
     if (url.searchParams.get("format") === "json") {
       return NextResponse.json({ success: true, data: { subject: b.subject, day: b.dayKey, report: b.data } });
     }

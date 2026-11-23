@@ -5,6 +5,8 @@ import { orgFromSession } from "@/lib/session-org";
 import { listFridayClients } from "@/lib/reports/friday/data";
 import { FRIDAY_KINDS, type FridayKind } from "@/lib/reports/friday/render";
 import { buildFridayPack, sendFridayPack } from "@/lib/reports/friday/send";
+import { bundlingOn } from "@/lib/reports/bundle/mode";
+import { flushFridayPack, stageFridayClient } from "@/lib/reports/bundle/friday-pack";
 
 /**
  * Friday client reports (v4.78.0) — three e-mails per campaign client / client:
@@ -52,7 +54,30 @@ export async function POST(req: NextRequest) {
   if (!bearerOk(req)) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   const url = new URL(req.url);
   const client = url.searchParams.get("client");
+  const force = url.searchParams.get("force") === "1";
+  const to = url.searchParams.get("to") || undefined;
+  // v4.82.0: ONE Friday pack email (every client, 3 report links each) instead of 3 per client.
+  // Each ?client= call stages that client; the call that completes the list sends the pack.
+  // ?flush=1 sends what is staged now; ?separate=1 or Setting report_bundling=off → the old 3 emails.
+  const bundled = url.searchParams.get("separate") !== "1" && (await bundlingOn());
+  if (bundled && url.searchParams.get("flush") === "1") {
+    try {
+      const r = await flushFridayPack({ force, to });
+      return NextResponse.json({ success: r.sent || !!r.skipped, data: r }, { status: r.sent || r.skipped ? 200 : 502 });
+    } catch (e) {
+      return NextResponse.json({ success: false, error: e instanceof Error ? e.message : "pack send failed" }, { status: 500 });
+    }
+  }
   if (!client) return NextResponse.json({ success: false, error: "client is required (GET ?list=1 for the list)" }, { status: 400 });
+  if (bundled && !to) {
+    try {
+      const r = await stageFridayClient(await primaryOrgId(), client, { force });
+      const ok = !r.error;
+      return NextResponse.json({ success: ok, data: [r] }, { status: ok ? 200 : 502 });
+    } catch (e) {
+      return NextResponse.json({ success: false, error: e instanceof Error ? e.message : "pack stage failed" }, { status: 500 });
+    }
+  }
   try {
     const results = await sendFridayPack(await primaryOrgId(), client, {
       force: url.searchParams.get("force") === "1",

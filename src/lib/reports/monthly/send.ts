@@ -20,6 +20,8 @@ import { APP_VERSION } from "@/lib/extension-version";
 import { competitionHtml, competitionModel, competitionPdf, competitionSubject, type CompetitionModel } from "./competition";
 import { withAuditBcc } from "@/lib/mail-bcc";
 import { sendResend } from "@/lib/resend-send";
+import { bundlingOn } from "../bundle/mode";
+import { combineEmail, slugId } from "../bundle/combine";
 
 export const MONTHLY_SENT_KEY = "monthly_report_sent";
 const REPORT_INBOX = "report@gershonconsulting.com";
@@ -50,14 +52,14 @@ async function markSent(month: string, item: string, note: string) {
   await prisma.setting.upsert({ where: { key: MONTHLY_SENT_KEY }, update: { value }, create: { key: MONTHLY_SENT_KEY, value } });
 }
 
-async function resend(msg: { from: string; to: string[]; bcc?: string[]; subject: string; html: string; filename: string; pdf: string }) {
+async function resend(msg: { from: string; to: string[]; bcc?: string[]; subject: string; html: string; filename: string; pdf: string; more?: Array<{ filename: string; content: string }> }) {
   const key = process.env.RESEND_API_KEY;
   if (!key) return { ok: false, error: "RESEND_API_KEY not set" };
   try {
     // v4.78.6: retries 429/5xx/network 3x with one Idempotency-Key (lib/resend-send.ts).
     const r = await sendResend(key, withAuditBcc({
       from: msg.from, to: msg.to, bcc: msg.bcc?.length ? msg.bcc : undefined, subject: msg.subject, html: msg.html,
-      attachments: [{ filename: msg.filename, content: msg.pdf }],
+      attachments: [{ filename: msg.filename, content: msg.pdf }, ...(msg.more || [])],
     }), { label: "monthly-report" });
     return r.ok ? { ok: true, id: r.id } : { ok: false, status: r.status, error: (r.error || "").slice(0, 300) };
   } catch (e) {
@@ -136,6 +138,31 @@ export async function runMonthlyReports(opts: { month?: string | null; force?: b
     out.results.push({ item: c.model.name, to: c.recipients, ...s });
     if (s.ok) await markSent(b.win.key, item, c.recipients.join(","));
     await pause(700);
+  }
+
+  // 2. v4.81.0: ONE email with every category (bodies one after the other + every PDF attached)
+  //    instead of one email per category. Setting report_bundling=off → the old 8 emails.
+  if (await bundlingOn()) {
+    const todo = b.categories.filter((m) => !sent[`cat:${m.key}`]);
+    if (!opts.force && !catPlan.due) { out.results.push({ item: "Monthly categories", skipped: catPlan.skipReason || "off" }); return out; }
+    if (!todo.length) { out.results.push({ item: "Monthly categories", skipped: "already sent" }); return out; }
+    const to = Array.from(new Set([...catPlan.to, ...(todo.some((m) => m.key === "CAMPAIGN") ? [SALES_INBOX] : [])]));
+    const rendered = todo.map((m) => ({ m, r: renderCategory(b, m) }));
+    if (opts.dry) { out.results.push({ item: `Monthly categories (${todo.length})`, to, ok: true, skipped: "dry run" }); return out; }
+    const html = combineEmail({
+      title: `Monthly reports — ${b.win.key}`,
+      subtitle: `${todo.length} category reports in one email · each one is also attached as a PDF`,
+      sections: rendered.map(({ m, r }) => ({ id: slugId(m.label), title: m.label, html: r.html })),
+    });
+    const [first, ...rest] = rendered;
+    const s = await resend({
+      from: FROM_INTERNAL, to, subject: `Social.gershon.ai — Monthly reports — ${b.win.key} — ${todo.length} categories`, html,
+      filename: first.r.filename, pdf: first.r.pdf.base64(),
+      more: rest.map(({ r }) => ({ filename: r.filename, content: r.pdf.base64() })),
+    });
+    out.results.push({ item: `Monthly categories (${todo.map((m) => m.label).join(", ")})`, to, ...s });
+    if (s.ok) for (const m of todo) await markSent(b.win.key, `cat:${m.key}`, `bundle → ${to.join(",")}`);
+    return out;
   }
 
   // 2. One report per category.

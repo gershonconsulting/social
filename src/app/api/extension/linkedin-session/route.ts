@@ -28,6 +28,8 @@ import prisma from "@/lib/db";
 import { resolveExtensionCaller } from "@/lib/extension-auth";
 import { resolveFrom } from "@/lib/email/sender";
 import { withAuditBcc } from "@/lib/mail-bcc";
+import { bundlingOn } from "@/lib/reports/bundle/mode";
+import { primaryOrgId } from "@/lib/reports/monthly/data";
 
 const KEY = "linkedin_session";
 
@@ -127,6 +129,9 @@ async function emailSignOut(
     </div>`;
   const recipients = await alertRecipients();
   if (!recipients.length) return false; // turned Off in Settings → Reports
+  // v4.82.0: for Gershon's own workspace the sign-out is a red banner in the Daily brief
+  // (and the extension speaks it at once) — no separate email while bundling is on.
+  if ((await bundlingOn()) && orgId === (await primaryOrgId().catch(() => ""))) return false;
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
