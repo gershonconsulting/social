@@ -5,6 +5,7 @@ import { List, Sparkles, Swords } from "lucide-react";
 import { PostsListing } from "./posts-listing";
 import { ContentIntelligence } from "./content-intelligence";
 import { CompetitorWatch } from "./competitor-watch";
+import { canWatchCompetitors } from "@/lib/competitors/watchable";
 
 /**
  * Company detail: collected content (Posts) and the analysis layer built on
@@ -21,17 +22,17 @@ export function ClientContentTabs({
   clientType?: string;
 }) {
   const [tab, setTab] = useState<"posts" | "intelligence" | "competitors">("posts");
+  // v4.83.0: own company (INTERNAL) plus campaign clients and clients.
+  const watchable = canWatchCompetitors(clientType);
 
   const tabs = [
     { key: "posts" as const, label: "Collected posts", icon: List },
     { key: "intelligence" as const, label: "Content Intelligence", icon: Sparkles },
-    // v4.35.0: only on the workspace's OWN company. On a client's page it filed
-    // that client's competitors into this workspace's Competition list.
-    ...(clientType === "INTERNAL" ? [{ key: "competitors" as const, label: "Competitor Watch", icon: Swords }] : []),
+    ...(watchable ? [{ key: "competitors" as const, label: "Competitor Watch", icon: Swords }] : []),
   ];
 
   // Defensive: don't leave a now-hidden tab selected.
-  const active = tab === "competitors" && clientType !== "INTERNAL" ? "posts" : tab;
+  const active = tab === "competitors" && !watchable ? "posts" : tab;
 
   return (
     <div className="space-y-4">

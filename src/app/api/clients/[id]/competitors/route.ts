@@ -18,6 +18,7 @@ import { ClientStatus, ClientType, ConnectionStatus, Platform } from "@prisma/cl
 import { buildCompetitorWatch } from "@/lib/competitors/analyze";
 import { getBrief, getCompetitorIds, requireOrgId, setCompetitorIds } from "@/lib/competitors/store";
 import { getAISettings } from "@/lib/content/provider";
+import { canWatchCompetitors } from "@/lib/competitors/watchable";
 
 const ALLOWED_WINDOWS = [30, 90, 180, 365];
 
@@ -27,14 +28,18 @@ function parseWindow(req: NextRequest): number {
 }
 
 /**
- * v4.35.0: Competitor Watch belongs to a workspace's OWN company (INTERNAL).
- * On a client's page it filed the client's competitors into the workspace's
- * own Competition list (how VALOS's competitors landed in Gershon's account).
- * A client that wants competitor tracking gets its own workspace.
+ * v4.35.0 limited Competitor Watch to the workspace's OWN company (INTERNAL).
+ * v4.83.0: campaign clients and clients get it too — the Friday client pack
+ * reads their Competitor Watch links. Other types (partners, prospects,
+ * competitors…) still don't.
  */
-function notInternal() {
+function notWatchable() {
   return NextResponse.json(
-    { success: false, error: "NOT_INTERNAL", message: "Competitor Watch is only available on your own company (Internal)." },
+    {
+      success: false,
+      error: "NOT_WATCHABLE",
+      message: "Competitor Watch is available on your own company, campaign clients and clients.",
+    },
     { status: 403 },
   );
 }
@@ -55,7 +60,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const windowDays = parseWindow(req);
     const client = await loadClient(id);
     if (!client) return NextResponse.json({ success: false, error: "Company not found" }, { status: 404 });
-    if (client.clientType !== ClientType.INTERNAL) return notInternal();
+    if (!canWatchCompetitors(client.clientType)) return notWatchable();
 
     const orgId = await requireOrgId();
     const ids = await getCompetitorIds(orgId, id);
@@ -139,7 +144,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params;
     const client = await loadClient(id);
     if (!client) return NextResponse.json({ success: false, error: "Company not found" }, { status: 404 });
-    if (client.clientType !== ClientType.INTERNAL) return notInternal();
+    if (!canWatchCompetitors(client.clientType)) return notWatchable();
 
     const orgId = await requireOrgId();
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
