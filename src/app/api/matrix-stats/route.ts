@@ -2,6 +2,7 @@ export const runtime = 'edge';
 import { NextRequest, NextResponse } from "next/server";
 import { ClientStatus, ClientType } from "@prisma/client";
 import prisma from "@/lib/db";
+import { gradeSocial, COVERAGE_DAYS } from "@/lib/matrix/social-grade";
 
 /**
  * POST /api/matrix-stats — read-only feed for the weekly "Client Platform Matrix"
@@ -10,14 +11,20 @@ import prisma from "@/lib/db";
  * Request : {"secret":"…","people":[{"key":"…","company":"…","emails":["a@b.com"]}]}
  * Auth    : SHA-256 hex of `secret` must equal MATRIX_SECRET_SHA256 (only the hash is
  *           stored here). Mismatch → 401 {"ok":false}.
- * Response: {"ok":true,"platform":"social","results":[{"key","ok","note"}],"others":[…]}
+ * Response: {"ok":true,"platform":"social","results":[{"key","ok","warn","level","note","companies",…}],"others":[…]}
  *
  * Social tracks client COMPANIES, so a person is matched to a Client of the primary
  * (Gershon Consulting) organization by company name (case-insensitive, legal suffixes
  * like AG/Intl/Inc ignored) or by email domain vs Client.website domain.
- * ok=true when the matched Client is ACTIVE and not archived.
- * note = "campaign" for CAMPAIGN clients, else "N posts (30d)"; "paused"/"archived"/…
- * when matched but not active; null when no match.
+ * v4.84.0 (2026-11-23, Olivier): graded on what Social is FOR — watching companies
+ * and collecting their content continuously so intelligent reports can be built.
+ * Companies watched for a client = competitors/partners linked to it in Gershon's
+ * workspace (OrgSetting competitors:<clientId>) + every company in the client's own
+ * workspace (found through the people's emails). See lib/matrix/social-grade.ts:
+ *   red    (ok:false)           fewer than 10 companies
+ *   orange (ok:true, warn:true) 10+ companies, collection not continuous
+ *   green  (ok:true)            10+ companies, collected in 48h, half covered in 14 days
+ * "paused"/"archived"/… when matched but not active; null when no match.
  * others = ACTIVE CAMPAIGN clients of the primary org not matched to any person.
  */
 const MATRIX_SECRET_SHA256 = "7031a38bde30c34db677585e85f696f51d78cc417e40d38572d20ebeb1c77569";
@@ -126,25 +133,76 @@ export async function POST(req: NextRequest) {
       return hits[0];
     });
 
-    const needCounts = Array.from(new Set(picks.filter((c) => c && c.status === ClientStatus.ACTIVE && c.clientType !== ClientType.CAMPAIGN).map((c) => c!.id)));
-    const counts = new Map<string, number>();
-    if (needCounts.length) {
-      const since = new Date(Date.now() - 30 * 24 * 3600 * 1000);
-      const rows = await prisma.socialPost.groupBy({
-        by: ["clientId"],
-        where: { clientId: { in: needCounts }, publishedAtUtc: { gte: since } },
-        _count: { _all: true },
-      });
-      for (const r of rows as { clientId: string; _count: { _all: number } }[]) counts.set(r.clientId, r._count._all);
+    // Companies watched per person: linked in Gershon's workspace + the client's own workspace.
+    const pickedIds = Array.from(new Set(picks.filter(Boolean).map((c) => c!.id)));
+    const linkRows = pickedIds.length
+      ? await prisma.orgSetting.findMany({ where: { organizationId: primary.id, key: { in: pickedIds.map((id) => `competitors:${id}`) } }, select: { key: true, value: true } })
+      : [];
+    const linked = new Map<string, string[]>();
+    for (const r of linkRows) {
+      try {
+        const v = JSON.parse(r.value);
+        if (Array.isArray(v)) linked.set(r.key.slice("competitors:".length), v.filter((x): x is string => typeof x === "string"));
+      } catch { /* ignore a bad row */ }
+    }
+    const allEmails = Array.from(new Set(people.flatMap((p) => (Array.isArray(p?.emails) ? p.emails : []).filter((e): e is string => typeof e === "string").map((e) => e.trim().toLowerCase()))));
+    const users = allEmails.length
+      ? await prisma.user.findMany({ where: { email: { in: allEmails, mode: "insensitive" }, organizationId: { not: null } }, select: { email: true, organizationId: true } })
+      : [];
+    const orgByEmail = new Map(users.filter((u) => u.organizationId && u.organizationId !== primary.id).map((u) => [u.email.toLowerCase(), u.organizationId as string]));
+    const wsOrgs = Array.from(new Set(orgByEmail.values()));
+    const wsClients = wsOrgs.length
+      ? await prisma.client.findMany({ where: { organizationId: { in: wsOrgs }, archivedAt: null, status: { not: ClientStatus.ARCHIVED }, clientType: { not: ClientType.INTERNAL } }, select: { id: true, organizationId: true, name: true } })
+      : [];
+    const byOrg = new Map<string, { id: string; tokens: string[] }[]>();
+    for (const c of wsClients) byOrg.set(c.organizationId as string, [...(byOrg.get(c.organizationId as string) || []), { id: c.id, tokens: nameTokens(c.name) }]);
+
+    const watched: string[][] = people.map((p, i) => {
+      const ids = new Set<string>(picks[i] ? linked.get(picks[i]!.id) || [] : []);
+      const emails = Array.isArray(p?.emails) ? p.emails.filter((e): e is string => typeof e === "string") : [];
+      // The client's own company in its workspace is not a company it watches.
+      const own = nameTokens(typeof p?.company === "string" ? p.company : "");
+      for (const e of emails) {
+        const o = orgByEmail.get(e.trim().toLowerCase());
+        if (o) (byOrg.get(o) || []).forEach((w) => { if (!namesMatch(own, w.tokens)) ids.add(w.id); });
+      }
+      return Array.from(ids);
+    });
+
+    const allWatched = Array.from(new Set(watched.flat()));
+    const since30 = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+    const sinceCov = new Date(Date.now() - COVERAGE_DAYS * 24 * 3600 * 1000);
+    const stats = new Map<string, { last: Date | null; n30: number; cov: boolean }>();
+    if (allWatched.length) {
+      const [lastRows, recentRows] = await Promise.all([
+        prisma.socialPost.groupBy({ by: ["clientId"], where: { clientId: { in: allWatched } }, _max: { importedAt: true } }),
+        prisma.socialPost.groupBy({ by: ["clientId"], where: { clientId: { in: allWatched }, importedAt: { gte: since30 } }, _count: { _all: true }, _max: { importedAt: true } }),
+      ]);
+      for (const r of lastRows as { clientId: string; _max: { importedAt: Date | null } }[]) stats.set(r.clientId, { last: r._max.importedAt ? new Date(r._max.importedAt) : null, n30: 0, cov: false });
+      for (const r of recentRows as { clientId: string; _count: { _all: number }; _max: { importedAt: Date | null } }[]) {
+        const s = stats.get(r.clientId) || { last: null, n30: 0, cov: false };
+        s.n30 = r._count._all;
+        s.cov = !!r._max.importedAt && new Date(r._max.importedAt) >= sinceCov;
+        stats.set(r.clientId, s);
+      }
     }
 
     const results = people.map((p, i) => {
       const key = String(p?.key ?? "");
       const c = picks[i];
-      if (!c) return { key, ok: false, note: null };
-      if (c.status !== ClientStatus.ACTIVE) return { key, ok: false, note: c.status.toLowerCase().replace(/_/g, " ").slice(0, 20) };
-      if (c.clientType === ClientType.CAMPAIGN) return { key, ok: true, note: "campaign" };
-      return { key, ok: true, note: `${counts.get(c.id) ?? 0} posts (30d)` };
+      const ids = watched[i];
+      if (!c && !ids.length) return { key, ok: false, note: null };
+      if (c && c.status !== ClientStatus.ACTIVE && !ids.length) return { key, ok: false, note: c.status.toLowerCase().replace(/_/g, " ").slice(0, 20) };
+      let last: Date | null = null, posts30 = 0, covered = 0;
+      for (const id of ids) {
+        const s = stats.get(id);
+        if (!s) continue;
+        if (s.last && (!last || s.last > last)) last = s.last;
+        posts30 += s.n30;
+        if (s.cov) covered++;
+      }
+      const g = gradeSocial({ companies: ids.length, covered, posts30, lastCollectedAt: last });
+      return { key, ok: g.ok, warn: g.warn, level: g.level, note: g.note, companies: ids.length, covered, posts30, last_collected_at: last ? last.toISOString() : null };
     });
 
     const others = indexed
