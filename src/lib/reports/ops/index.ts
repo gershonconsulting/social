@@ -99,10 +99,11 @@ export async function competitiveWorkspaces(primaryId: string): Promise<Array<{ 
 type SendResult = (DeliveryResult & { workspace?: string }) | { kind: OpsKind; sent: false; error: string; workspace?: string };
 
 /** Build and send the given reports (all three by default). One failure never stops the others. */
-export async function sendOps(opts: { kinds?: OpsKind[]; force?: boolean; to?: string; workspaces?: boolean } = {}): Promise<SendResult[]> {
+export async function sendOps(opts: { kinds?: OpsKind[]; force?: boolean; to?: string; workspaces?: boolean; primary?: boolean } = {}): Promise<SendResult[]> {
   const org = await primaryOrgId();
   const out: SendResult[] = [];
-  for (const kind of opts.kinds || OPS_KINDS) {
+  // v4.81.0: primary:false = Gershon's own three are already in the Daily brief; only client workspaces here.
+  for (const kind of opts.primary === false ? [] : opts.kinds || OPS_KINDS) {
     try {
       const b = await buildOps(kind, org);
       out.push(await deliver(kind, b.dayKey, b.subject, b.html, { force: opts.force, to: opts.to, defaultTo: defaultTo(kind) }));

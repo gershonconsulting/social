@@ -5,6 +5,9 @@ import { ClientStatus, Platform } from "@prisma/client";
 import { sendCampaignMonthlyReport } from "@/lib/campaigns/send";
 import { sendPostingAlert, dueAlerts } from "@/lib/alerts/send";
 import { sendDailyReport } from "@/lib/reports/daily-report-send";
+import { bundlingOn } from "@/lib/reports/bundle/mode";
+import { sendDailyBrief } from "@/lib/reports/bundle/daily-brief";
+import { flushFridayPack } from "@/lib/reports/bundle/friday-pack";
 import { resolveFrom, resolveDigestTo } from "@/lib/email/sender";
 import { reportPlan } from "@/lib/reports/settings";
 import { withAuditBcc } from "@/lib/mail-bcc";
@@ -473,7 +476,9 @@ export async function POST(req: NextRequest) {
     // One subject format with the Collection Report: "<Title> — <Workspace> — <ET day> — N posts from M companies".
     // v4.80.2: a no-collection day says so first (digestHeadline); normal days unchanged.
     const subject = headlineOf(d).subject(reportSubject(DIGEST_TITLE, undefined, d.window.dayShort));
-    const send = await sendViaResend(html, subject);
+    // v4.82.0: the digest is a section of the Daily brief — no separate email unless bundling is off.
+    const bundled = new URL(req.url).searchParams.get("separate") !== "1" && (await bundlingOn());
+    const send = bundled ? { ok: false, skipped: "included in the Daily brief" } as Awaited<ReturnType<typeof sendViaResend>> : await sendViaResend(html, subject);
 
     // Month-end campaign report piggyback.
     //
@@ -537,10 +542,26 @@ export async function POST(req: NextRequest) {
     let dailyReport: unknown = null;
     try {
       const forcedReport = new URL(req.url).searchParams.get("dailyReport") === "1";
-      const r = await sendDailyReport({ force: forcedReport });
-      dailyReport = { day: r.dayKey, sent: r.sent, skipped: r.skipped, to: r.to, error: r.error };
+      if (bundled) {
+        // Fallback for the Daily brief: idempotent per ET day, so it no-ops after the 08:00 run.
+        const b = await sendDailyBrief({ force: forcedReport });
+        dailyReport = { day: b.day, brief: true, sent: b.sent, skipped: b.skipped, to: b.to, error: b.error };
+      } else {
+        const r = await sendDailyReport({ force: forcedReport });
+        dailyReport = { day: r.dayKey, sent: r.sent, skipped: r.skipped, to: r.to, error: r.error };
+      }
     } catch (e) {
       dailyReport = { error: e instanceof Error ? e.message : String(e) };
+    }
+
+    // v4.82.0: safety net — a Friday client pack still unsent after its Friday goes out now.
+    let fridayPack: unknown = null;
+    if (bundled) {
+      try {
+        fridayPack = await flushFridayPack({ onlyIfLate: true });
+      } catch (e) {
+        fridayPack = { error: e instanceof Error ? e.message : String(e) };
+      }
     }
 
     return NextResponse.json({
@@ -551,6 +572,7 @@ export async function POST(req: NextRequest) {
         campaignReport,
         postingAlert,
         dailyReport,
+        fridayPack,
       },
     }, { status: send.ok || send.skipped ? 200 : 502 });
   } catch (e) {

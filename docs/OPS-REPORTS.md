@@ -27,3 +27,16 @@ Olivier, 2026-11-04: "The social competitive report is a great tool. We should h
 - **Setup**: /welcome step 3 now needs **at least 3 competitors** (default category Competitor); /actions shows the same nudge.
 - Browser preview `GET /api/report/ops?kind=…` shows the signed-in user's own workspace (no session = Gershon's, as before).
 - Test: `NEXTAUTH_SECRET=x npx tsx --tsconfig tests/tsconfig.test.json tests/actions.test.mts`.
+
+## v4.82.0 — report bundling (one email per mailbox per cadence)
+
+| Before | After |
+|---|---|
+| 5 daily emails (Collection, Posting, Competitive, Intelligence→sales@, Digest) | 1 **Daily brief** (POST /api/report/daily) to all their recipients, alerts banner on top |
+| 3 Friday emails × every client | 1 **Friday client pack** (rows + 3 report links per client) |
+| 8 monthly category emails | 1 monthly email, every PDF attached |
+| Weekly + monthly posting alert → social@ | off by default (Social Tracking covers them) |
+| LinkedIn signed-out email (Gershon workspace) | banner in the Daily brief |
+
+Switch: Setting `report_bundling` = `off` restores every separate email; `?separate=1` on a POST does it for one run.
+Code: `src/lib/reports/bundle/{combine,mode,daily-brief,friday-pack}.ts`. Test: `tests/bundle.test.mts`.
