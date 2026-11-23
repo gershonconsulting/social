@@ -19,6 +19,7 @@ import { buildCompetitorWatch } from "@/lib/competitors/analyze";
 import { getBrief, getCompetitorIds, requireOrgId, setCompetitorIds } from "@/lib/competitors/store";
 import { getAISettings } from "@/lib/content/provider";
 import { canWatchCompetitors } from "@/lib/competitors/watchable";
+import { freeClientSlug } from "@/lib/competitors/slug";
 
 const ALLOWED_WINDOWS = [30, 90, 180, 365];
 
@@ -168,11 +169,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (same) {
         competitorId = same.id;
       } else {
-        let slug = slugify(name);
-        for (let i = 2; await prisma.client.findFirst({ where: { slug }, select: { id: true } }).catch(() => null); i++) {
-          slug = `${slugify(name)}-${i}`;
-          if (i > 20) break;
-        }
+        // v4.83.1: Client.slug is unique across ALL workspaces, but the scoped
+        // client only sees this workspace — so "10x Genomics" tracked in another
+        // workspace made the create fail on the slug. Check the slug unscoped
+        // (id only; nothing else is read from other workspaces).
+        const slug = await freeClientSlug(slugify(name));
         const created = await prisma.client.create({
           data: {
             name,

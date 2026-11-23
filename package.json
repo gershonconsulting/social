@@ -1,6 +1,6 @@
 {
   "name": "social-gershon-crm",
-  "version": "4.83.0",
+  "version": "4.83.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -13,7 +13,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "jobs:run": "tsx src/jobs/runner.ts",
-    "test": "tsx tests/app-version.test.mts && node tests/background-window.test.mjs && tsx tests/linkedin-page.test.mts && tsx tests/posting-summary.test.mts && tsx tests/email-subject.test.mts && tsx tests/sync-log.test.mts && tsx tests/report-counts.test.mts && tsx tests/one-count.test.mts && tsx tests/et-days.test.mts && tsx --tsconfig tests/tsconfig.test.json tests/friday-reports.test.mts && tsx --tsconfig tests/tsconfig.test.json tests/friday-pack.test.mts && tsx tests/friday-once.test.mts && tsx tests/resend-retry.test.mts && tsx tests/client-weekly.test.mts && tsx tests/internal-sender.test.mts && tsx tests/digest-headline.test.mts && tsx tests/bundle.test.mts",
+    "test": "tsx tests/app-version.test.mts && node tests/background-window.test.mjs && tsx tests/linkedin-page.test.mts && tsx tests/posting-summary.test.mts && tsx tests/email-subject.test.mts && tsx tests/sync-log.test.mts && tsx tests/report-counts.test.mts && tsx tests/one-count.test.mts && tsx tests/et-days.test.mts && tsx --tsconfig tests/tsconfig.test.json tests/friday-reports.test.mts && tsx --tsconfig tests/tsconfig.test.json tests/friday-pack.test.mts && tsx tests/friday-once.test.mts && tsx tests/resend-retry.test.mts && tsx tests/client-weekly.test.mts && tsx tests/internal-sender.test.mts && tsx tests/digest-headline.test.mts && tsx tests/bundle.test.mts && tsx tests/competitor-slug.test.mts",
     "test:db": "tsx tests/remote-collect.test.mts && tsx tests/remote-collect-e2e.test.mts",
     "test:all": "npm test && npm run test:db"
   },
