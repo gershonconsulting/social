@@ -7,6 +7,9 @@ Push / merge to `claude/social-campaign-verification-jiG5E` (the default branch)
 Commits with `[skip-db-push]` in the message skip `prisma db push` (code-only changes).
 Live check: `GET https://social.gershon.ai/api/ping` → `commit` = deployed SHA, `build` = run number.
 
+## v4.82.1 — exact-post links (2026-11-23)
+- ✅ /clients/<id>?post=<postId> opens Collected posts on "All time", scrolls to that post and outlines it in red. Used by Social Tracking v0.9.0 weekly report "View in Social" buttons.
+
 ## Current — v4.82.0 (on top of v4.81.0 #42) (report bundling: fewer emails)
 - ✅ Olivier 2026-11-23 "Too many reports … consolidate" → option 1. Setting `report_bundling` (default on; "off" = old separate emails; `?separate=1` per call).
 - ✅ Daily brief: POST /api/report/daily sends ONE email = Collection + Posting + Competitive + Intelligence + Digest (each section only if due in Settings → Reports), alerts banner (collection, extension, LinkedIn signed out). To = union of the five reports' recipients (report@, sales@, Aina). Sections fetched from their own GET endpoints (own Worker request each). Idempotent per ET day (`daily_brief_sent` + Resend key). `src/lib/reports/bundle/*`.
