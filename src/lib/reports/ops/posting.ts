@@ -24,8 +24,8 @@ import {
   banner, esc, isWeekend, kpis, LEVEL_COLOR, page, pill, section, shortDay, SITE, table, TD, TDR, TH, THR,
   type Level,
 } from "./shell";
+import { isoWeek } from "./posting-subject";
 import { postingSummary, yesterdayCounts, type PostingYesterdayCounts } from "./posting-summary";
-import { socialSubject } from "@/lib/email/subject";
 
 const NET: Record<string, string> = { LINKEDIN: "LinkedIn", TWITTER: "X" };
 
@@ -228,14 +228,16 @@ export function renderPosting(r: PostingReport): string {
         : ""),
   );
 
+  // Olivier 2026-11-23: "We only post Monday through Friday, no need to add Sat and Sun."
+  const weekdays = r.keys.filter((k) => !isWeekend(k));
   const grid = table(
-    `<tr><th ${TH}>Company</th>${r.keys.map((k) => `<th style="padding:7px 4px;text-align:center;font-size:11px;color:#6b7280;font-weight:700;border-bottom:2px solid #eee;white-space:nowrap;">${shortDay(k)}</th>`).join("")}<th ${THR}>Week</th></tr>`,
+    `<tr><th ${TH}>Company</th>${weekdays.map((k) => `<th style="padding:7px 4px;text-align:center;font-size:11px;color:#6b7280;font-weight:700;border-bottom:2px solid #eee;white-space:nowrap;">${shortDay(k)}</th>`).join("")}<th ${THR}>Week</th></tr>`,
     r.rows
       .map(
         (row) => `<tr>
       <td ${TD}><a href="${SITE}/clients/${row.id}" style="color:#1d1d1f;font-weight:700;text-decoration:none;">${esc(row.name)}</a>
         <div style="font-size:11px;color:#9ca3af;">${row.clientType === "INTERNAL" ? "Internal" : "Campaign"} · target ${row.perWeek}/week</div></td>
-      ${row.days.map(dayCell).join("")}
+      ${row.days.filter((d) => !isWeekend(d.key)).map(dayCell).join("")}
       <td ${TDR}>${pill(`${row.daysPosted}/${row.expectedDays} days`, row.level)}</td>
     </tr>`,
       )
@@ -272,22 +274,20 @@ export function renderPosting(r: PostingReport): string {
       { label: "Posts, last 7 days", value: String(t.postsWeek) },
     ]) +
     section(
-      "Last 7 days, company by company",
+      "Monday to Friday, company by company",
       grid,
-      "Number = posts seen on the company's LinkedIn / X page that day · <span style=\"color:#b91c1c;font-weight:700;\">✕</span> = a post was due and none appeared · · = not a posting day.",
+      "Number = posts seen on the company's LinkedIn / X page that day · <span style=\"color:#b91c1c;font-weight:700;\">✕</span> = a post was due and none appeared · · = not a posting day. Weekends are not shown — we post Monday to Friday.",
     ) +
     section("What needs fixing", why) +
     section("The content, company by company", contentList(r), "Every post seen on the company's LinkedIn / X page in the last 7 days — click to open it.");
 
   return page({
     kind: "posting",
-    title: "Social Posting Report",
-    subtitle: `Did we post for every company? — ${r.dayShort} and the 7 days to it`,
+    title: `Master Posting Report — W${isoWeek(r.dayKey)}`,
+    subtitle: `Did we post for every company? — Monday to Friday, up to ${r.dayShort}`,
     body,
     cta: { href: "https://publish.gershon.ai/publishing", label: "Open Publish" },
   });
 }
 
-export function postingSubject(_r: PostingReport, workspace?: string): string {
-  return socialSubject(workspace, "Posting report");
-}
+export { isoWeek, postingSubject } from "./posting-subject";
