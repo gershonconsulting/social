@@ -1,13 +1,20 @@
 # Social (social.gershon.ai) — STATUS
 
-Last updated: 2026-11-20
+Last updated: 2026-11-23
 
 ## Deploy route
 Push / merge to `claude/social-campaign-verification-jiG5E` (the default branch) → `.github/workflows/deploy.yml` → Cloudflare Pages `gershoncrm-social`.
 Commits with `[skip-db-push]` in the message skip `prisma db push` (code-only changes).
 Live check: `GET https://social.gershon.ai/api/ping` → `commit` = deployed SHA, `build` = run number.
 
-## Current — v4.80.2 (digest says "No collection")
+## Current — v4.81.0 (fewer emails)
+- ✅ v4.81.0 (Olivier 2026-11-14 "Too many emails sent. Review and re organize the emails from this platform"): from ~80 emails a week to ~26.
+  - Daily: ONE email — Social Collection Report (keeps the "collector did not run" alarm). Posting, Competitive, Intelligence and Digest now default to WEEKLY (Monday). `src/lib/reports/settings.ts` defaults; a frequency saved in Settings → Reports still wins.
+  - Friday client pack: ONE email per client ("Client report" = Company + Competitive + Intelligence stacked) instead of three — 45 → 15. `combineFridayHtml` / `fridayPackSubject` in `friday/pack.ts`, `sendFridayPack` in `friday/send.ts`; same sent-marker + idempotency key as the old Company email. Previews stay one page per report.
+  - tsc + npm test green (new `tests/friday-pack.test.mts` 5/5).
+- ❌ Still several separate Monday emails (Posting, Competitive, Intelligence, Digest) — could become one "Monday pack".
+
+## Previous — v4.80.2 (digest says "No collection")
 - ✅ v4.80.2 (nightly 2026-11-20): internal daily digest no longer looks like a quiet day when nothing was collected. Headline + subject: "⚠ No collection on <day> — 0 posts (collector did not run / collector failed: N runs, F failed, 0 stored; top error …)". New "Collection status" block on every digest: heartbeat runs/attempted/stored/failed, last successful collection date, profiles missing X of 120 with top reasons, top current collection errors. Normal-day subject unchanged. `src/lib/reports/digest-headline.ts`, `tests/digest-headline.test.mts`; tsc + npm test green.
 - ❌ Separate "⛔ NO COLLECTION" mail NOT merged: it is the daily Social Collection Report itself (scorecard + links to fix); dropping it on bad days would lose that. Both now carry the same verdict.
 - ❌ Root cause of the 0-post days: collector runs (11-18: 13 runs, 20 failed) but LinkedIn harvest reads nothing ("LinkedIn layout changed again" / "no posts found"), extension 0.27.0 — needs a new extension release with updated LinkedIn selectors (live DOM needed). Report sends land ~7-8h after their cron time (digest cron 13:00Z, sent ~21:10Z) — check Actions schedule.
