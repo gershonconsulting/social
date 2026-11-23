@@ -9,6 +9,9 @@
  * "All the time" is measured, not assumed:
  *   - something new was collected in the last 48 hours, and
  *   - at least half of the watched companies had content collected in the last 14 days.
+ *
+ * Orange notes use the matrix engine's warning words ("never", "no scan"), so the
+ * Client Platform Matrix renders them orange without any change on its side.
  */
 export const MIN_COMPANIES = 10;
 export const FRESH_HOURS = 48;
@@ -40,9 +43,9 @@ export function gradeSocial(x: SocialInput): SocialGrade {
     return { ok: true, warn: false, level: "green", note: `${co} · ${x.posts30} posts (30d) · collecting` };
   }
   const why = !x.lastCollectedAt
-    ? "nothing collected yet"
+    ? "never collected"
     : !fresh
-      ? `last collected ${ago(x.lastCollectedAt, now)}`
-      : `only ${x.covered} of ${n} collecting`;
+      ? `no scan for ${ago(x.lastCollectedAt, now).replace(" ago", "")}`
+      : `${n - x.covered} with no scan in ${COVERAGE_DAYS}d`;
   return { ok: true, warn: true, level: "orange", note: `${co} · ${why}` };
 }
