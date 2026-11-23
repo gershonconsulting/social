@@ -19,3 +19,4 @@ Last deploy request for publish.gershon.ai (gershonconsulting/publish@main)
 2026-11-19T16:32Z v0.21.0 weekly connections report PUB-215 to report@, PR #36 (publish@74f7109) - by Claude (approved by Olivier "ship it")
 2026-11-19T16:40Z v0.22.0 semi-autopilot + weekdays only + @company tag, PR #37 (publish@fdc495f) - by Claude (approved by Olivier "ship it")
 2026-11-19T23:13:02Z v0.23.0 Knowledge links (publish@30c8f58, PR #38) — Olivier ship it
+2026-11-23T09:28Z v0.23.1 monthly client email once per client per month, PR #39 (publish@d810247) — Olivier "All"
