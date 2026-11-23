@@ -1,5 +1,7 @@
 /**
- * Friday client reports (v4.78.0) — build and send the three e-mails for one client.
+ * Friday client reports (v4.78.0) — build and send the weekly pack for one client.
+ * v4.81.0: the three reports (Company, Competitive, Intelligence) go out as ONE
+ * e-mail per client ("Client report"); the previews stay one page per report.
  *
  * Olivier, 2026-11-10: client reports are reviewed before any client sees them,
  * so the pack goes to Gershon (Setting `friday_reports_to`, default
@@ -17,6 +19,7 @@ import { OPS_FROM } from "../ops/shell";
 import { loadFridayData, type FridayData } from "./data";
 import { buildFridayIntel } from "./intel";
 import { sendOncePerReportDay } from "./once";
+import { combineFridayHtml, fridayPackSubject } from "./pack";
 import { FRIDAY_KINDS, fridaySubject, renderCompany, renderCompetitive, renderIntelligence, type FridayKind } from "./render";
 
 export const FRIDAY_TO_DEFAULT = "olivier@gershonconsulting.com";
@@ -72,17 +75,22 @@ export async function sendFridayPack(orgId: string, clientId: string, opts: { fo
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return emails.map((e) => ({ ...base, kind: e.kind, subject: e.subject, sent: false, error: "RESEND_API_KEY not set" }));
   const from = withGcName(process.env.OPS_REPORT_FROM || OPS_FROM);
+  // v4.81.0 (Olivier 2026-11-14 "Too many emails sent"): ONE e-mail per client holding the
+  // three reports, instead of three e-mails. It keeps the "company" sent-marker and
+  // idempotency key, so a client already sent this report Friday is not sent again.
+  const subject = fridayPackSubject(data);
+  const pack: FridayEmail[] = [{ kind: "company", subject, html: combineFridayHtml(subject, emails.map((e) => e.html)) }];
   const results = await sendOncePerReportDay(
     clientId,
     data.dayKey,
-    emails,
+    pack,
     {
       post: async (e, idempotencyKey) => {
         // v4.78.6: retries 429/5xx/network 3x with the same Idempotency-Key (lib/resend-send.ts).
         // A 409 for an already-used key is not retried, so once.ts still sees it as "already sent".
         const r = await sendResend(apiKey, withAuditBcc({ from, to, subject: e.subject, html: e.html }), {
           idempotencyKey: idempotencyKey || undefined,
-          label: `friday-${e.kind}`,
+          label: `friday-pack`,
         });
         return { status: r.status, text: r.ok ? "" : r.text || r.error || "" };
       },
