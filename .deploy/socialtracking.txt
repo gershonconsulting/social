@@ -1,1 +1,2 @@
 2026-11-09T19:00:46Z socialtracking@1c6e24a matrix-stats endpoint
+2026-11-23T17:12Z socialtracking@d4331e9 show/hide password eye on every password field (Olivier asked: show password on all platforms)
