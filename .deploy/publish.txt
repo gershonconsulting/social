@@ -24,3 +24,4 @@ Last deploy request for publish.gershon.ai (gershonconsulting/publish@main)
 2026-11-24 v0.24.1 calendar posts clickable (publish@bdf7785)
 2026-11-24T13:38Z publish main 6914197 v0.24.1 no weekend publishing
 2026-11-24T14:05Z v0.25.0 weekly feature status PUB-217 to social@, PR #44 (publish@4a10791) - by Claude (auto-merge rule: internal email only)
+2026-11-24T14:20Z v0.25.0 version label + feature list, PR #45 (publish@07e8289) - by Claude (auto-merge rule)
