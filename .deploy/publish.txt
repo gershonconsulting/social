@@ -21,3 +21,4 @@ Last deploy request for publish.gershon.ai (gershonconsulting/publish@main)
 2026-11-19T23:13:02Z v0.23.0 Knowledge links (publish@30c8f58, PR #38) — Olivier ship it
 2026-11-23T09:28Z v0.23.1 monthly client email once per client per month, PR #39 (publish@d810247) — Olivier "All"
 2026-11-23T17:12Z v0.23.1 + show/hide password eye on every password field (publish@efedc02) - by Claude (Olivier asked: show password on all platforms)
+2026-11-24 v0.24.1 calendar posts clickable (publish@bdf7785)
