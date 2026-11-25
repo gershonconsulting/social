@@ -20,6 +20,9 @@ const WINDOW_MS = 36 * 3600 * 1000;
 const KEEP_MS = 7 * 24 * 3600 * 1000;
 const MIN_COMPANIES = 3;
 
+import { countsForLinkedInAlarm } from "./collection-health-errors";
+export { isBrowserSideError, countsForLinkedInAlarm } from "./collection-health-errors";
+
 type Entry = { at: number; n: number; err?: string };
 type Health = Record<string, Entry>;
 
@@ -70,7 +73,7 @@ export async function recordLinkedInResults(
 export async function getLinkedInAlarm(orgId: string): Promise<LinkedInAlarm | null> {
   const h = await read(orgId);
   const now = Date.now();
-  const recent = Object.values(h).filter((e) => now - e.at <= WINDOW_MS);
+  const recent = Object.values(h).filter((e) => now - e.at <= WINDOW_MS && countsForLinkedInAlarm(e.err));
   if (recent.length < MIN_COMPANIES) return null;
   if (recent.some((e) => e.n > 0)) return null;
   const since = Math.min(...recent.map((e) => e.at));

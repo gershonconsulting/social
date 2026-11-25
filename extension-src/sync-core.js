@@ -456,6 +456,28 @@ function twitterDomScraper(scrollPasses) {
   });
 }
 
+// 0.28.0: when the collection tab disappears mid-run (closed, or its window
+// closed — 2026-11-25: one closed tab at 16:04 UTC turned every remaining
+// company into "tabs.update failed: No tab with id …" and the dashboard said
+// LinkedIn had changed its pages), open a fresh tab and try that company again
+// instead of failing the rest of the run. `holder.tabId` is updated in place.
+const TAB_GONE_RE = /No tab with id|Frame with ID \d+ was removed|No frame with id|Cannot access contents of the page|The tab was closed|Tabs cannot be edited right now/i;
+self.gxTabGone = function (err) { return !!err && TAB_GONE_RE.test(String(err)); };
+async function scrapeKeepingTab(holder, targetUrl, scrapeFunc, runLog, label, passes) {
+  let r = await navigateAndScrape(holder.tabId, targetUrl, scrapeFunc, runLog, label, passes);
+  if (r && self.gxTabGone(r.error)) {
+    try {
+      const fresh = await chrome.tabs.create({ url: "about:blank", active: false });
+      runLog.push({ at: Date.now(), step: label + ":tab-reopened", detail: { oldTabId: holder.tabId, newTabId: fresh.id, error: String(r.error).slice(0, 120) } });
+      holder.tabId = fresh.id;
+      r = await navigateAndScrape(holder.tabId, targetUrl, scrapeFunc, runLog, label, passes);
+    } catch (e) {
+      runLog.push({ at: Date.now(), step: label + ":tab-reopen-failed", detail: { error: ((e && e.message) || String(e)).slice(0, 120) } });
+    }
+  }
+  return r;
+}
+
 async function navigateAndScrape(tabId, targetUrl, scrapeFunc, runLog, label, passes) {
   runLog.push({ at: Date.now(), step: label + ":navigate", detail: { url: targetUrl } });
   try {
@@ -586,7 +608,7 @@ async function runFullSync(opts) {
       // opening them as /company/ collected nothing (Amphasys Bioprocessing).
       const liPath = c.linkedin.kind === "showcase" ? "showcase" : "company";
       const url = "https://www.linkedin.com/" + liPath + "/" + encodeURIComponent(c.linkedin.vanity) + "/posts/?feedView=all";
-      const r = await navigateAndScrape(captureResults.LINKEDIN.tabId, url, linkedinDomScraper, runLog, "LINKEDIN:" + c.linkedin.vanity, passes);
+      const r = await scrapeKeepingTab(captureResults.LINKEDIN, url, linkedinDomScraper, runLog, "LINKEDIN:" + c.linkedin.vanity, passes);
       liResults.push({
         clientId: c.id,
         connectionId: c.linkedin.connectionId,
@@ -603,7 +625,7 @@ async function runFullSync(opts) {
       const c = twClients[i];
       onProgress("X: @" + c.twitter.handle + " (" + (i + 1) + "/" + twClients.length + ")…", "info");
       const url = "https://x.com/" + encodeURIComponent(c.twitter.handle);
-      const r = await navigateAndScrape(captureResults.TWITTER.tabId, url, twitterDomScraper, runLog, "TWITTER:@" + c.twitter.handle, passes);
+      const r = await scrapeKeepingTab(captureResults.TWITTER, url, twitterDomScraper, runLog, "TWITTER:@" + c.twitter.handle, passes);
       twResults.push({
         clientId: c.id,
         connectionId: c.twitter.connectionId,
