@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { ExternalLink, ThumbsUp, MessageCircle, Share2, AlertTriangle, RefreshCw } from "lucide-react";
 
 interface Post {
@@ -45,8 +45,15 @@ export function PostsListing({ clientId, platform }: { clientId: string; platfor
   const [state, setState] = useState<LoadState>("loading");
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [attempt, setAttempt] = useState(0);
-  // Default to "This month" — matches the memory directive on dashboard windows
-  const [windowKey, setWindowKey] = useState<WindowKey>("THIS_MONTH");
+  // Default to "This month" — matches the memory directive on dashboard windows.
+  // v4.83.0: a report link ?post=<id> opens "All time" and jumps to that exact post.
+  const [focusId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const v = new URLSearchParams(window.location.search).get("post");
+    return v && /^[A-Za-z0-9_-]{6,64}$/.test(v) ? v : null;
+  });
+  const [windowKey, setWindowKey] = useState<WindowKey>(focusId ? "ALL_TIME" : "THIS_MONTH");
+  const scrolled = useRef(false);
 
   const loadPosts = useCallback(async () => {
     setState("loading");
@@ -94,6 +101,16 @@ export function PostsListing({ clientId, platform }: { clientId: string; platfor
   useEffect(() => {
     loadPosts();
   }, [loadPosts, attempt]);
+
+  // Scroll once to the post a report linked to, after the list has rendered.
+  useEffect(() => {
+    if (!focusId || scrolled.current || state !== "ok") return;
+    const el = document.getElementById(`post-${focusId}`);
+    if (el) {
+      scrolled.current = true;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [focusId, state, posts]);
 
   if (state === "loading") {
     return (
@@ -214,7 +231,11 @@ export function PostsListing({ clientId, platform }: { clientId: string; platfor
         </thead>
         <tbody className="divide-y divide-gray-50">
           {visiblePosts.map((post) => (
-            <tr key={post.id} className="hover:bg-gray-50">
+            <tr
+              key={post.id}
+              id={`post-${post.id}`}
+              className={post.id === focusId ? "bg-red-50 outline outline-2 outline-red-500" : "hover:bg-gray-50"}
+            >
               <td className="px-6 py-3 text-xs font-mono text-gray-600 whitespace-nowrap">
                 {post.publishedDateLocal}
               </td>

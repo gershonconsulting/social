@@ -2,6 +2,9 @@
 
 Last updated: 2026-11-23
 
+## v4.86.1 — exact-post links (PR #44 rebuilt 2026-11-25)
+- ✅ /clients/<id>?post=<postId> opens Collected posts on "All time", scrolls to that post and outlines it in red. Used by Social Tracking v0.9.0 weekly report "View in Social" buttons.
+
 ## Deploy route
 Push / merge to `claude/social-campaign-verification-jiG5E` (the default branch) → `.github/workflows/deploy.yml` → Cloudflare Pages `gershoncrm-social`.
 Commits with `[skip-db-push]` in the message skip `prisma db push` (code-only changes).
