@@ -26,3 +26,4 @@ Last deploy request for publish.gershon.ai (gershonconsulting/publish@main)
 2026-11-24T14:05Z v0.25.0 weekly feature status PUB-217 to social@, PR #44 (publish@4a10791) - by Claude (auto-merge rule: internal email only)
 2026-11-24T14:20Z v0.25.0 version label + feature list, PR #45 (publish@07e8289) - by Claude (auto-merge rule)
 2026-11-24 v0.25.1 review link focus (publish@77024ba, PR #46)
+2026-11-25T12:50Z v0.25.2 client review emails show the posts + subject 'Publish by Gershon.AI', PR #47 (publish@8ad8c16) - by Claude, Olivier: 'deploy publish and socialtracking'
