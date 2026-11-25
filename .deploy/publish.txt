@@ -28,3 +28,4 @@ Last deploy request for publish.gershon.ai (gershonconsulting/publish@main)
 2026-11-24 v0.25.1 review link focus (publish@77024ba, PR #46)
 2026-11-25T12:50Z v0.25.2 client review emails show the posts + subject 'Publish by Gershon.AI', PR #47 (publish@8ad8c16) - by Claude, Olivier: 'deploy publish and socialtracking'
 2026-11-25 v0.26.0 3 picture options (publish@1eeddb4)
+2026-11-25 v0.27.0 client chooses the picture, PR #49 - Olivier: 'ship it + test'
