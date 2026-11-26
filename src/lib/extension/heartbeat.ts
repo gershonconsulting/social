@@ -58,18 +58,20 @@ export async function readHeartbeat(orgId?: string): Promise<Heartbeat> {
   }
 }
 
-/** Fire-and-forget: never let a heartbeat failure fail the ingest response. */
-export async function recordIngestRun(
-  orgId: string | null,
-  stats: { attempted: number; upserted: number; failed: number; failedKeys?: string[] },
-): Promise<void> {
-  const key = etDayKey(0);
-  const nowIso = new Date().toISOString();
+function keepKeys(): Set<string> {
   const keep = new Set<string>();
   for (let i = 0; i < KEEP_DAYS; i++) keep.add(etDayKey(i));
+  return keep;
+}
 
+/** All-workspace row. Fire-and-forget: never let a heartbeat failure fail the ingest response. */
+export async function recordIngestRun(stats: {
+  attempted: number;
+  upserted: number;
+  failed: number;
+}): Promise<void> {
   try {
-    const hb = addRun(await readGlobal(), key, { ...stats, failedKeys: undefined }, nowIso, keep);
+    const hb = addRun(await readGlobal(), etDayKey(0), stats, new Date().toISOString(), keepKeys());
     const value = JSON.stringify(hb);
     await prisma.setting.upsert({
       where: { key: HEARTBEAT_KEY },
@@ -79,10 +81,26 @@ export async function recordIngestRun(
   } catch {
     /* best-effort */
   }
+}
 
-  if (!orgId) return;
+/**
+ * Per-workspace row (v4.87.1), from the per-company outcomes of one ingest
+ * batch (the same list the sync log is written from): one run, its attempts,
+ * upserts, failures, and the distinct profiles that failed. Never throws.
+ */
+export async function recordOrgIngestRun(
+  orgId: string,
+  outcomes: Array<{ clientId: string; platform: string; attempted: number; upserted: number; error?: string }>,
+): Promise<void> {
   try {
-    const hb = addRun(await readOrg(orgId), key, stats, nowIso, keep);
+    const failedOnes = outcomes.filter((o) => o.error);
+    const stats = {
+      attempted: outcomes.reduce((s, o) => s + (Number(o.attempted) || 0), 0),
+      upserted: outcomes.reduce((s, o) => s + (Number(o.upserted) || 0), 0),
+      failed: failedOnes.length,
+      failedKeys: failedOnes.map((o) => `${o.clientId}|${o.platform}`),
+    };
+    const hb = addRun(await readOrg(orgId), etDayKey(0), stats, new Date().toISOString(), keepKeys());
     const value = JSON.stringify(hb);
     await rawPrisma.orgSetting.upsert({
       where: { organizationId_key: { organizationId: orgId, key: HEARTBEAT_KEY } },
