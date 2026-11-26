@@ -31,3 +31,4 @@ Last deploy request for publish.gershon.ai (gershonconsulting/publish@main)
 2026-11-25 v0.27.0 client chooses the picture, PR #49 - Olivier: 'ship it + test'
 2026-11-25 v0.28.0 publish@b204028 review link = sent posts only; deleted days stay empty
 2026-11-26 v0.28.1 Unsplash + Pixabay photo sources, PR #52 (publish@8d5dc8d) - Olivier: 'All'
+2026-11-26T15:35Z v0.28.2 comment @tags kept in BOTH LinkedIn and X versions, PR #54 (publish@41438de) - by Claude, Olivier: 'ship it'
