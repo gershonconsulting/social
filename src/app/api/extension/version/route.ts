@@ -16,6 +16,7 @@ import { EXTENSION_LATEST, EXTENSION_ZIP_URL } from "@/lib/extension-version";
 const LATEST = EXTENSION_LATEST;
 
 const RELEASE_NOTES: Record<string, string> = {
+  "0.28.1": "X profiles that show no posts now say why. An account that has never posted counts as 0 posts instead of a failure; a renamed or deleted handle, a suspended or protected account, or a signed-out X are each named (X_PROFILE_UNAVAILABLE / X_PROFILE_PROTECTED / login wall) instead of \"no tweet cards found (selectors may have changed)\". Restricted-profile warnings are clicked through and a slow timeline gets a few extra seconds.",
   "0.28.0": "Collection no longer stops when its tab is closed. On 25 Nov one closed tab made every remaining company fail (\"No tab with id\") and the dashboard wrongly said LinkedIn had changed its pages. The collector now opens a fresh tab and carries on.",
   "0.27.0": "LinkedIn showcase pages are collected. A tracked page at linkedin.com/showcase/… (for example Amphasys Bioprocessing) used to be skipped, so none of its posts reached Social. It is now opened at its real address and its posts are collected like any company page.",
   "0.26.0": "Publishing moved to publish.gershon.ai. Social is now a collection platform only: it collects the posts of your clients, partners, competitors and your own company. This extension still publishes the posts approved on Publish, and now asks publish.gershon.ai directly for them. Client publishing links now open on publish.gershon.ai/connect/….",
