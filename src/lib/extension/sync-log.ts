@@ -20,6 +20,7 @@
 import rawDb from "@/lib/db-raw";
 
 import { buildSyncLogRows, EXT_NOTE, type IngestOutcome } from "./sync-log-rows";
+import { recordOrgIngestRun } from "./heartbeat";
 export { EXT_NOTE, buildSyncLogRows } from "./sync-log-rows";
 
 const KEEP_DAYS = 14;
@@ -31,6 +32,8 @@ export async function recordExtensionSyncLog(
   startedAt: Date,
   extVersion?: string | null,
 ): Promise<void> {
+  // v4.87.1: the workspace's own collection heartbeat (the daily brief reads it).
+  await recordOrgIngestRun(orgId, outcomes);
   try {
     const rows = buildSyncLogRows(orgId, outcomes, startedAt, new Date(), extVersion);
     if (rows.length) await rawDb.syncJob.createMany({ data: rows });
