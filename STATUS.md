@@ -1,6 +1,12 @@
 # Social (social.gershon.ai) — STATUS
 
-Last updated: 2026-11-23
+Last updated: 2026-11-25
+
+## v4.87.0 + extension 0.28.0 — false "LinkedIn collection is not working" (2026-11-25)
+- Cause: at 16:04 UTC the collector's tab in Browser 1 was closed mid-run; every following company failed with "tabs.update failed: No tab with id …" (19 LinkedIn + 5 X), was recorded as 0 posts, and the red strip blamed LinkedIn. LinkedIn's pages were checked live: the 0.27.0 reader still reads them.
+- ✅ Extension 0.28.0: `scrapeKeepingTab()` in sync-core.js opens a fresh tab and retries the company when the tab is gone. tests/tab-reopen.test.mjs.
+- ✅ Server: browser-side errors (closed tab, removed frame, unscriptable page) no longer count toward the LinkedIn alarm (`src/lib/collection-health-errors.ts`), also for entries already stored. tests/collection-health.test.mts.
+- ❌ What closes the collector's tab is not identified (another Claude-in-Chrome session using the same Chrome is the likely suspect).
 
 ## v4.86.1 — exact-post links (PR #44 rebuilt 2026-11-25)
 - ✅ /clients/<id>?post=<postId> opens Collected posts on "All time", scrolls to that post and outlines it in red. Used by Social Tracking v0.9.0 weekly report "View in Social" buttons.

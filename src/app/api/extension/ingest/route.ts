@@ -7,7 +7,7 @@ import { recordIngestRun } from "@/lib/extension/heartbeat";
 import { recordExtSeen } from "@/lib/extension/seen";
 import { dbForOrg } from "@/lib/scoped-db";
 import { resolveExtensionCaller } from "@/lib/extension-auth";
-import { recordLinkedInResults } from "@/lib/collection-health";
+import { recordLinkedInResults, countsForLinkedInAlarm } from "@/lib/collection-health";
 import { recordExtensionSyncLog } from "@/lib/extension/sync-log";
 
 /**
@@ -161,9 +161,10 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // A dead link says nothing about whether the LinkedIn reader works, so it
-      // stays out of the "LinkedIn changed its page" alarm.
-      if (platform === Platform.LINKEDIN && !(r.error ?? "").startsWith("PAGE_UNAVAILABLE")) {
+      // A dead link, or a tab the browser closed under the collector, says
+      // nothing about whether the LinkedIn reader works, so it stays out of
+      // the "LinkedIn changed its page" alarm.
+      if (platform === Platform.LINKEDIN && countsForLinkedInAlarm(r.error)) {
         liHealth.push({
           connectionId: r.connectionId,
           n: r.error ? 0 : Array.isArray(r.posts) ? r.posts.length : 0,
