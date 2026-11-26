@@ -31,7 +31,8 @@ import prisma from "@/lib/db";
 import { isPageProblem, PAGE_UNAVAILABLE } from "@/lib/linkedin-page-check";
 import { EXTENSION_LATEST, EXTENSION_ZIP_URL } from "@/lib/extension-version";
 import { readExtSeen, semverLt, type ExtSeen } from "@/lib/extension/seen";
-import { readHeartbeat } from "@/lib/extension/heartbeat";
+import { readHeartbeat, failedProfiles } from "@/lib/extension/heartbeat";
+import { errorConnectionsWhere, pageProblemsWhere, failedHint } from "./collection-scope";
 import { etDayKey, etDayLabel, etDayShort, etMidnight } from "./et-days";
 import { countCollected, countCollectedByDay, emptyCollectionDay, loadCollectedPosts, type CollectionDay } from "./collection-counts";
 import { primaryOrgId } from "./monthly/data";
@@ -164,13 +165,13 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
       // function (countCollected), exactly as the digest counts (v4.77.3).
       loadCollectedPosts(orgId, etMidnight(8, now), etMidnight(0, now)),
       companiesAddedByDay(orgId, now, 8),
-      readHeartbeat(),
+      readHeartbeat(orgId),
       readExtSeen(),
       prisma.client.count({ where: { status: "ACTIVE", organizationId: orgId } }),
       freshCompaniesAt(orgId, yTo),
       freshCompaniesAt(orgId, yFrom),
       prisma.platformConnection.findMany({
-        where: { isEnabled: true, lastSyncError: { not: null } },
+        where: errorConnectionsWhere(orgId),
         select: {
           platform: true,
           lastSyncError: true,
@@ -181,14 +182,7 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
         take: 40,
       }),
       prisma.platformConnection.findMany({
-        where: {
-          isEnabled: true,
-          platform: "LINKEDIN",
-          OR: [
-            { lastSyncError: { startsWith: "PAGE_UNAVAILABLE" } },
-            { lastSyncError: { startsWith: "PAGE_MISMATCH" } },
-          ],
-        },
+        where: pageProblemsWhere(orgId),
         select: {
           externalAccountUrl: true,
           lastSyncError: true,
@@ -259,7 +253,7 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
     {
       key: "failed",
       label: "Failed collection attempts",
-      hint: "per-company scrape failures reported by the extension",
+      hint: failedHint(failedProfiles(hbDay(yKey))),
       yesterday: failedFor(yKey),
       dayBefore: failedFor(dKey),
       avg7: avg(weekFailed),
@@ -276,7 +270,7 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
     },
   ];
 
-  // ── Run status ────────────────────────────────────────────────────────────────────────────────────────
+  // ── Run status ───────────────────────────────────────────────────────────────────────────────────────────────
   const hbY = hbDay(yKey);
   const ranYesterday = hbY ? hbY.runs > 0 : null; // null = heartbeat has no record for that day
   const avgPosts = avg(week.map((w) => w.posts)) ?? 0;
@@ -321,7 +315,7 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
     };
   }
 
-  // ── Progress verdict ────────────────────────────────────────────────────────────────────────────────
+  // ── Progress verdict ────────────────────────────────────────────────────────────────────────────────────────────
   let improved = 0;
   let declined = 0;
   let flat = 0;
@@ -345,10 +339,10 @@ export async function buildDailyReport(now: Date = new Date()): Promise<DailyRep
     flat,
   };
 
-  // ── Extension version ─────────────────────────────────────────────────────────────────────────────
+  // ── Extension version ─────────────────────────────────────────────────────────────────────────────────────────
   const extension = buildExtensionBlock(extSeen, now);
 
-  // ── Movers / went quiet ───────────────────────────────────────────────────────────────────────
+  // ── Movers / went quiet ───────────────────────────────────────────────────────────────────────────────────
   const dMap = new Map(compD.map((c) => [c.id, c.n]));
   const yMap = new Map(compY.map((c) => [c.id, c.n]));
   const movers = compY
