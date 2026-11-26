@@ -1,6 +1,11 @@
 # Social (social.gershon.ai) — STATUS
 
-Last updated: 2026-11-25
+Last updated: 2026-11-26
+
+## v4.87.1 — daily brief counted other workspaces' failures (nightly 2026-11-26)
+- Cause: "Failed collection attempts" (51 on 11-24, 77 on 11-23) came from ONE global heartbeat shared by every workspace, and counts one per company per run (13 runs → a dead link counts 13). "Connections in error" / "LinkedIn links to fix" queried all workspaces (cron = unscoped client), so competitors moved to client workspaces by v4.86.0 (Integer Group, Mars United, Geometry Global, Green Shot …) showed in Gershon's brief; the digest (scoped) did not list them.
+- ✅ Per-workspace heartbeat (OrgSetting `collection_heartbeat`, written from `recordExtensionSyncLog`; global row still written; first day falls back to global). Day keeps distinct failed profiles → hint "counted once per run · N distinct profiles". Both brief lists scoped to the workspace. `heartbeat-core.ts`, `reports/collection-scope.ts`, tests/heartbeat-scope.test.mts.
+- ❌ Real failures left: closed collector tab (extension 0.28.0 not yet installed — brief says 0.27.0), X "no tweet cards found" (6 profiles), 2 dead LinkedIn links (MMI, Dyadic).
 
 ## v4.87.0 + extension 0.28.0 — false "LinkedIn collection is not working" (2026-11-25)
 - Cause: at 16:04 UTC the collector's tab in Browser 1 was closed mid-run; every following company failed with "tabs.update failed: No tab with id …" (19 LinkedIn + 5 X), was recorded as 0 posts, and the red strip blamed LinkedIn. LinkedIn's pages were checked live: the 0.27.0 reader still reads them.
