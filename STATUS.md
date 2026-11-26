@@ -2,6 +2,11 @@
 
 Last updated: 2026-11-26
 
+## v4.87.2 + extension 0.28.1 — X "no tweet cards found" (nightly 2026-11-26)
+- Cause: when an X profile showed no tweet cards, the reader only checked the first 400 characters of the page (X's sidebar fills them) for straight-apostrophe wording X no longer uses ("doesn't exist", "this account is private"; X prints U+2019 and "These posts are protected"), and had no "hasn't posted" case. Never-posted, renamed/deleted, suspended, protected and signed-out profiles all came back as "no tweet cards found (selectors may have changed)" and counted as failures (6 profiles incl. PhiTech, Enzymicals, Amphasys, Meteor Biotech, AmericanAbroad).
+- ✅ `twitterDomScraper` reads the empty-state / main column: never posted → 0 posts, no error; `X_PROFILE_UNAVAILABLE:` (renamed/deleted/suspended), `X_PROFILE_PROTECTED:`, "login wall", "X timeline did not load"; clicks "Yes, view profile"; up to 4×2 s extra wait before calling it a selector change. tests/x-empty-profile.test.mjs.
+- ❌ Owner: after installing 0.28.1, check the 6 profiles' new errors — X_PROFILE_UNAVAILABLE means the stored X handle must be fixed.
+
 ## v4.87.1 — daily brief counted other workspaces' failures (nightly 2026-11-26)
 - Cause: "Failed collection attempts" (51 on 11-24, 77 on 11-23) came from ONE global heartbeat shared by every workspace, and counts one per company per run (13 runs → a dead link counts 13). "Connections in error" / "LinkedIn links to fix" queried all workspaces (cron = unscoped client), so competitors moved to client workspaces by v4.86.0 (Integer Group, Mars United, Geometry Global, Green Shot …) showed in Gershon's brief; the digest (scoped) did not list them.
 - ✅ Per-workspace heartbeat (OrgSetting `collection_heartbeat`, written from `recordExtensionSyncLog`; global row still written; first day falls back to global). Day keeps distinct failed profiles → hint "counted once per run · N distinct profiles". Both brief lists scoped to the workspace. `heartbeat-core.ts`, `reports/collection-scope.ts`, tests/heartbeat-scope.test.mts.

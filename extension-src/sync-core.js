@@ -386,6 +386,39 @@ function twitterDomScraper(scrollPasses) {
       resolve({ posts: [], error: "landed on X login wall (session expired)" });
       return;
     }
+    // 0.28.1: why a profile shows no tweet cards. X prints these messages
+    // with a curly apostrophe (U+2019) and below the sidebar, so the old
+    // check (first 400 characters, straight apostrophe only) never matched:
+    // an account that has never posted, a renamed handle or a protected
+    // account all came back as "no tweet cards found (selectors may have
+    // changed)". Returns null when the page gives no reason (still loading).
+    function emptyReason() {
+      var col = document.querySelector("[data-testid='primaryColumn']");
+      var es = document.querySelector("[data-testid='emptyState']");
+      var raw = ((es && es.innerText) || "") + "\n" + ((col && col.innerText) || (document.body && document.body.innerText) || "");
+      var t = raw.replace(/[‘’ʼ]/g, "'").slice(0, 20000);
+      var handle = (url.match(/x\.com\/([A-Za-z0-9_]{1,15})/i) || [])[1] || "";
+      if (/account suspended/i.test(t)) return { error: "X_PROFILE_UNAVAILABLE: @" + handle + " — X says the account is suspended" };
+      if (/this account doesn't exist|this page doesn't exist/i.test(t)) return { error: "X_PROFILE_UNAVAILABLE: @" + handle + " — X says this account doesn't exist (handle renamed or deleted? fix the X link)" };
+      if (/(these|this account's) (posts|tweets) are protected|this account is private/i.test(t)) return { error: "X_PROFILE_PROTECTED: @" + handle + " — posts are protected (only approved followers can see them)" };
+      if (/hasn't (posted|tweeted)|no (posts|tweets) yet/i.test(t)) return { empty: true };
+      if (/sign in to x|log in to x|don't miss what's happening|new to x\?/i.test(t) && !document.querySelector("[data-testid='SideNav_AccountSwitcher_Button'], a[data-testid='AppTabBar_Home_Link']")) {
+        return { error: "landed on X login wall (signed out of X in this browser)" };
+      }
+      if (/something went wrong\. try reloading|rate limit exceeded/i.test(t)) return { error: "X timeline did not load (X said: something went wrong / rate limited) — will retry next run" };
+      return null;
+    }
+    // Sensitive-content / restricted-profile interstitials hide the timeline
+    // behind a "Yes, view profile" button.
+    function passInterstitial() {
+      var btns = document.querySelectorAll("button, [role='button']");
+      for (var b = 0; b < btns.length; b++) {
+        if (/^\s*yes, view profile\s*$/i.test(btns[b].innerText || "")) { try { btns[b].click(); return true; } catch (_) {} }
+      }
+      return false;
+    }
+    var retries = 0;
+    var passedInterstitial = false;
     var passes = 0;
     var scrollTimer = setInterval(function () {
       try { window.scrollBy(0, 1800); } catch (_) {}
@@ -397,14 +430,15 @@ function twitterDomScraper(scrollPasses) {
     }, 900);
     function harvest() {
       try {
-        var cards = document.querySelectorAll("article[data-testid='tweet']");
+        var cards = document.querySelectorAll("article[data-testid='tweet'], article[role='article']");
         if (!cards.length) {
-          var bodyText = (document.body && document.body.innerText || "").slice(0, 400);
-          if (/account suspended|doesn'?t exist|this account is private/i.test(bodyText)) {
-            resolve({ posts: [], error: "X profile inaccessible: " + bodyText.slice(0, 80) });
-          } else {
-            resolve({ posts: [], error: "no tweet cards found (selectors may have changed)" });
-          }
+          if (!passedInterstitial && passInterstitial()) { passedInterstitial = true; setTimeout(harvest, 3000); return; }
+          var why = emptyReason();
+          if (why && why.empty) { resolve({ posts: [] }); return; }
+          if (why && why.error) { resolve({ posts: [], error: why.error }); return; }
+          // Nothing rendered and no reason shown yet: the timeline may still be loading.
+          if (retries < 4) { retries++; setTimeout(harvest, 2000); return; }
+          resolve({ posts: [], error: "no tweet cards found (selectors may have changed)" });
           return;
         }
         var posts = [];
