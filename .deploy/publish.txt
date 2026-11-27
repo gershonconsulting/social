@@ -33,3 +33,4 @@ Last deploy request for publish.gershon.ai (gershonconsulting/publish@main)
 2026-11-26 v0.28.1 Unsplash + Pixabay photo sources, PR #52 (publish@8d5dc8d) - Olivier: 'All'
 2026-11-26T15:35Z v0.28.2 comment @tags kept in BOTH LinkedIn and X versions, PR #54 (publish@41438de) - by Claude, Olivier: 'ship it'
 2026-11-27T01:10Z v0.29.0 Knowledge Base content folder links, PR #55 (publish@effeef9) - by Claude (auto-merge rule: internal KB UI, no schema change, 185/185 tsc clean)
+2026-11-27T16:12Z v0.30.0 Approvals: saved selections in any status and reusable link history, PR #56 (publish@40255ab) - user requested production
